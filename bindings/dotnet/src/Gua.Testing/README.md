@@ -227,3 +227,47 @@ GuaAssertions.Query(context).ByAction("scroll").WaitForCount(1, timeout, pollInt
 Node expectations expose correlated sync/async action completion for `click`,
 `focus`, `set_value`, `set_checked`, `select`, `scroll`, and `press_key`. These
 helpers wait for the same `requestId`; unrelated events remain queued.
+
+## Gua Trace（opt-in）
+
+`GuaTraceSession` は test framework に依存しない記録口。既定は直近 100 step と
+非成功時保存。成功探索は `SavePolicy = GuaTraceSavePolicy.Always` で保存する。
+
+```csharp
+await using var trace = new GuaTraceSession(new() {
+    OutputDirectory = "artifacts/traces",
+    SavePolicy = GuaTraceSavePolicy.Always,
+});
+using var scope = GuaAssertionScope.Use(new() { Trace = trace });
+try {
+    await GuaAssertions.GetById(context, "play").ClickAsync();
+    await trace.CompleteAsync(GuaTraceOutcome.Passed);
+} catch {
+    await trace.CompleteAsync(GuaTraceOutcome.Failed);
+    throw;
+}
+var report = GuaTraceReport.WriteHtml(trace.ArtifactPath, "artifacts/report.html");
+// report.Succeeded と trace.Status は主結果とは別に呼び出し側で判定する。
+```
+
+`BeginStep`/`EndStep`/`Mark`/`Correlate`/`RecordRequest`/`Observe`/`Change`/
+`Evaluate`/`Annotate`/`Attach`/`FlushAsync` は外部 Runner から使用できる。
+`GuaTraceCapture.Diagnostics` は既存 context の公開 diagnostics を JSON 添付にする。
+Screenshot は別の pixel mask 方針が必要なので自動収集しない。
+主結果は `SetPrimaryOutcome` で固定でき、以後の cleanup/遅い結果は追記する。
+汎用 API の文字列や JSON は公開可能な内容を渡し、秘密 object には
+`sensitive: true`/`mask: true`、または API の sensitive 引数を明示する。
+
+NuGet 配布には版固定の Viewer を同梱するため、利用者側に Web ビルドは不要。
+ソースからの開発・pack 時には先に以下を実行する:
+
+```powershell
+bun install --frozen-lockfile
+bun run --filter @gua/inspector build:trace
+dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj
+# native Value を使う外部 writer の実例（GUA_NATIVE_DIR をビルド先へ設定）
+dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj -- artifacts/trace-example
+```
+
+完全な契約、上限と親 #109 の未完了条件は
+[Trace v1](../../../../protocol/specs/trace-v1.md) を参照。

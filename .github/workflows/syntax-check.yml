@@ -356,6 +356,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Bun for the shared Trace Viewer
+        uses: oven-sh/setup-bun@v2
+
+      - name: Build the offline Trace Viewer
+        run: |
+          bun install --frozen-lockfile
+          bun run --filter @gua/inspector build:trace
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:

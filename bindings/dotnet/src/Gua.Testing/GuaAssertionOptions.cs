@@ -8,4 +8,5 @@ public sealed class GuaAssertionOptions
 
     public GuaDiagnosticOptions? Diagnostics { get; init; }
     public GuaDiagnosticsSession? DiagnosticsSession { get; init; }
+    public GuaTraceSession? Trace { get; init; }
 }

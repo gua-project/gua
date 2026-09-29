@@ -61,9 +61,15 @@ public static class GuaActionCompletion
         if (limit < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
         if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(pollInterval));
 
-        var error = context.EnqueueAction(request, out var requestId);
+        var trace = GuaTraceAction.Begin(context, request);
+        GuaActionError error;
+        ulong requestId;
+        try { error = context.EnqueueAction(request, out requestId); }
+        catch { trace?.End(GuaTraceOutcome.Unknown, "send-exception"); throw; }
+        trace?.Accepted(requestId, error);
         if (error != GuaActionError.None)
         {
+            trace?.End(GuaTraceOutcome.Failed, "rejected");
             throw Create(context, GuaActionFailureKind.Rejected, requestId, request.Action, request.NodeId, error,
                 $"Gua action was rejected: requestId={requestId}, action={request.Action}, nodeId='{request.NodeId ?? "<focused>"}', error={error}.");
         }
@@ -76,6 +82,8 @@ public static class GuaActionCompletion
                 cancellationToken.ThrowIfCancellationRequested();
                 if (context.TryPollActionEvent(requestId, out var result))
                 {
+                    trace?.Completed(result);
+                    trace?.End(result.Succeeded ? GuaTraceOutcome.Passed : GuaTraceOutcome.Failed, "host-result");
                     if (!result.Succeeded)
                     {
                         throw Create(context, GuaActionFailureKind.Failed, requestId, request.Action, request.NodeId, result.Error,
@@ -90,10 +98,13 @@ public static class GuaActionCompletion
         }
         catch (OperationCanceledException cancellationError) when (cancellationToken.IsCancellationRequested)
         {
+            trace?.End(GuaTraceOutcome.Interrupted, "cancelled-side-effects-unknown");
             throw Create(context, GuaActionFailureKind.Cancelled, requestId, request.Action, request.NodeId, GuaActionError.None,
                 $"Gua action wait was cancelled: requestId={requestId}, action={request.Action}, nodeId='{request.NodeId ?? "<focused>"}'.", cancellationError);
         }
+        catch { trace?.End(GuaTraceOutcome.Unknown, "receive-exception"); throw; }
 
+        trace?.End(GuaTraceOutcome.Unknown, "timeout-side-effects-unknown");
         throw Create(context, GuaActionFailureKind.TimedOut, requestId, request.Action, request.NodeId, GuaActionError.None,
             $"Timed out after {limit:g} waiting for Gua action: requestId={requestId}, action={request.Action}, nodeId='{request.NodeId ?? "<focused>"}'.");
     }
