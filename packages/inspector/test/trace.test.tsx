@@ -62,4 +62,15 @@ describe("Trace v1 offline reader/viewer", () => {
     const html = renderToStaticMarkup(<GuaTraceViewer trace={trace} />);
     expect(html).toContain("manifest-marker"); expect(html).toContain("event-marker");
   });
+  test("reversed collector timestamps do not become negative durations", () => {
+    const trace = parseTrace(JSON.stringify(manifest), lines({ ...event(1, "step.begin", {}), collectedMilliseconds: 10 },
+      { ...event(2, "step.end", {}), collectedMilliseconds: 5 }));
+    expect(trace.issues).toContain("invalid-record"); expect(trace.events.length).toBe(1);
+  });
+  test("record limit counts UTF-8 bytes rather than UTF-16 characters", async () => {
+    const source = lines(event(1, "mark", { text: "あ".repeat(1500000) }));
+    expect(parseTrace(JSON.stringify(manifest), source).issues).toContain("reader-limit");
+    const fromFiles = await readTraceFiles([new File([JSON.stringify(manifest)], "manifest.json"), new File([source], "events.jsonl")]);
+    expect(fromFiles.issues).toContain("reader-limit");
+  });
 });

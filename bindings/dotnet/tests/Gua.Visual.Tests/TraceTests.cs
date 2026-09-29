@@ -255,6 +255,17 @@ public sealed class TraceTests
         Assert.That(JsonSerializer.Serialize(read.Events[0]), Does.Contain("future-marker"));
     }
     [Test]
+    public async Task ReaderRejectsReversedCollectionTime()
+    {
+        await using var trace = new GuaTraceSession(Options()); trace.Mark("time");
+        await trace.CompleteAsync(GuaTraceOutcome.Failed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+        var lines = read.Events.Select((e, i) => JsonSerializer.Serialize(e with { CollectedMilliseconds = i == 0 ? 10 : 5 }, options));
+        File.WriteAllText(Path.Combine(trace.ArtifactPath, "events.jsonl"), string.Join("\n", lines) + "\n");
+        Assert.That(GuaTraceReader.Read(trace.ArtifactPath).Issues, Does.Contain("invalid-record"));
+    }
+    [Test]
     public async Task AutomaticActionRecordingPreservesCompletionAndOriginalException()
     {
         await using var trace = new GuaTraceSession(Options());

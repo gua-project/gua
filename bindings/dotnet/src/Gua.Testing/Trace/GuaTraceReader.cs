@@ -50,13 +50,14 @@ public static class GuaTraceReader
         var path = Path.Combine(directory, "events.jsonl"); CheckNoLinks(path);
         if (!File.Exists(path)) { issues.Add("events-missing"); return new(manifest, events, blobs, issues); }
         long previous = 0;
+        double previousCollected = 0;
         using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
         using (var line = new MemoryStream())
         {
             int b;
             while ((b = stream.ReadByte()) != -1)
             {
-                if (--budget < 0 || line.Length >= maxRecordBytes || events.Count >= maxRecords)
+                if (--budget < 0 || (b != '\n' && line.Length >= maxRecordBytes) || events.Count >= maxRecords)
                 { issues.Add("reader-limit"); break; }
                 if (b != '\n') { line.WriteByte((byte)b); continue; }
                 try
@@ -68,10 +69,10 @@ public static class GuaTraceReader
                         record.Sequence <= previous || record.Sequence > 9007199254740991 || string.IsNullOrEmpty(record.EventId) ||
                         !Id(record.StepId) || string.IsNullOrEmpty(record.Type) || record.Type.Length > 64 ||
                         record.Data.ValueKind == JsonValueKind.Undefined ||
-                        record.CollectedMilliseconds < 0 || double.IsInfinity(record.CollectedMilliseconds) ||
+                        record.CollectedMilliseconds < previousCollected || double.IsInfinity(record.CollectedMilliseconds) ||
                         double.IsNaN(record.CollectedMilliseconds))
                         throw new JsonException();
-                    events.Add(record); previous = record.Sequence;
+                    events.Add(record); previous = record.Sequence; previousCollected = record.CollectedMilliseconds;
                 }
                 catch (Exception error) when (error is JsonException or DecoderFallbackException) { issues.Add("invalid-record"); break; }
                 line.SetLength(0);

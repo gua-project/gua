@@ -20,7 +20,9 @@ export function text(value: unknown, fallback = "unconfirmed"): string {
   return typeof value === "string" ? value : fallback;
 }
 export function parseTrace(manifestText: string, eventLines: string, blobs: Record<string, unknown> = {}): TraceDocument {
-  if (manifestText.length > 65536 || eventLines.length > 256 * 1024 * 1024) throw new Error("Trace reader limit");
+  const utf8 = new TextEncoder();
+  if (manifestText.length > 65536 || eventLines.length > 256 * 1024 * 1024 ||
+      utf8.encode(manifestText).byteLength > 65536 || utf8.encode(eventLines).byteLength > 256 * 1024 * 1024) throw new Error("Trace reader limit");
   const m = object(JSON.parse(manifestText)), quality = object(m.quality);
   if (m.schemaVersion !== 1 || !/^[a-f0-9]{32}$/.test(text(m.traceId, "")) ||
       !["recent", "streaming"].includes(text(m.captureMode)) || !["onFailure", "always"].includes(text(m.savePolicy)) ||
@@ -31,18 +33,18 @@ export function parseTrace(manifestText: string, eventLines: string, blobs: Reco
       !Array.isArray(quality.issues) || quality.issues.length > 64 || !quality.issues.every(x => typeof x === "string")) throw new Error("Unsupported or invalid Trace manifest");
   const manifest = m as unknown as TraceManifest;
   const events: TraceEvent[] = [], issues: string[] = manifest.finalized ? [] : ["unfinalized"];
-  let previous = 0;
+  let previous = 0, previousCollected = 0;
   const lines = eventLines.split("\n");
   const tail = lines.pop();
   for (const line of lines) {
-    if (line.length > 4 * 1024 * 1024 || events.length >= 100000) { issues.push("reader-limit"); break; }
+    if (line.length > 4 * 1024 * 1024 || utf8.encode(line).byteLength > 4 * 1024 * 1024 || events.length >= 100000) { issues.push("reader-limit"); break; }
     try {
       const e = object(JSON.parse(line));
       if (e.schemaVersion !== 1 || e.traceId !== manifest.traceId || !Number.isSafeInteger(e.sequence) ||
           Number(e.sequence) <= previous || typeof e.eventId !== "string" || e.eventId.length === 0 || !/^[a-f0-9]{32}$/.test(text(e.stepId, "")) ||
           typeof e.type !== "string" || e.type.length < 1 || e.type.length > 64 || !Object.hasOwn(e, "data") || typeof e.collectedMilliseconds !== "number" ||
-          !Number.isFinite(e.collectedMilliseconds) || e.collectedMilliseconds < 0) throw new Error("invalid-record");
-      previous = Number(e.sequence); events.push(e as unknown as TraceEvent);
+          !Number.isFinite(e.collectedMilliseconds) || e.collectedMilliseconds < previousCollected) throw new Error("invalid-record");
+      previous = Number(e.sequence); previousCollected = e.collectedMilliseconds; events.push(e as unknown as TraceEvent);
     } catch { issues.push("invalid-record"); break; }
   }
   if (tail) issues.push("incomplete-tail");
@@ -80,16 +82,18 @@ export async function readTraceFiles(files: File[]): Promise<TraceDocument> {
   const manifestText = new TextDecoder("utf-8", { fatal: true }).decode(await manifest[0]!.arrayBuffer());
   const eventBytes = new Uint8Array(await events[0]!.arrayBuffer());
   const decoded: string[] = [];
-  let start = 0, invalid = false;
+  let start = 0, invalid = false, limited = false;
   for (let i = 0; i < eventBytes.length; i++) {
+    if (i - start > 4 * 1024 * 1024 || decoded.length >= 100000) { limited = true; break; }
     if (eventBytes[i] !== 10) continue;
     try { decoded.push(new TextDecoder("utf-8", { fatal: true }).decode(eventBytes.subarray(start, i)) + "\n"); }
     catch { invalid = true; break; }
     start = i + 1;
   }
   // Do not decode the unfinished suffix; no complete record was committed there.
-  const trace = parseTrace(manifestText, decoded.join("") + (!invalid && start < eventBytes.length ? "{" : ""), blobs);
+  const trace = parseTrace(manifestText, decoded.join("") + (!invalid && !limited && start < eventBytes.length ? "{" : ""), blobs);
   if (invalid) trace.issues.push("invalid-record");
+  if (limited) trace.issues.push("reader-limit");
   return trace;
 }
 

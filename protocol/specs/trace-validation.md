@@ -10,11 +10,11 @@
 | `cmake --build --preset windows-msvc-debug --parallel 12` | 成功 |
 | `ctest --test-dir build/windows-msvc-debug -C Debug --output-on-failure` | 6/6 成功 |
 | `Gua.Selector.Tests` | 134/134 成功、skip 0 |
-| `Gua.Visual.Tests`（Trace を含む） | 33/33 成功、skip 0 |
-| TraceTests のみ | 20/20 成功 |
+| `Gua.Visual.Tests`（Trace を含む） | 34/34 成功、skip 0 |
+| TraceTests のみ | 21/21 成功 |
 | `Gua.Testing` net10.0 / netstandard2.1 | 両方ビルド成功、警告 0 |
 | `bun run check` | 全 workspace 成功 |
-| Inspector テスト | 24/24 成功（Trace 9 件を含む） |
+| Inspector テスト | 26/26 成功（Trace 11 件を含む） |
 | Inspector Vite 本番ビルド | 成功 |
 | offline Viewer build と `dotnet pack Gua.Testing` | 成功 |
 | 展開済み nupkg DLL のみを参照する別 console | source project 参照なしで HTML 生成成功 |
@@ -42,6 +42,8 @@ NuGet の初回 restore と Vite/esbuild は sandbox 外の既存設定・親デ
 - completion の無相関 poll API を呼ぶと必ず失敗する fake context で非干渉を確認。
 - 初回監査の終了/Dispose 競合、Windows 改行による上限超過、不正 UTF-8、data 欠落、
   未知 envelope field 消失を親側の追加テストでも失敗させてから修正。
+- 最終監査の収集時刻逆行と UTF-8 byte 上限も、親側で失敗を再現して修正。
+  監査は 2 回で終了し、最後の修正は上記のローカル回帰テストで確認した。
 - 保持窓から消えた観測を参照する assertion を作り、欠損として表示することを確認。
 
 生成物は `artifacts/trace-viewer`、sample の出力先、`artifacts/packages` に置く。
