@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../../../../protocol/fixtures/value-v1.json" Link="value-v1.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\Gua.Core\Gua.Core.csproj" />
     <ProjectReference Include="..\..\src\Gua.Runtime\Gua.Runtime.csproj" />
     <ProjectReference Include="..\..\src\Gua.Testing\Gua.Testing.csproj" />

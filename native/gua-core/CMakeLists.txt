@@ -1,11 +1,13 @@
 add_library(gua-core
     src/gua.cpp
+    src/value.cpp
 )
 
 add_library(gua::core ALIAS gua-core)
 
 add_library(gua SHARED
     src/gua.cpp
+    src/value.cpp
 )
 
 add_library(gua::shared ALIAS gua)
@@ -45,6 +47,7 @@ if(MSVC)
             /permissive-
             /Zc:__cplusplus
             /utf-8
+            /EHsc
     )
     target_compile_options(gua
         PRIVATE
@@ -52,6 +55,7 @@ if(MSVC)
             /permissive-
             /Zc:__cplusplus
             /utf-8
+            /EHsc
     )
 else()
     target_compile_options(gua-core
@@ -69,6 +73,15 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(gua-value-c-tests tests/value_c_tests.c)
+    target_link_libraries(gua-value-c-tests PRIVATE gua)
+    target_compile_options(gua-value-c-tests PRIVATE $<$<C_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<C_COMPILER_ID:MSVC>>:-UNDEBUG>)
+    add_test(NAME gua-value-c-tests COMMAND gua-value-c-tests)
+    add_executable(gua-value-tests tests/value_tests.cpp)
+    target_link_libraries(gua-value-tests PRIVATE gua-core)
+    target_compile_definitions(gua-value-tests PRIVATE GUA_VALUE_FIXTURE="${PROJECT_SOURCE_DIR}/protocol/fixtures/value-v1.json")
+    target_compile_options(gua-value-tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<CXX_COMPILER_ID:MSVC>:/utf-8> $<$<CXX_COMPILER_ID:MSVC>:/EHsc> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+    add_test(NAME gua-value-tests COMMAND gua-value-tests)
     add_executable(gua-core-state-tests tests/state_model_tests.cpp)
     target_link_libraries(gua-core-state-tests PRIVATE gua-core)
     target_compile_features(gua-core-state-tests PRIVATE cxx_std_20)

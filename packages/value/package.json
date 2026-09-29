@@ -1,0 +1,11 @@
+{
+  "name": "gua-value",
+  "version": "0.0.0",
+  "description": "Gua Value v1 types, validation and equality",
+  "type": "module",
+  "license": "MIT",
+  "exports": {".": {"types": "./src/index.ts", "bun": "./src/index.ts", "import": "./dist/index.js"}},
+  "files": ["src", "dist", "README.md"],
+  "scripts": {"check": "tsc --noEmit", "test": "bun test", "build": "bun build src/index.ts --target browser --format esm --outfile dist/index.js && tsc --emitDeclarationOnly", "prepack": "bun run build"},
+  "devDependencies": {"typescript": "^5.5.0", "ajv": "^8.17.1"}
+}
