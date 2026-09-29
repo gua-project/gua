@@ -200,6 +200,14 @@ public static class GuaUnityFixture
         root.name = "toolkit-root";
         root.style.width = 640;
         root.style.height = 360;
+        if (Environment.GetEnvironmentVariable("GUA_UNITY_TOOLKIT_CLICKS") == "1")
+        {
+            document.panelSettings.scaleMode = PanelScaleMode.ConstantPixelSize;
+            document.panelSettings.scale = float.Parse(Environment.GetEnvironmentVariable("GUA_UNITY_TOOLKIT_SCALE") ?? "1",
+                System.Globalization.CultureInfo.InvariantCulture);
+            BuildToolkitClickControls(root);
+            return;
+        }
         var scaledBox = new VisualElement { name = "scaled-box" };
         scaledBox.style.position = Position.Absolute;
         scaledBox.style.left = 100;
@@ -242,6 +250,58 @@ public static class GuaUnityFixture
         Button("DisabledCanvasButton", "disabled-canvas-button", disabledCanvasObject.transform, "Hidden by Canvas", Vector2.zero);
 
         coverage.SetActive(string.Equals(Environment.GetEnvironmentVariable("GUA_UNITY_COVERAGE"), "1", StringComparison.Ordinal));
+    }
+
+    private static void BuildToolkitClickControls(VisualElement root)
+    {
+        root.style.width = 400;
+        var status = new UnityEngine.UIElements.Label("clicks:0 down:0 up:0 events:0 count:0 centered:False") { name = "click-status" };
+        root.Add(status);
+        var clicks = 0; var downs = 0; var ups = 0; var events = 0; var count = 0; var centered = false;
+        void UpdateStatus() => status.text = $"clicks:{clicks} down:{downs} up:{ups} events:{events} count:{count} centered:{centered}";
+        var button = new UnityEngine.UIElements.Button(() => { clicks++; UpdateStatus(); }) { name = "click-button", text = "Click Target" };
+        button.style.height = 36;
+        button.RegisterCallback<PointerDownEvent>(_ => { downs++; UpdateStatus(); }, TrickleDown.TrickleDown);
+        button.RegisterCallback<PointerUpEvent>(_ => { ups++; UpdateStatus(); }, TrickleDown.TrickleDown);
+        button.RegisterCallback<ClickEvent>(evt =>
+        {
+            events++; count = evt.clickCount;
+            centered = Vector2.Distance(evt.position, button.worldBound.center) < 1;
+            UpdateStatus();
+        });
+        root.Add(button);
+        // Pick may return a child instead of the button itself.
+        var child = new VisualElement();
+        child.style.position = Position.Absolute;
+        child.style.left = child.style.right = child.style.top = child.style.bottom = 0;
+        button.Add(child);
+        var cover = new VisualElement { name = "click-cover" };
+        cover.style.position = Position.Absolute;
+        cover.style.left = cover.style.right = cover.style.top = cover.style.bottom = 0;
+        cover.style.display = DisplayStyle.None;
+        root.Add(new UnityEngine.UIElements.Button(() => { button.parent.Add(cover); cover.style.display = DisplayStyle.Flex; })
+            { text = "Show Cover" });
+        var scrollStatus = new UnityEngine.UIElements.Label("scrolled:0");
+        root.Add(scrollStatus);
+        var scroll = new ScrollView();
+        scroll.style.height = 70;
+        root.Add(scroll);
+        var spacer = new VisualElement(); spacer.style.height = 300; spacer.style.flexShrink = 0;
+        scroll.Add(spacer);
+        var scrolled = 0;
+        var scrollButton = new UnityEngine.UIElements.Button(() => scrollStatus.text = $"scrolled:{++scrolled}") { text = "Scroll Target" };
+        scrollButton.style.height = 32; scrollButton.style.flexShrink = 0;
+        scroll.Add(scrollButton);
+        var tabs = new TabView();
+        var first = new Tab("Click First") { name = "click-first-tab" };
+        var second = new Tab("Click Second") { name = "click-second-tab" };
+        first.Add(new UnityEngine.UIElements.Label("first content"));
+        second.Add(new UnityEngine.UIElements.Label("second content"));
+        tabs.Add(first); tabs.Add(second);
+        root.Add(tabs);
+        var tabStatus = new UnityEngine.UIElements.Label("tab:0");
+        root.Add(tabStatus);
+        tabs.activeTabChanged += (_, next) => tabStatus.text = next == second ? "tab:1" : "tab:0";
     }
 
     private static UnityEngine.UI.Button Button(string name, string id, Transform parent, string label, Vector2 position)

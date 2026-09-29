@@ -12,6 +12,17 @@ precompiled managed assemblies and OS/CPU-scoped native libraries for the
 supported Editors and Players. IL2CPP, IMGUI, and EditorWindow UI automation
 remain outside that stable range; the WebGL path below is experimental.
 
+## UI Toolkit clicks
+
+Button `click` and Tab `click`/`select` send pointer move/down/up at the
+target's center in panel coordinates (the header for a Tab). This invokes
+the normal UI Toolkit pointer and click handlers. Ancestor ScrollViews scroll
+the target into view first; virtualized rows that have not been created are
+not materialized by this operation. If the panel cannot pick the target or
+one of its descendants at that point, the action fails with `hidden` instead
+of clicking through a covering element. Success reports dispatched input;
+tests should also assert the application's resulting state.
+
 ## Unity WebGL and browser-native WebMCP (experimental)
 
 WebGL builds install a tab-local `__guaUnityWebPort` from

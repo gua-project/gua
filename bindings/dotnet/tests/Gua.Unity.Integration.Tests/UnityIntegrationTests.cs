@@ -9,6 +9,59 @@ namespace Gua.Unity.Integration.Tests;
 [TestFixture]
 public sealed class UnityIntegrationTests
 {
+    [TestCase("1")]
+    [TestCase("1.5")]
+    [TestCase("2")]
+    public void RenderedPlayer_ToolkitClickDispatchesPointerEventsAndRejectsCoveredTargets(string scale)
+    {
+        var player = Environment.GetEnvironmentVariable("GUA_UNITY_PLAYER");
+        if (string.IsNullOrWhiteSpace(player)) Assert.Ignore("Set GUA_UNITY_PLAYER to run the Unity integration fixture.");
+        using var host = UnitySceneTestHost.LoadRenderedPlayer(player!, new UnitySceneTestHostOptions
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(30),
+            EnvironmentVariables = new Dictionary<string, string>
+            {
+                ["GUA_UNITY_TOOLKIT_CLICKS"] = "1",
+                ["GUA_UNITY_TOOLKIT_SCALE"] = scale,
+            },
+        });
+        Assert.That(WaitForNode(host, "button", "Click Target", out var buttonId), Is.True);
+
+        GuaActionEvent Act(string id, GuaActionType action = GuaActionType.Click)
+        {
+            Assert.That(host.Context.EnqueueAction(new GuaActionRequest(action, id), out var requestId), Is.EqualTo(GuaActionError.None));
+            Assert.That(WaitForActionEvent(host, requestId, out var result), Is.True);
+            return result;
+        }
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            var result = Act(buttonId);
+            Assert.That(result.Succeeded, Is.True, result.Error.ToString());
+            Assert.That(WaitForText(host, $"clicks:{attempt} down:{attempt} up:{attempt} events:{attempt} count:1 centered:True"), Is.True,
+                "A completed click must invoke clicked and pointer/click callbacks exactly once at the panel-space center.");
+            Assert.That(host.Context.TryPollActionEvent(out _), Is.False, "Synthetic clicks must not emit duplicate uncorrelated events.");
+        }
+        Assert.That(WaitForNode(host, "button", "Scroll Target", out var scrollId), Is.True);
+        var scrollResult = Act(scrollId);
+        Assert.That(scrollResult.Succeeded, Is.True, scrollResult.Error.ToString());
+        Assert.That(WaitForText(host, "scrolled:1"), Is.True);
+
+        Assert.That(WaitForNode(host, "tab", "click-second-tab", out var secondTab), Is.True);
+        var tabResult = Act(secondTab);
+        Assert.That(tabResult.Succeeded, Is.True, tabResult.Error.ToString());
+        Assert.That(WaitForText(host, "tab:1"), Is.True, "Click must activate the previously inactive tab.");
+        Assert.That(WaitForNode(host, "tab", "click-first-tab", out var firstTab), Is.True);
+        Assert.That(Act(firstTab, GuaActionType.Select).Succeeded, Is.True);
+        Assert.That(WaitForText(host, "tab:0"), Is.True);
+
+        Assert.That(WaitForNode(host, "button", "Show Cover", out var coverId), Is.True);
+        Assert.That(Act(coverId).Succeeded, Is.True);
+        var covered = Act(buttonId);
+        Assert.That(covered.Succeeded, Is.False);
+        Assert.That(covered.Error, Is.EqualTo(GuaActionError.Hidden));
+        Assert.That(WaitForText(host, "clicks:2 down:2 up:2 events:2 count:1 centered:True"), Is.True);
+    }
+
     [Test]
     public void PrecompiledUpmArtifactPlayer_LoadsManagedAndNativeClosure()
     {
