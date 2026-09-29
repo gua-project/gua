@@ -1,0 +1,411 @@
+{
+  "schemaVersion": 1,
+  "catalog": {
+    "schemaVersion": 1,
+    "enums": [
+      {
+        "enumType": "game.BossPhase",
+        "members": [
+          "First",
+          "Second",
+          "AliasSecond",
+          "FirstSecond"
+        ]
+      },
+      {
+        "enumType": "other.Phase",
+        "members": [
+          "Second"
+        ]
+      }
+    ]
+  },
+  "valid": [
+    {
+      "id": "bool",
+      "json": "{\"type\":\"bool\",\"value\":true}"
+    },
+    {
+      "id": "list-bool-0",
+      "json": "{\"type\":\"list\",\"elementType\":\"bool\",\"value\":[]}"
+    },
+    {
+      "id": "list-bool-1",
+      "json": "{\"type\":\"list\",\"elementType\":\"bool\",\"value\":[true]}"
+    },
+    {
+      "id": "set-bool-0",
+      "json": "{\"type\":\"set\",\"elementType\":\"bool\",\"value\":[]}"
+    },
+    {
+      "id": "set-bool-1",
+      "json": "{\"type\":\"set\",\"elementType\":\"bool\",\"value\":[true]}"
+    },
+    {
+      "id": "integer",
+      "json": "{\"type\":\"integer\",\"value\":9007199254740991}"
+    },
+    {
+      "id": "list-integer-0",
+      "json": "{\"type\":\"list\",\"elementType\":\"integer\",\"value\":[]}"
+    },
+    {
+      "id": "list-integer-1",
+      "json": "{\"type\":\"list\",\"elementType\":\"integer\",\"value\":[9007199254740991]}"
+    },
+    {
+      "id": "set-integer-0",
+      "json": "{\"type\":\"set\",\"elementType\":\"integer\",\"value\":[]}"
+    },
+    {
+      "id": "set-integer-1",
+      "json": "{\"type\":\"set\",\"elementType\":\"integer\",\"value\":[9007199254740991]}"
+    },
+    {
+      "id": "number",
+      "json": "{\"type\":\"number\",\"value\":1}"
+    },
+    {
+      "id": "list-number-0",
+      "json": "{\"type\":\"list\",\"elementType\":\"number\",\"value\":[]}"
+    },
+    {
+      "id": "list-number-1",
+      "json": "{\"type\":\"list\",\"elementType\":\"number\",\"value\":[1]}"
+    },
+    {
+      "id": "set-number-0",
+      "json": "{\"type\":\"set\",\"elementType\":\"number\",\"value\":[]}"
+    },
+    {
+      "id": "set-number-1",
+      "json": "{\"type\":\"set\",\"elementType\":\"number\",\"value\":[1]}"
+    },
+    {
+      "id": "string",
+      "json": "{\"type\":\"string\",\"value\":\"日本語😀\\u0000é\"}"
+    },
+    {
+      "id": "list-string-0",
+      "json": "{\"type\":\"list\",\"elementType\":\"string\",\"value\":[]}"
+    },
+    {
+      "id": "list-string-1",
+      "json": "{\"type\":\"list\",\"elementType\":\"string\",\"value\":[\"日本語😀\\u0000é\"]}"
+    },
+    {
+      "id": "set-string-0",
+      "json": "{\"type\":\"set\",\"elementType\":\"string\",\"value\":[]}"
+    },
+    {
+      "id": "set-string-1",
+      "json": "{\"type\":\"set\",\"elementType\":\"string\",\"value\":[\"日本語😀\\u0000é\"]}"
+    },
+    {
+      "id": "enum",
+      "json": "{\"type\":\"enum\",\"value\":\"Second\",\"enumType\":\"game.BossPhase\"}"
+    },
+    {
+      "id": "list-enum-0",
+      "json": "{\"type\":\"list\",\"elementType\":\"enum\",\"value\":[],\"enumType\":\"game.BossPhase\"}"
+    },
+    {
+      "id": "list-enum-1",
+      "json": "{\"type\":\"list\",\"elementType\":\"enum\",\"value\":[\"Second\"],\"enumType\":\"game.BossPhase\"}"
+    },
+    {
+      "id": "set-enum-0",
+      "json": "{\"type\":\"set\",\"elementType\":\"enum\",\"value\":[],\"enumType\":\"game.BossPhase\"}"
+    },
+    {
+      "id": "set-enum-1",
+      "json": "{\"type\":\"set\",\"elementType\":\"enum\",\"value\":[\"Second\"],\"enumType\":\"game.BossPhase\"}"
+    },
+    {
+      "id": "minimum",
+      "json": "{\"type\":\"integer\",\"value\":-9007199254740991}"
+    },
+    {
+      "id": "exponent-integer",
+      "json": "{\"type\":\"integer\",\"value\":900719925474099100e-2}"
+    },
+    {
+      "id": "negative-zero",
+      "json": "{\"type\":\"number\",\"value\":-0}"
+    },
+    {
+      "id": "subnormal",
+      "json": "{\"type\":\"number\",\"value\":5e-324}"
+    },
+    {
+      "id": "underflow",
+      "json": "{\"type\":\"number\",\"value\":1e-400}"
+    },
+    {
+      "id": "zero-huge-exponent",
+      "json": "{\"type\":\"integer\",\"value\":0e999999999999}"
+    },
+    {
+      "id": "large-number",
+      "json": "{\"type\":\"number\",\"value\":1.7976931348623157e308}"
+    }
+  ],
+  "invalid": [
+    {
+      "id": "above-max",
+      "json": "{\"type\":\"integer\",\"value\":9007199254740992}",
+      "error": "range",
+      "schemaReject": true
+    },
+    {
+      "id": "below-min",
+      "json": "{\"type\":\"integer\",\"value\":-9007199254740992}",
+      "error": "range",
+      "schemaReject": true
+    },
+    {
+      "id": "rounded-fraction",
+      "json": "{\"type\":\"integer\",\"value\":9007199254740990.9}",
+      "error": "range",
+      "schemaReject": false
+    },
+    {
+      "id": "rounded-fraction-one",
+      "json": "{\"type\":\"integer\",\"value\":1.00000000000000001}",
+      "error": "range",
+      "schemaReject": false
+    },
+    {
+      "id": "fraction",
+      "json": "{\"type\":\"integer\",\"value\":1.5}",
+      "error": "range",
+      "schemaReject": true
+    },
+    {
+      "id": "overflow",
+      "json": "{\"type\":\"number\",\"value\":1e999}",
+      "error": "non_finite",
+      "schemaReject": false
+    },
+    {
+      "id": "null",
+      "json": "{\"type\":\"string\",\"value\":null}",
+      "error": "forbidden_type",
+      "schemaReject": true
+    },
+    {
+      "id": "object",
+      "json": "{\"type\":\"string\",\"value\":{}}",
+      "error": "forbidden_type",
+      "schemaReject": true
+    },
+    {
+      "id": "nested-array",
+      "json": "{\"type\":\"list\",\"elementType\":\"string\",\"value\":[[]]}",
+      "error": "forbidden_type",
+      "schemaReject": true
+    },
+    {
+      "id": "nested-type",
+      "json": "{\"type\":\"list\",\"elementType\":\"list\",\"value\":[]}",
+      "error": "forbidden_type",
+      "schemaReject": true
+    },
+    {
+      "id": "mixed",
+      "json": "{\"type\":\"list\",\"elementType\":\"string\",\"value\":[true]}",
+      "error": "element_type",
+      "schemaReject": true
+    },
+    {
+      "id": "duplicate",
+      "json": "{\"type\":\"set\",\"elementType\":\"integer\",\"value\":[1,1]}",
+      "error": "duplicate",
+      "schemaReject": true
+    },
+    {
+      "id": "zero-duplicate",
+      "json": "{\"type\":\"set\",\"elementType\":\"number\",\"value\":[0,-0]}",
+      "error": "duplicate",
+      "schemaReject": true
+    },
+    {
+      "id": "enum-unknown",
+      "json": "{\"type\":\"enum\",\"enumType\":\"missing.Phase\",\"value\":\"Second\"}",
+      "error": "enum_unknown",
+      "schemaReject": false
+    },
+    {
+      "id": "enum-member",
+      "json": "{\"type\":\"enum\",\"enumType\":\"game.BossPhase\",\"value\":\"Undefined\"}",
+      "error": "enum_member",
+      "schemaReject": false
+    },
+    {
+      "id": "enum-numeric",
+      "json": "{\"type\":\"enum\",\"enumType\":\"game.BossPhase\",\"value\":1}",
+      "error": "element_type",
+      "schemaReject": true
+    },
+    {
+      "id": "unknown-field",
+      "json": "{\"type\":\"bool\",\"value\":true,\"secret\":\"DO_NOT_LOG\"}",
+      "error": "structure",
+      "schemaReject": true
+    },
+    {
+      "id": "unnecessary-enum",
+      "json": "{\"type\":\"string\",\"value\":\"x\",\"enumType\":\"game.BossPhase\"}",
+      "error": "structure",
+      "schemaReject": true
+    },
+    {
+      "id": "missing-element",
+      "json": "{\"type\":\"list\",\"value\":[]}",
+      "error": "structure",
+      "schemaReject": true
+    },
+    {
+      "id": "surrogate",
+      "json": "{\"type\":\"string\",\"value\":\"\\ud800\"}",
+      "error": "unicode",
+      "schemaReject": false
+    },
+    {
+      "id": "duplicate-key",
+      "json": "{\"type\":\"bool\",\"type\":\"string\",\"value\":\"x\"}",
+      "error": "structure",
+      "schemaReject": false
+    },
+    {
+      "id": "invalid-json",
+      "json": "{\"type\":\"number\",\"value\":NaN}",
+      "error": "structure",
+      "schemaReject": false
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "number-integer",
+      "left": "{\"type\":\"number\",\"value\":1}",
+      "right": "{\"type\":\"integer\",\"value\":1}",
+      "equal": false
+    },
+    {
+      "id": "enum-type",
+      "left": "{\"type\":\"enum\",\"value\":\"Second\",\"enumType\":\"game.BossPhase\"}",
+      "right": "{\"type\":\"enum\",\"value\":\"Second\",\"enumType\":\"other.Phase\"}",
+      "equal": false
+    },
+    {
+      "id": "enum-alias",
+      "left": "{\"type\":\"enum\",\"value\":\"Second\",\"enumType\":\"game.BossPhase\"}",
+      "right": "{\"type\":\"enum\",\"value\":\"AliasSecond\",\"enumType\":\"game.BossPhase\"}",
+      "equal": false
+    },
+    {
+      "id": "set-order",
+      "left": "{\"type\":\"set\",\"value\":[1,2],\"elementType\":\"integer\"}",
+      "right": "{\"type\":\"set\",\"value\":[2,1],\"elementType\":\"integer\"}",
+      "equal": true
+    },
+    {
+      "id": "list-order",
+      "left": "{\"type\":\"list\",\"value\":[1,2],\"elementType\":\"integer\"}",
+      "right": "{\"type\":\"list\",\"value\":[2,1],\"elementType\":\"integer\"}",
+      "equal": false
+    },
+    {
+      "id": "collection-kind",
+      "left": "{\"type\":\"list\",\"value\":[],\"elementType\":\"integer\"}",
+      "right": "{\"type\":\"set\",\"value\":[],\"elementType\":\"integer\"}",
+      "equal": false
+    },
+    {
+      "id": "empty-type",
+      "left": "{\"type\":\"list\",\"value\":[],\"elementType\":\"integer\"}",
+      "right": "{\"type\":\"list\",\"value\":[],\"elementType\":\"number\"}",
+      "equal": false
+    },
+    {
+      "id": "unicode",
+      "left": "{\"type\":\"string\",\"value\":\"é\"}",
+      "right": "{\"type\":\"string\",\"value\":\"é\"}",
+      "equal": false
+    },
+    {
+      "id": "case",
+      "left": "{\"type\":\"string\",\"value\":\"Second\"}",
+      "right": "{\"type\":\"string\",\"value\":\"second\"}",
+      "equal": false
+    },
+    {
+      "id": "zero",
+      "left": "{\"type\":\"number\",\"value\":-0}",
+      "right": "{\"type\":\"number\",\"value\":0}",
+      "equal": true
+    },
+    {
+      "id": "nul",
+      "left": "{\"type\":\"string\",\"value\":\"a\\u0000b\"}",
+      "right": "{\"type\":\"string\",\"value\":\"a\"}",
+      "equal": false
+    },
+    {
+      "id": "number-underflow-zero",
+      "left": "{\"type\":\"number\",\"value\":1e-400}",
+      "right": "{\"type\":\"number\",\"value\":0}",
+      "equal": true
+    },
+    {
+      "id": "subnormal-below-midpoint",
+      "left": "{\"type\":\"number\",\"value\":2.4703282292062327e-324}",
+      "right": "{\"type\":\"number\",\"value\":0}",
+      "equal": true
+    },
+    {
+      "id": "subnormal-above-midpoint",
+      "left": "{\"type\":\"number\",\"value\":2.4703282292062328e-324}",
+      "right": "{\"type\":\"number\",\"value\":5e-324}",
+      "equal": true
+    },
+    {
+      "id": "negative-subnormal-above-midpoint",
+      "left": "{\"type\":\"number\",\"value\":-2.4703282292062328e-324}",
+      "right": "{\"type\":\"number\",\"value\":-5e-324}",
+      "equal": true
+    },
+    {
+      "id": "subnormal-near-normal-boundary",
+      "left": "{\"type\":\"number\",\"value\":2.225073858507201e-308}",
+      "right": "{\"type\":\"number\",\"value\":0}",
+      "equal": false
+    }
+  ],
+  "generators": [
+    {
+      "id": "nan",
+      "type": "number",
+      "generate": "NaN",
+      "error": "non_finite"
+    },
+    {
+      "id": "infinity",
+      "type": "number",
+      "generate": "Infinity",
+      "error": "non_finite"
+    },
+    {
+      "id": "negative-infinity",
+      "type": "number",
+      "generate": "-Infinity",
+      "error": "non_finite"
+    },
+    {
+      "id": "bigint",
+      "type": "integer",
+      "generate": "BigInt",
+      "error": "forbidden_type"
+    }
+  ]
+}
