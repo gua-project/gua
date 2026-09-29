@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <cstring>
 
@@ -43,6 +44,17 @@ int main() {
     rejects([&]{auto v=gua::Value::collection(GUA_VALUE_SET,GUA_VALUE_INTEGER,{&a,&a});},GUA_VALUE_DUPLICATE);
     std::string source("a\0b",3); auto text=gua::Value::string(source); source[0]='x'; assert(text.to_json().find("a\\u0000b")!=std::string::npos);
     auto zero=gua::Value::number(-0.0); assert(zero.to_json().find("-0")==std::string::npos);
+    struct comma_decimal : std::numpunct<char> { char do_decimal_point() const override { return ','; } };
+    const auto previous_locale=std::locale();
+    std::locale::global(std::locale(previous_locale,new comma_decimal));
+    try {
+        auto decimal=gua::Value(R"({"type":"number","value":1.25})");
+        auto exponent=gua::Value(R"({"type":"number","value":125e-2})");
+        assert(decimal==gua::Value::number(1.25)&&exponent==decimal);
+        assert(decimal.to_json().find("1.25")!=std::string::npos);
+        rejects([]{gua::Value invalid(R"({"type":"number","value":1,25})");},GUA_VALUE_STRUCTURE);
+    } catch(...) { std::locale::global(previous_locale); throw; }
+    std::locale::global(previous_locale);
     const auto required=gua_value_copy_json(text.get(),nullptr,0); char short_buffer[2]={'x','y'};
     assert(gua_value_copy_json(text.get(),short_buffer,2)==required&&short_buffer[0]==0&&short_buffer[1]=='y');
     assert(gua_value_copy_json(text.get(),nullptr,1)==0);

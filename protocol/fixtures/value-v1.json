@@ -350,6 +350,36 @@
       "left": "{\"type\":\"string\",\"value\":\"a\\u0000b\"}",
       "right": "{\"type\":\"string\",\"value\":\"a\"}",
       "equal": false
+    },
+    {
+      "id": "number-underflow-zero",
+      "left": "{\"type\":\"number\",\"value\":1e-400}",
+      "right": "{\"type\":\"number\",\"value\":0}",
+      "equal": true
+    },
+    {
+      "id": "subnormal-below-midpoint",
+      "left": "{\"type\":\"number\",\"value\":2.4703282292062327e-324}",
+      "right": "{\"type\":\"number\",\"value\":0}",
+      "equal": true
+    },
+    {
+      "id": "subnormal-above-midpoint",
+      "left": "{\"type\":\"number\",\"value\":2.4703282292062328e-324}",
+      "right": "{\"type\":\"number\",\"value\":5e-324}",
+      "equal": true
+    },
+    {
+      "id": "negative-subnormal-above-midpoint",
+      "left": "{\"type\":\"number\",\"value\":-2.4703282292062328e-324}",
+      "right": "{\"type\":\"number\",\"value\":-5e-324}",
+      "equal": true
+    },
+    {
+      "id": "subnormal-near-normal-boundary",
+      "left": "{\"type\":\"number\",\"value\":2.225073858507201e-308}",
+      "right": "{\"type\":\"number\",\"value\":0}",
+      "equal": false
     }
   ],
   "generators": [

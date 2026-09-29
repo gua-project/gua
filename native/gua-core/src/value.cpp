@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <locale>
 #include <memory>
 #include <set>
+#include <sstream>
 
 using namespace gua_value_detail;
 struct gua_enum_catalog_t { std::map<std::string,std::vector<std::string>> enums; };
@@ -91,11 +93,18 @@ gua_value_t scalar(int t,const json& j,const std::string& id,const gua_enum_cata
     case GUA_VALUE_INTEGER: if(j.type!=json::number) fail(GUA_VALUE_ELEMENT_TYPE,path); v.integer=gua_value_detail::integer(j.text,path); break;
     case GUA_VALUE_NUMBER: {
         if(j.type!=json::number) fail(GUA_VALUE_ELEMENT_TYPE,path);
-        auto r=std::from_chars(j.text.data(),j.text.data()+j.text.size(),v.number);
-        // from_chars reports both overflow and underflow as out_of_range.
-        // IEEE binary64 underflow rounds to zero, as on the JS wire reader.
-        if(r.ec==std::errc::result_out_of_range && decimal_order(j.text)<-308) { v.number=0; break; }
-        if(r.ec!=std::errc{}||!std::isfinite(v.number)) fail(GUA_VALUE_NON_FINITE,path);
+        // Xcode 16 libc++ has no floating-point from_chars overload. The JSON
+        // parser already checked the token grammar; classic locale keeps the
+        // portable conversion independent of the application's decimal point.
+        std::istringstream stream(j.text);
+        stream.imbue(std::locale::classic());
+        stream >> v.number;
+        // Some libraries mark underflow with failbit even when they return a
+        // rounded subnormal. Preserve that result; reject overflow/saturation.
+        const bool underflow=decimal_order(j.text)<=-308 &&
+            std::abs(v.number)<std::numeric_limits<double>::min();
+        if(!std::isfinite(v.number) || (stream.fail() && !underflow))
+            fail(GUA_VALUE_NON_FINITE,path);
         break;
     }
     case GUA_VALUE_STRING:case GUA_VALUE_ENUM:
