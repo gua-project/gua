@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GuaTraceFileViewer } from "./TraceViewer";
 
 import {
   type GuaInspectorClient,
@@ -274,6 +275,7 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
         </div>
       </header>
 
+      <details style={{ padding: 16 }}><summary>Open Gua Trace (offline)</summary><GuaTraceFileViewer /></details>
       <main className="gua-layout">
         <TreePanel
           nodes={state.uiTree.nodes}

@@ -118,6 +118,14 @@ jobs:
           dotnet restore bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj
           dotnet restore bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj
 
+      - name: Set up Bun for the shared Trace Viewer
+        uses: oven-sh/setup-bun@v2
+
+      - name: Build the packaged offline Trace Viewer
+        run: |
+          bun install --frozen-lockfile
+          bun run --filter @gua/inspector build:trace
+
       - name: Build Gua.Core and Gua.Testing target frameworks
         run: |
           dotnet build bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release --framework net10.0 --no-restore -p:Version=${{ steps.version.outputs.version }}

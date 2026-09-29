@@ -108,6 +108,10 @@ epoch, but never action payload values. Clean sessions do not create artifacts.
 
 ## Failure diagnostics and artifact version 1
 
+The opt-in [Gua Trace v1](trace-v1.md) recorder adds a bounded, versioned timeline
+and offline viewer without replacing diagnostics or Recording. It separates
+caller outcome, capture quality, observation times and host completion.
+
 `diagnostics.schema.json` is the source of truth for a best-effort failure
 snapshot. The additive C ABI copy-JSON API and WebSocket `get_diagnostics`
 command return the same versioned document. It includes the final semantic UI

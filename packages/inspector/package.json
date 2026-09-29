@@ -7,12 +7,14 @@
     ".": "./src/index.ts",
     "./automation": "./src/automation.ts",
     "./core": "./src/core.ts",
-    "./react": "./src/react.ts"
+    "./react": "./src/react.ts",
+    "./trace": "./src/trace.ts"
   },
   "types": "./src/index.ts",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
+    "build:trace": "bun ../../scripts/build-trace-viewer.ts",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "test": "bun test test",

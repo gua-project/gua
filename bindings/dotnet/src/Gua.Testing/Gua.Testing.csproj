@@ -30,5 +30,14 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <EmbeddedResource Include="../../../../artifacts/trace-viewer/viewer.js" LogicalName="Gua.Trace.Viewer.js"
+                      Condition="Exists('../../../../artifacts/trace-viewer/viewer.js')" />
+    <None Include="../../../../protocol/schema/trace.schema.json" Pack="true" PackagePath="trace/" />
+    <None Include="../../../../artifacts/trace-viewer/index.html" Pack="true" PackagePath="trace/"
+          Condition="Exists('../../../../artifacts/trace-viewer/index.html')" />
   </ItemGroup>
+  <Target Name="RequireTraceViewerForPack" BeforeTargets="GenerateNuspec">
+    <Error Condition="!Exists('../../../../artifacts/trace-viewer/viewer.js')"
+           Text="Build the version-pinned Trace Viewer before packaging: bun run --filter @gua/inspector build:trace" />
+  </Target>
 </Project>
