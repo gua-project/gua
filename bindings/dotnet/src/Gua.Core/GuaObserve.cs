@@ -153,19 +153,19 @@ public sealed class GuaObserveSubscription : IDisposable
 }
 internal static partial class Native
 {
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_registration_alive(nint c, ulong id);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_registration_alive(nint c, ulong id);
     [StructLayout(LayoutKind.Sequential)]
     internal struct ObserveRegistration { public uint StructSize; public ulong Owner; public ValueText Name; public int Player, Sensitive; }
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_create_owner(nint c, int source, ValueText id, out ulong owner);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_destroy_owner(nint c, ulong owner);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_register_v1(nint c, in ObserveRegistration d, out ulong registration);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_unregister(nint c, ulong id);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_publish(nint c, ulong id, nint value, int error, int stage);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_set_limits(nint c, uint events, ulong bytes);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_snapshot(nint c, int profile, out nint result);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_subscribe(nint c, int profile, out ulong subscription, out nint result);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_poll(nint c, ulong id, out nint result);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_unsubscribe(nint c, ulong id);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_result_copy_json(nint result, byte[]? buffer, int capacity);
-    [DllImport("gua", CallingConvention = CallingConvention.Cdecl)] internal static extern void gua_observe_result_destroy(nint result);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_create_owner(nint c, int source, ValueText id, out ulong owner);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_destroy_owner(nint c, ulong owner);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_register_v1(nint c, in ObserveRegistration d, out ulong registration);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_unregister(nint c, ulong id);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_publish(nint c, ulong id, nint value, int error, int stage);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_set_limits(nint c, uint events, ulong bytes);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_snapshot(nint c, int profile, out nint result);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_subscribe(nint c, int profile, out ulong subscription, out nint result);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_poll(nint c, ulong id, out nint result);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_unsubscribe(nint c, ulong id);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_result_copy_json(nint result, byte[]? buffer, int capacity);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern void gua_observe_result_destroy(nint result);
 }

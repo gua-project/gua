@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <thread>
+#include <iostream>
 using gua_value_detail::json;
 using gua_value_detail::parser;
 static json parse(const std::string& s) { return parser(s).parse(); }
@@ -101,6 +102,27 @@ static void cpp_move_in_getter() {
     assert(moved); moved->end_frame();
     assert(gua::observe_snapshot(*moved).find("\"value\":1")!=std::string::npos);
 }
+static void cpp_sampling_failure_preserves_callbacks() {
+    gua::Context c; ui(c.native_handle());
+    gua::ObserveOwner world(c,GUA_OBSERVE_WORLD), ui_owner(c,GUA_OBSERVE_UI,"a");
+    int world_calls=0, first_calls=0, last_calls=0;
+    auto property=world.property("world",[&]{++world_calls;return gua::Value::integer(10);});
+    auto first=ui_owner.observe("first",[&]{++first_calls;return gua::Value::integer(20);});
+    auto last=ui_owner.observe("last",[&]{++last_calls;return gua::Value::integer(30);});
+    bool failed=false;
+    try { c.end_frame(); }
+    catch(const gua::ObserveError& e) { failed=e.code==GUA_OBSERVE_NO_FRAME; }
+    if(!failed) throw std::runtime_error("Expected missing-frame error");
+    c.begin_frame("test"); c.node("a","button","A",{}); c.end_frame();
+    if(first_calls!=2 || last_calls!=1) throw std::runtime_error("Sampling failure lost failed or unvisited callbacks");
+    if(!gua_begin_world_frame(c.native_handle(),"world")) throw std::runtime_error("World begin failed");
+    c.end_world_frame();
+    c.begin_frame("test"); c.node("a","button","A",{}); c.end_frame();
+    if(world_calls!=1 || first_calls!=3 || last_calls!=2) throw std::runtime_error("Callbacks lost or duplicated after recovery");
+    const auto entries=parse(gua::observe_snapshot(c)).at("entries").items;
+    if(entries.size()!=3) throw std::runtime_error("Registration count changed");
+    for(const auto& entry:entries) if(entry.at("status").text!="available") throw std::runtime_error("Recovered registration was not sampled");
+}
 static void shared_fixture() {
     std::ifstream file(GUA_OBSERVE_FIXTURE); assert(file); std::stringstream buffer; buffer<<file.rdbuf(); auto f=parse(buffer.str());
     gua::Context context;auto c=context.native_handle();auto o=owner(c,3),r=reg(c,o),sub=subscribe(c);
@@ -111,4 +133,4 @@ static void shared_fixture() {
         auto events=poll(c,sub).at("events").items;assert(events.size()==1);assert(events[0].at("kind").text==step.at("kind").text);
     }
 }
-int main() { cpp_move_in_getter(); shared_fixture(); lifetimes();publication();continuity();privacy();cpp_getters(); }
+int main() { try { cpp_sampling_failure_preserves_callbacks(); cpp_move_in_getter(); shared_fixture(); lifetimes();publication();continuity();privacy();cpp_getters(); } catch(const std::exception& e) { std::cerr << e.what() << std::endl; return 1; } }
