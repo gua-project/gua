@@ -106,6 +106,16 @@ async function runSmoke() {
   if (!capabilities?.includes("semantic_game_input_v1") || !actionMap?.actions?.some((action: any) => action.id === "jump")) {
     throw new Error(`Godot Release did not expose its Player-authorized game action: ${JSON.stringify({ capabilities, actionMap })}`);
   }
+  const search = await port.invoke({ type: "find_game_input_actions", id: "jump", limit: 1 });
+  if (search?.count !== 1 || search.actions?.[0]?.id !== "jump") {
+    throw new Error(`Godot JSON game-input search failed: ${JSON.stringify(search)}`);
+  }
+  for (const limit of [0, 1.5, 101, "1", null]) {
+    let code;
+    try { await port.invoke({ type: "find_game_input_actions", limit }); }
+    catch (error: any) { code = error.code; }
+    if (code !== "invalid_request") throw new Error(`Godot accepted invalid selector limit: ${limit}`);
+  }
   const gameInputCompletion = await port.invoke(
     { type: "perform_game_input", request: { type: "press_game_input_action", actionId: "jump" } },
     { timeoutMs: 5_000 },

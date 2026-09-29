@@ -442,6 +442,7 @@ async function waitForWorldObject(
 
 function gameInputSelector(input: Record<string, unknown>): GuaGameInputActionSelector {
   rejectUnknownArguments(input, new Set(["id", "query", "valueType", "active", "context", "category", "tags", "limit"]));
+  if (input.limit === null) throw new GuaWebError("invalid_request", "limit must be an integer from 1 to 100.");
   const stringValue = (key: string, maximumCodePoints?: number): string | undefined => {
     const value = input[key];
     if (value === undefined) return undefined;

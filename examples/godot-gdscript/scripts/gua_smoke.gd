@@ -236,6 +236,24 @@ func _run() -> void:
 		_fail("Gua smoke did not publish every game input action type: %s" % game_input_actions)
 		return
 	var player_actions: String = ui.context.get_player_game_input_actions_json()
+	# Issue #117: Web selectors arrive through JSON with FLOAT limits.
+	for limit_text in ["1", "1.0", "100", "1e2"]:
+		var selector: Dictionary = JSON.parse_string('{"id":"move","limit":%s}' % limit_text)
+		var search = JSON.parse_string(ui.context.find_game_input_actions_json(selector, 1))
+		if not search is Dictionary or search.get("count") != 1 or search.get("actions", [])[0].get("id") != "move":
+			_fail("Gua JSON game-input selector failed: %s" % limit_text)
+			return
+	for invalid_selector in [
+		{"limit": 0}, {"limit": -1}, {"limit": 101}, {"limit": 1.5},
+		{"limit": INF}, {"limit": NAN}, {"limit": 4294967297},
+		{"limit": "1"}, {"limit": true}, {"limit": null},
+		{"id": 1}, {"active": "true"}, {"tags": "gameplay"}, {"tags": [1]},
+		{"value_type": "unknown"},
+	]:
+		var rejected = JSON.parse_string(ui.context.find_game_input_actions_json(invalid_selector, 1))
+		if not rejected is Dictionary or rejected.get("code") != "invalid_request":
+			_fail("Gua invalid game-input selector did not return structured invalid_request.")
+			return
 	var jump_search: String = ui.context.find_game_input_actions_json({"query": "hop", "category": "movement", "tags": ["gameplay"], "limit": 1}, 1)
 	if player_actions.contains("\"chat\"") or not jump_search.contains("\"jump\"") or not jump_search.contains("\"truncated\":false"):
 		_fail("Gua Player game-input projection/search did not enforce descriptor v2 metadata: %s / %s" % [player_actions, jump_search])

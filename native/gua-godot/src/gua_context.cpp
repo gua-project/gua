@@ -769,31 +769,40 @@ String GuaContext::get_player_game_input_actions_json() const
 
 String GuaContext::find_game_input_actions_json(const Dictionary& selector, int observation_profile) const
 {
+    const auto invalid_selector = []() {
+        return String("{\"code\":\"invalid_request\",\"message\":\"Invalid game input selector.\"}");
+    };
     for (const char* field : { "id", "query", "context", "category", "value_type" })
-        if (selector.has(field) && selector[field].get_type() != Variant::STRING) return String();
-    if (selector.has("active") && selector["active"].get_type() != Variant::BOOL) return String();
-    if (selector.has("limit") && selector["limit"].get_type() != Variant::INT) return String();
+        if (selector.has(field) && selector[field].get_type() != Variant::STRING) return invalid_selector();
+    if (selector.has("active") && selector["active"].get_type() != Variant::BOOL) return invalid_selector();
+    // Godot's JSON parser represents numbers as FLOAT, including integer limits.
+    // Check the range before narrowing so large integers cannot wrap into range.
+    const Variant limit_value = selector.get("limit", 20);
+    if (limit_value.get_type() != Variant::INT && limit_value.get_type() != Variant::FLOAT) return invalid_selector();
+    const double numeric_limit = limit_value;
+    if (!std::isfinite(numeric_limit) || numeric_limit < 1 || numeric_limit > 100 ||
+        std::floor(numeric_limit) != numeric_limit) return invalid_selector();
+    const int limit = static_cast<int>(numeric_limit);
     const String id = selector.get("id", String()), query = selector.get("query", String()), context = selector.get("context", String());
     const String category = selector.get("category", String()), value_type = selector.get("value_type", String());
     const auto contains_nul = [](const String& value) {
         for (int64_t index = 0; index < value.length(); ++index) if (value.unicode_at(index) == 0) return true;
         return false;
     };
-    if (contains_nul(id) || contains_nul(query) || contains_nul(context) || contains_nul(category)) return String();
+    if (contains_nul(id) || contains_nul(query) || contains_nul(context) || contains_nul(category)) return invalid_selector();
     const CharString id_utf8 = id.utf8(), query_utf8 = query.utf8(), context_utf8 = context.utf8(), category_utf8 = category.utf8();
+    if (selector.has("tags") && selector["tags"].get_type() != Variant::ARRAY) return invalid_selector();
     const Array tags = selector.get("tags", Array());
-    if (selector.has("tags") && selector["tags"].get_type() != Variant::ARRAY) return String();
-    const int limit = selector.get("limit", 20);
-    if (limit < 1 || limit > 100 || tags.size() > 16) return String();
+    if (tags.size() > 16) return invalid_selector();
     std::vector<CharString> tag_strings; std::vector<const char*> tag_pointers;
     for (int i = 0; i < tags.size(); ++i) {
-        if (tags[i].get_type() != Variant::STRING || String(tags[i]).is_empty() || contains_nul(String(tags[i]))) return String();
+        if (tags[i].get_type() != Variant::STRING || String(tags[i]).is_empty() || contains_nul(String(tags[i]))) return invalid_selector();
         tag_strings.push_back(String(tags[i]).utf8());
     }
     for (const auto& tag : tag_strings) tag_pointers.push_back(tag.get_data());
     const int native_type = value_type == "button" ? GUA_GAME_INPUT_BUTTON : value_type == "axis1d" ? GUA_GAME_INPUT_AXIS1D :
         value_type == "vector2" ? GUA_GAME_INPUT_VECTOR2 : value_type == "text" ? GUA_GAME_INPUT_TEXT : 0;
-    if (!value_type.is_empty() && native_type == 0) return String();
+    if (!value_type.is_empty() && native_type == 0) return invalid_selector();
     int active = GUA_FILTER_ANY;
     if (selector.has("active")) active = static_cast<bool>(selector["active"]) ? GUA_FILTER_TRUE : GUA_FILTER_FALSE;
     gua_game_input_action_selector_v1_t native { sizeof(native), id.is_empty() ? nullptr : id_utf8.get_data(),
@@ -801,7 +810,7 @@ String GuaContext::find_game_input_actions_json(const Dictionary& selector, int 
         category.is_empty() ? nullptr : category_utf8.get_data(), tag_pointers.empty() ? nullptr : tag_pointers.data(),
         static_cast<uint32_t>(tag_pointers.size()), static_cast<uint32_t>(limit) };
     const auto copy = [&](char* output, int size) { return gua_runtime_query_game_input_actions_json(runtime_, &native, observation_profile, output, size); };
-    const int required = copy(nullptr, 0); if (required <= 0) return String();
+    const int required = copy(nullptr, 0); if (required <= 0) return invalid_selector();
     std::vector<char> output(static_cast<std::size_t>(required)); copy(output.data(), required);
     return String::utf8(output.data());
 }

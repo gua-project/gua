@@ -57,6 +57,7 @@ async function installGodotWebPort(
     enqueueGameInput?: (request: string) => string;
     pollGameInput?: (requestId: string) => string;
     releaseGameInput?: (recreate?: string) => number;
+    findGameInputActions?: (request: string) => string;
   } = {},
 ) {
   const source = await Bun.file(new URL(
@@ -73,13 +74,13 @@ async function installGodotWebPort(
   godotGlobals.__guaGodotCancelAction = godotCallback((requestId) => { cancelled.push(requestId); return options.cancellationResult ?? 1; });
   godotGlobals.__guaGodotGetGameInputCapabilities = godotCallback(() => JSON.stringify(["raw_keyboard_input_v1"]));
   godotGlobals.__guaGodotGetGameInputActions = godotCallback(() => JSON.stringify({ schemaVersion: 1, sessionEpoch: 1, revision: 1, context: "", actions: [] }));
-  godotGlobals.__guaGodotFindGameInputActions = godotCallback((request) => {
+  godotGlobals.__guaGodotFindGameInputActions = godotCallback(options.findGameInputActions ?? ((request: string) => {
     const selector = JSON.parse(request) as { id?: string };
     return JSON.stringify({ schemaVersion: 1, sessionEpoch: 1, revision: 2, context: "gameplay", count: 1,
       truncated: false, actions: [{ id: selector.id, description: "Jump", valueType: "button", holdable: true,
         active: true, bindings: ["Space"], risk: "safe", requiresConfirmation: false, category: "movement",
         aliases: ["hop"], tags: ["gameplay"], agentExposure: "auto" }] });
-  });
+  }));
   godotGlobals.__guaGodotGetGameInputState = godotCallback(() => JSON.stringify({ schemaVersion: 1, held: [] }));
   godotGlobals.__guaGodotEnqueueGameInput = godotCallback(options.enqueueGameInput ?? (() => JSON.stringify({ requestId: 23 })));
   godotGlobals.__guaGodotPollGameInput = godotCallback(options.pollGameInput ?? (() => "null"));
@@ -89,6 +90,13 @@ async function installGodotWebPort(
 }
 
 describe("Godot Web same-page port", () => {
+  test("preserves structured selector errors from the Godot binding", async () => {
+    const port = await installGodotWebPort([], {
+      findGameInputActions: () => JSON.stringify({ code: "invalid_request", message: "Invalid game input selector." }),
+    });
+    await expect(port.invoke({ type: "find_game_input_actions", limit: 1.5 }))
+      .rejects.toMatchObject({ code: "invalid_request" });
+  });
   test("routes bounded semantic action search through the Godot callback", async () => {
     const port = await installGodotWebPort([]);
     await expect(port.invoke({ type: "find_game_input_actions", id: "jump", limit: 1 })).resolves.toMatchObject({
