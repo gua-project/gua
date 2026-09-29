@@ -173,7 +173,8 @@ describe("registerGuaWebMcp", () => {
     expect(registration.registeredTools).not.toContain("set_gamepad_axis");
     const found = await page.tools.get("find_game_input_actions")!.execute({ query: "Jump", active: true }) as GuaGameInputActionSearchResult;
     expect(found.actions[0]!.id).toBe("jump");
-    for (const invalid of [{ id: "Invalid" }, { tags: ["same", "same"] }, { query: "q".repeat(129) }, { query: "before\0after" }]) {
+    for (const invalid of [{ id: "Invalid" }, { tags: ["same", "same"] }, { query: "q".repeat(129) }, { query: "before\0after" },
+      { limit: null }, { limit: 0 }, { limit: 1.5 }, { limit: 101 }, { limit: "1" }]) {
       const rejected = await page.tools.get("find_game_input_actions")!.execute(invalid) as { isError: boolean; content: Array<{ text: string }> };
       expect(rejected.isError).toBe(true);
       expect(JSON.parse(rejected.content[0]!.text).error.code).toBe("invalid_request");

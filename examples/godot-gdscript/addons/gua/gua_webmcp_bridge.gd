@@ -129,7 +129,11 @@ func attach(gua_adapter: RefCounted) -> bool:
       }
       if (command.type === 'get_game_input_capabilities') return JSON.parse(callGodot(getGameInputCapabilities));
       if (command.type === 'get_game_input_actions') return JSON.parse(callGodot(getGameInputActions));
-      if (command.type === 'find_game_input_actions') return JSON.parse(callGodot(findGameInputActions, JSON.stringify(command)));
+      if (command.type === 'find_game_input_actions') {
+        const result = JSON.parse(callGodot(findGameInputActions, JSON.stringify(command)));
+        if (result && result.code) throw engineError(result.code, result.message || 'Invalid game input selector.');
+        return result;
+      }
       if (command.type === 'get_game_input_state') return JSON.parse(callGodot(getGameInputState));
       if (command.type === 'perform_game_input') {
         const receipt = JSON.parse(callGodot(enqueueGameInput, JSON.stringify(command.request)));
