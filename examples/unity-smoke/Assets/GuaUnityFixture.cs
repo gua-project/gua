@@ -302,6 +302,10 @@ public static class GuaUnityFixture
         var tabStatus = new UnityEngine.UIElements.Label("tab:0");
         root.Add(tabStatus);
         tabs.activeTabChanged += (_, next) => tabStatus.text = next == second ? "tab:1" : "tab:0";
+        root.Add(new UnityEngine.UIElements.Button(() => tabs.contentContainer.style.display = DisplayStyle.None)
+            { text = "Hide Tab Content" });
+        root.Add(new UnityEngine.UIElements.Button(() => first.tabHeader.parent.style.display = DisplayStyle.None)
+            { text = "Hide Tab Headers" });
     }
 
     private static UnityEngine.UI.Button Button(string name, string id, Transform parent, string label, Vector2 position)

@@ -694,11 +694,12 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             var root = document.rootVisualElement;
             if (root == null) continue;
             var rootId = ExplicitOrObjectId(document.gameObject, "uidocument");
-            CollectVisualElement(root, rootId, null, 0, document.isActiveAndEnabled && document.gameObject.activeInHierarchy);
+            var documentVisible = document.isActiveAndEnabled && document.gameObject.activeInHierarchy;
+            CollectVisualElement(root, rootId, null, 0, documentVisible, documentVisible);
         }
     }
 
-    private void CollectVisualElement(VisualElement element, string id, string? parentId, int index, bool hostVisible)
+    private void CollectVisualElement(VisualElement element, string id, string? parentId, int index, bool hostVisible, bool documentVisible)
     {
         var explicitId = !string.IsNullOrWhiteSpace(element.viewDataKey) ? element.viewDataKey : element.name;
         var resolved = FitNodeId(string.IsNullOrWhiteSpace(explicitId)
@@ -712,7 +713,10 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         if (sensitive) range.value = null;
         // A Tab's content is hidden when inactive; its header remains actionable.
         var interactionElement = element is Tab tab ? tab.tabHeader : element;
-        var visible = hostVisible && interactionElement.resolvedStyle.display != DisplayStyle.None && interactionElement.resolvedStyle.visibility == Visibility.Visible;
+        var contentVisible = hostVisible && element.resolvedStyle.display != DisplayStyle.None && element.resolvedStyle.visibility == Visibility.Visible;
+        // TabView reparents headers outside its content container. Follow that
+        // actual hierarchy, while keeping hidden content hidden in the tree.
+        var visible = element is Tab ? documentVisible && IsVisualHierarchyVisible(interactionElement) : contentVisible;
         var enabled = element.enabledInHierarchy;
         var registered = Register(resolved, role, label, VisualBounds(interactionElement), visible, enabled, parentId,
             text: !sensitive && (role is "text" or "textbox") ? label : null,
@@ -725,9 +729,8 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             CollectListViewItems(listView, resolved, visible, enabled);
             return;
         }
-        var contentVisible = visible && element.resolvedStyle.display != DisplayStyle.None && element.resolvedStyle.visibility == Visibility.Visible;
         for (var childIndex = 0; childIndex < element.hierarchy.childCount; childIndex++)
-            CollectVisualElement(element.hierarchy[childIndex], resolved, resolved, childIndex, contentVisible);
+            CollectVisualElement(element.hierarchy[childIndex], resolved, resolved, childIndex, contentVisible, documentVisible);
     }
 
     private void CollectListViewItems(ListView listView, string parentId, bool parentVisible, bool parentEnabled)
@@ -1199,9 +1202,18 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         Component component => ReferenceEquals(frameFocusTarget, component.gameObject),
         _ => false,
     };
+    private static bool IsVisualHierarchyVisible(VisualElement element)
+    {
+        if (element.panel == null) return false;
+        for (var current = element; current != null; current = current.hierarchy.parent)
+            if (current.resolvedStyle.display == DisplayStyle.None || current.resolvedStyle.visibility != Visibility.Visible)
+                return false;
+        return true;
+    }
+
     private static bool IsCurrentlyVisible(object target, bool collectedVisible) => target switch
     {
-        Tab tab => IsCurrentlyVisible(tab.tabHeader, collectedVisible),
+        Tab tab => IsVisualHierarchyVisible(tab.tabHeader),
         VisualElement visual => visual.panel != null && visual.visible && visual.resolvedStyle.display != DisplayStyle.None,
         ListItemTarget item => item.List.panel != null && item.List.visible && item.List.resolvedStyle.display != DisplayStyle.None,
         GameObject gameObject => gameObject != null && gameObject.activeInHierarchy,

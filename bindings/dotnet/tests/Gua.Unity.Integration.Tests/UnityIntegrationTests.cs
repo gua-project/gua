@@ -54,6 +54,15 @@ public sealed class UnityIntegrationTests
         Assert.That(Act(firstTab, GuaActionType.Select).Succeeded, Is.True);
         Assert.That(WaitForText(host, "tab:0"), Is.True);
 
+        Assert.That(WaitForNode(host, "button", "Hide Tab Content", out var hideContentId), Is.True);
+        Assert.That(Act(hideContentId).Succeeded, Is.True);
+        Assert.That(Act(secondTab).Succeeded, Is.True, "Visible tab headers remain actionable when their separate content container is hidden.");
+        Assert.That(WaitForText(host, "tab:1"), Is.True);
+        Assert.That(WaitForNode(host, "button", "Hide Tab Headers", out var hideHeadersId), Is.True);
+        Assert.That(Act(hideHeadersId).Succeeded, Is.True);
+        Assert.That(() => host.RemoteContext.GetRemoteTree().Nodes.Single(node => node.Id == secondTab).Visible,
+            Is.False.After(2000, 50), "A hidden header ancestor must make its tab hidden.");
+
         Assert.That(WaitForNode(host, "button", "Show Cover", out var coverId), Is.True);
         Assert.That(Act(coverId).Succeeded, Is.True);
         var covered = Act(buttonId);
