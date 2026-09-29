@@ -304,8 +304,18 @@ public static class GuaUnityFixture
         tabs.activeTabChanged += (_, next) => tabStatus.text = next == second ? "tab:1" : "tab:0";
         root.Add(new UnityEngine.UIElements.Button(() => tabs.contentContainer.style.display = DisplayStyle.None)
             { text = "Hide Tab Content" });
-        root.Add(new UnityEngine.UIElements.Button(() => first.tabHeader.parent.style.display = DisplayStyle.None)
+        root.Add(new UnityEngine.UIElements.Button(() =>
+            {
+                tabs.contentContainer.style.display = DisplayStyle.Flex;
+                first.tabHeader.parent.style.display = DisplayStyle.None;
+            })
             { text = "Hide Tab Headers" });
+        root.Add(new UnityEngine.UIElements.Button(() =>
+            {
+                first.tabHeader.parent.style.display = DisplayStyle.Flex;
+                GuaUnityAdapterRegistry.SetAgentPolicy(tabs.contentContainer, new GuaAgentPolicy(Exposure: GuaAgentExposure.Private));
+                tabStatus.text = "private tabs";
+            }) { text = "Private Tab Content" });
     }
 
     private static UnityEngine.UI.Button Button(string name, string id, Transform parent, string label, Vector2 position)

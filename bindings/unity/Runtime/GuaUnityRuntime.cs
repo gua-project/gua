@@ -699,7 +699,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         }
     }
 
-    private void CollectVisualElement(VisualElement element, string id, string? parentId, int index, bool hostVisible, bool documentVisible)
+    private void CollectVisualElement(VisualElement element, string id, string? parentId, int index, bool hostVisible, bool documentVisible, string? tabListId = null)
     {
         var explicitId = !string.IsNullOrWhiteSpace(element.viewDataKey) ? element.viewDataKey : element.name;
         var resolved = FitNodeId(string.IsNullOrWhiteSpace(explicitId)
@@ -718,7 +718,8 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         // actual hierarchy, while keeping hidden content hidden in the tree.
         var visible = element is Tab ? documentVisible && IsVisualHierarchyVisible(interactionElement) : contentVisible;
         var enabled = element.enabledInHierarchy;
-        var registered = Register(resolved, role, label, VisualBounds(interactionElement), visible, enabled, parentId,
+        var semanticParentId = element is Tab ? tabListId ?? parentId : parentId;
+        var registered = Register(resolved, role, label, VisualBounds(interactionElement), visible, enabled, semanticParentId,
             text: !sensitive && (role is "text" or "textbox") ? label : null,
             value: sensitive ? null : VisualValue(element), focused: ReferenceEquals(frameFocusTarget, element),
             checkedValue: element is UnityEngine.UIElements.Toggle toggle ? toggle.value : null,
@@ -730,7 +731,8 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             return;
         }
         for (var childIndex = 0; childIndex < element.hierarchy.childCount; childIndex++)
-            CollectVisualElement(element.hierarchy[childIndex], resolved, resolved, childIndex, contentVisible, documentVisible);
+            CollectVisualElement(element.hierarchy[childIndex], resolved, resolved, childIndex, contentVisible, documentVisible,
+                element is TabView ? resolved : tabListId);
     }
 
     private void CollectListViewItems(ListView listView, string parentId, bool parentVisible, bool parentEnabled)
@@ -804,10 +806,15 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         (double? value, double? min, double? max) range, Target target)
     {
         if (!ids.Add(id)) { runtime!.AddLog(3, $"Duplicate Unity Gua id ignored: {id}"); return false; }
+        var agentPolicy = GuaUnityAdapterRegistry.PolicyFor(AgentPolicyTarget(target.Value));
+        // A Tab's semantic parent is its tablist rather than its hidden body
+        // container. Preserve private restrictions from both physical branches.
+        if (target.Value is Tab tab && (IsPrivateVisualHierarchy(tab.hierarchy.parent) || IsPrivateVisualHierarchy(tab.tabHeader)))
+            agentPolicy = new GuaAgentPolicy(Exposure: GuaAgentExposure.Private);
         runtime!.RegisterNode(new GuaNodeDescriptor(id, role, label, bounds, visible, enabled, parentId, text, value,
             Focused: focused, Checked: checkedValue, Selected: selectedValue,
             RangeValue: range.value, RangeMin: range.min, RangeMax: range.max,
-            AgentPolicy: GuaUnityAdapterRegistry.PolicyFor(AgentPolicyTarget(target.Value))));
+            AgentPolicy: agentPolicy));
         targets[id] = new Target(target.Value, target.Role, visible, enabled, target.PolicyHost);
         return true;
     }
@@ -1211,6 +1218,13 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         return true;
     }
 
+    private static bool IsPrivateVisualHierarchy(VisualElement? element)
+    {
+        for (var current = element; current != null; current = current.hierarchy.parent)
+            if (GuaUnityAdapterRegistry.PolicyFor(current)?.Exposure == GuaAgentExposure.Private) return true;
+        return false;
+    }
+
     private static bool IsCurrentlyVisible(object target, bool collectedVisible) => target switch
     {
         Tab tab => IsVisualHierarchyVisible(tab.tabHeader),
@@ -1237,6 +1251,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         var policy = GuaUnityAdapterRegistry.PolicyFor(policyTarget);
         if (policy?.Exposure == GuaAgentExposure.Private ||
             (policy?.AllowedActions != null && !policy.AllowedActions.Contains(action))) return false;
+        if (policyTarget is Tab tab && (IsPrivateVisualHierarchy(tab.hierarchy.parent) || IsPrivateVisualHierarchy(tab.tabHeader))) return false;
         var policyHost = target.PolicyHost ?? policyTarget switch
         {
             GameObject gameObject => gameObject,

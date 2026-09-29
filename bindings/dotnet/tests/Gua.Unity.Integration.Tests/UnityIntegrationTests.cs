@@ -9,10 +9,11 @@ namespace Gua.Unity.Integration.Tests;
 [TestFixture]
 public sealed class UnityIntegrationTests
 {
-    [TestCase("1")]
-    [TestCase("1.5")]
-    [TestCase("2")]
-    public void RenderedPlayer_ToolkitClickDispatchesPointerEventsAndRejectsCoveredTargets(string scale)
+    [TestCase("1", "debug")]
+    [TestCase("1.5", "debug")]
+    [TestCase("2", "debug")]
+    [TestCase("1", "player")]
+    public void RenderedPlayer_ToolkitClickDispatchesPointerEventsAndRejectsCoveredTargets(string scale, string profile)
     {
         var player = Environment.GetEnvironmentVariable("GUA_UNITY_PLAYER");
         if (string.IsNullOrWhiteSpace(player)) Assert.Ignore("Set GUA_UNITY_PLAYER to run the Unity integration fixture.");
@@ -23,6 +24,7 @@ public sealed class UnityIntegrationTests
             {
                 ["GUA_UNITY_TOOLKIT_CLICKS"] = "1",
                 ["GUA_UNITY_TOOLKIT_SCALE"] = scale,
+                ["GUA_OBSERVATION_PROFILE"] = profile,
             },
         });
         Assert.That(WaitForNode(host, "button", "Click Target", out var buttonId), Is.True);
@@ -58,10 +60,21 @@ public sealed class UnityIntegrationTests
         Assert.That(Act(hideContentId).Succeeded, Is.True);
         Assert.That(Act(secondTab).Succeeded, Is.True, "Visible tab headers remain actionable when their separate content container is hidden.");
         Assert.That(WaitForText(host, "tab:1"), Is.True);
+        Assert.That(host.RemoteContext.GetRemoteTree().Nodes.Any(node => node.Text == "second content" && node.Visible), Is.False,
+            "Reparenting the semantic tab must not make hidden content visible.");
         Assert.That(WaitForNode(host, "button", "Hide Tab Headers", out var hideHeadersId), Is.True);
         Assert.That(Act(hideHeadersId).Succeeded, Is.True);
-        Assert.That(() => host.RemoteContext.GetRemoteTree().Nodes.Single(node => node.Id == secondTab).Visible,
+        Assert.That(() => host.RemoteContext.GetRemoteTree().Nodes.Any(node => node.Id == secondTab && node.Visible),
             Is.False.After(2000, 50), "A hidden header ancestor must make its tab hidden.");
+        if (profile == "player")
+        {
+            Assert.That(WaitForNode(host, "button", "Private Tab Content", out var privateId), Is.True);
+            Assert.That(Act(privateId).Succeeded, Is.True);
+            Assert.That(WaitForText(host, "private tabs"), Is.True, "The policy-changing button must actually invoke its callback.");
+            Assert.That(() => host.RemoteContext.GetRemoteTree().Nodes.Any(node => node.Id == secondTab), Is.False.After(2000, 50),
+                "The tablist parent must not bypass private policies on the original content hierarchy.");
+            Assert.That(host.Context.EnqueueAction(new GuaActionRequest(GuaActionType.Click, secondTab), out _), Is.EqualTo(GuaActionError.NodeNotFound));
+        }
 
         Assert.That(WaitForNode(host, "button", "Show Cover", out var coverId), Is.True);
         Assert.That(Act(coverId).Succeeded, Is.True);
