@@ -1,0 +1,1052 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/observe-v1.schema.json",
+  "title": "Observe v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sessionEpoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "profile": {
+          "enum": [
+            "debug",
+            "player"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uiFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uiRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worldFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worldRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "const": "snapshot"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ownerId": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "registrationId": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "source": {
+                "enum": [
+                  "ui",
+                  "object",
+                  "world"
+                ]
+              },
+              "runtimeId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ]
+              },
+              "value": {
+                "$ref": "https://gua.dev/schema/value-v1.schema.json"
+              },
+              "error": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10,
+                  11,
+                  100,
+                  101,
+                  102
+                ]
+              }
+            },
+            "required": [
+              "ownerId",
+              "registrationId",
+              "source",
+              "runtimeId",
+              "name",
+              "status"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "available"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "value"
+                  ],
+                  "not": {
+                    "required": [
+                      "error"
+                    ]
+                  }
+                },
+                "else": {
+                  "required": [
+                    "error"
+                  ],
+                  "not": {
+                    "required": [
+                      "value"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "sourceId",
+        "sessionEpoch",
+        "profile",
+        "sequence",
+        "revision",
+        "uiFrame",
+        "uiRevision",
+        "worldFrame",
+        "worldRevision",
+        "kind",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sessionEpoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "profile": {
+          "enum": [
+            "debug",
+            "player"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uiFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uiRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worldFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worldRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "const": "changes"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "gap",
+            "stale_session"
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "const": 1
+              },
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sessionEpoch": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "profile": {
+                "enum": [
+                  "debug",
+                  "player"
+                ]
+              },
+              "sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uiFrame": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uiRevision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "worldFrame": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "worldRevision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ownerId": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "registrationId": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "source": {
+                "enum": [
+                  "ui",
+                  "object",
+                  "world"
+                ]
+              },
+              "runtimeId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "enum": [
+                  "added",
+                  "changed",
+                  "removed",
+                  "unavailable",
+                  "recovered"
+                ]
+              },
+              "boundary": {
+                "enum": [
+                  "frame",
+                  "explicit",
+                  "lifecycle"
+                ]
+              },
+              "beforeStatus": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ]
+              },
+              "afterStatus": {
+                "enum": [
+                  "available",
+                  "unavailable"
+                ]
+              },
+              "before": {
+                "$ref": "https://gua.dev/schema/value-v1.schema.json"
+              },
+              "after": {
+                "$ref": "https://gua.dev/schema/value-v1.schema.json"
+              },
+              "beforeError": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10,
+                  11,
+                  100,
+                  101,
+                  102
+                ]
+              },
+              "afterError": {
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10,
+                  11,
+                  100,
+                  101,
+                  102
+                ]
+              }
+            },
+            "required": [
+              "schemaVersion",
+              "sourceId",
+              "sessionEpoch",
+              "profile",
+              "sequence",
+              "revision",
+              "uiFrame",
+              "uiRevision",
+              "worldFrame",
+              "worldRevision",
+              "ownerId",
+              "registrationId",
+              "source",
+              "runtimeId",
+              "name",
+              "kind",
+              "boundary"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "beforeStatus"
+                  ]
+                },
+                "then": {
+                  "if": {
+                    "properties": {
+                      "beforeStatus": {
+                        "const": "available"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "before"
+                    ],
+                    "not": {
+                      "required": [
+                        "beforeError"
+                      ]
+                    }
+                  },
+                  "else": {
+                    "required": [
+                      "beforeError"
+                    ],
+                    "not": {
+                      "required": [
+                        "before"
+                      ]
+                    }
+                  }
+                },
+                "else": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "before"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "beforeError"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "required": [
+                    "afterStatus"
+                  ]
+                },
+                "then": {
+                  "if": {
+                    "properties": {
+                      "afterStatus": {
+                        "const": "available"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "after"
+                    ],
+                    "not": {
+                      "required": [
+                        "afterError"
+                      ]
+                    }
+                  },
+                  "else": {
+                    "required": [
+                      "afterError"
+                    ],
+                    "not": {
+                      "required": [
+                        "after"
+                      ]
+                    }
+                  }
+                },
+                "else": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "after"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "afterError"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "added"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "after"
+                  ],
+                  "not": {
+                    "required": [
+                      "before"
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "changed"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "before",
+                    "after"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "removed"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "beforeStatus"
+                  ],
+                  "not": {
+                    "required": [
+                      "afterStatus"
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "unavailable"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "afterError"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "recovered"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "beforeError",
+                    "after"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "sourceId",
+        "sessionEpoch",
+        "profile",
+        "sequence",
+        "revision",
+        "uiFrame",
+        "uiRevision",
+        "worldFrame",
+        "worldRevision",
+        "kind",
+        "status",
+        "events"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "gap",
+                  "stale_session"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "events": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "event": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sessionEpoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "profile": {
+          "enum": [
+            "debug",
+            "player"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uiFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uiRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worldFrame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worldRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ownerId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "registrationId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "enum": [
+            "ui",
+            "object",
+            "world"
+          ]
+        },
+        "runtimeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "added",
+            "changed",
+            "removed",
+            "unavailable",
+            "recovered"
+          ]
+        },
+        "boundary": {
+          "enum": [
+            "frame",
+            "explicit",
+            "lifecycle"
+          ]
+        },
+        "beforeStatus": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "afterStatus": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "before": {
+          "$ref": "https://gua.dev/schema/value-v1.schema.json"
+        },
+        "after": {
+          "$ref": "https://gua.dev/schema/value-v1.schema.json"
+        },
+        "beforeError": {
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            100,
+            101,
+            102
+          ]
+        },
+        "afterError": {
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            100,
+            101,
+            102
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "sourceId",
+        "sessionEpoch",
+        "profile",
+        "sequence",
+        "revision",
+        "uiFrame",
+        "uiRevision",
+        "worldFrame",
+        "worldRevision",
+        "ownerId",
+        "registrationId",
+        "source",
+        "runtimeId",
+        "name",
+        "kind",
+        "boundary"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "beforeStatus"
+            ]
+          },
+          "then": {
+            "if": {
+              "properties": {
+                "beforeStatus": {
+                  "const": "available"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "before"
+              ],
+              "not": {
+                "required": [
+                  "beforeError"
+                ]
+              }
+            },
+            "else": {
+              "required": [
+                "beforeError"
+              ],
+              "not": {
+                "required": [
+                  "before"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "before"
+                  ]
+                },
+                {
+                  "required": [
+                    "beforeError"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "afterStatus"
+            ]
+          },
+          "then": {
+            "if": {
+              "properties": {
+                "afterStatus": {
+                  "const": "available"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "after"
+              ],
+              "not": {
+                "required": [
+                  "afterError"
+                ]
+              }
+            },
+            "else": {
+              "required": [
+                "afterError"
+              ],
+              "not": {
+                "required": [
+                  "after"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "after"
+                  ]
+                },
+                {
+                  "required": [
+                    "afterError"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "added"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "after"
+            ],
+            "not": {
+              "required": [
+                "before"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "changed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "before",
+              "after"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "removed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "beforeStatus"
+            ],
+            "not": {
+              "required": [
+                "afterStatus"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "unavailable"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "afterError"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "recovered"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "beforeError",
+              "after"
+            ]
+          }
+        }
+      ]
+    },
+    "entry": {
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "registrationId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "enum": [
+            "ui",
+            "object",
+            "world"
+          ]
+        },
+        "runtimeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "$ref": "https://gua.dev/schema/value-v1.schema.json"
+        },
+        "error": {
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            100,
+            101,
+            102
+          ]
+        }
+      },
+      "required": [
+        "ownerId",
+        "registrationId",
+        "source",
+        "runtimeId",
+        "name",
+        "status"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "value"
+            ],
+            "not": {
+              "required": [
+                "error"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "error"
+            ],
+            "not": {
+              "required": [
+                "value"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

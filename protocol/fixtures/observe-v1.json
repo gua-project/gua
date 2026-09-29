@@ -1,0 +1,300 @@
+{
+  "valid": [
+    {
+      "id": "snapshot",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "snapshot",
+        "entries": [
+          {
+            "ownerId": 1,
+            "registrationId": 2,
+            "source": "world",
+            "runtimeId": "",
+            "name": "phase",
+            "status": "available",
+            "value": {
+              "type": "integer",
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "added",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "changes",
+        "status": "ok",
+        "events": [
+          {
+            "schemaVersion": 1,
+            "sourceId": "fixture-source",
+            "sessionEpoch": 1,
+            "profile": "debug",
+            "sequence": 1,
+            "revision": 1,
+            "uiFrame": 0,
+            "uiRevision": 0,
+            "worldFrame": 0,
+            "worldRevision": 0,
+            "ownerId": 1,
+            "registrationId": 2,
+            "source": "world",
+            "runtimeId": "",
+            "name": "phase",
+            "kind": "added",
+            "boundary": "explicit",
+            "beforeStatus": "unavailable",
+            "beforeError": 101,
+            "afterStatus": "available",
+            "after": {
+              "type": "integer",
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "unavailable",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "snapshot",
+        "entries": [
+          {
+            "ownerId": 1,
+            "registrationId": 2,
+            "source": "world",
+            "runtimeId": "",
+            "name": "phase",
+            "status": "unavailable",
+            "error": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "gap",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "changes",
+        "status": "gap",
+        "events": []
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "null-is-not-value",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "snapshot",
+        "entries": [
+          {
+            "ownerId": 1,
+            "registrationId": 2,
+            "source": "world",
+            "runtimeId": "",
+            "name": "phase",
+            "status": "available",
+            "value": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "error-with-old-value",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "snapshot",
+        "entries": [
+          {
+            "ownerId": 1,
+            "registrationId": 2,
+            "source": "world",
+            "runtimeId": "",
+            "name": "phase",
+            "status": "unavailable",
+            "value": {
+              "type": "integer",
+              "value": 1
+            },
+            "error": 100
+          }
+        ]
+      }
+    },
+    {
+      "id": "removed-with-after",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "changes",
+        "status": "ok",
+        "events": [
+          {
+            "schemaVersion": 1,
+            "sourceId": "fixture-source",
+            "sessionEpoch": 1,
+            "profile": "debug",
+            "sequence": 1,
+            "revision": 1,
+            "uiFrame": 0,
+            "uiRevision": 0,
+            "worldFrame": 0,
+            "worldRevision": 0,
+            "ownerId": 1,
+            "registrationId": 2,
+            "source": "world",
+            "runtimeId": "",
+            "name": "phase",
+            "kind": "removed",
+            "boundary": "explicit",
+            "beforeStatus": "unavailable",
+            "beforeError": 101,
+            "afterStatus": "available",
+            "after": {
+              "type": "integer",
+              "value": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gap-with-events",
+      "document": {
+        "schemaVersion": 1,
+        "sourceId": "fixture-source",
+        "sessionEpoch": 1,
+        "profile": "debug",
+        "sequence": 1,
+        "revision": 1,
+        "uiFrame": 0,
+        "uiRevision": 0,
+        "worldFrame": 0,
+        "worldRevision": 0,
+        "kind": "changes",
+        "status": "gap",
+        "events": [
+          {
+            "schemaVersion": 1,
+            "sourceId": "fixture-source",
+            "sessionEpoch": 1,
+            "profile": "debug",
+            "sequence": 1,
+            "revision": 1,
+            "uiFrame": 0,
+            "uiRevision": 0,
+            "worldFrame": 0,
+            "worldRevision": 0,
+            "ownerId": 1,
+            "registrationId": 2,
+            "source": "world",
+            "runtimeId": "",
+            "name": "phase",
+            "kind": "added",
+            "boundary": "explicit",
+            "beforeStatus": "unavailable",
+            "beforeError": 101,
+            "afterStatus": "available",
+            "after": {
+              "type": "integer",
+              "value": 1
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "value": 1,
+      "kind": "added"
+    },
+    {
+      "value": 2,
+      "kind": "changed"
+    },
+    {
+      "error": 100,
+      "kind": "unavailable"
+    },
+    {
+      "value": 2,
+      "kind": "recovered"
+    },
+    {
+      "error": 4,
+      "kind": "unavailable"
+    },
+    {
+      "remove": true,
+      "kind": "removed"
+    }
+  ]
+}

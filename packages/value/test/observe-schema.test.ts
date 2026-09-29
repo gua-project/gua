@@ -1,0 +1,10 @@
+import { test, expect } from "bun:test";
+import Ajv from "ajv/dist/2020.js";
+import value from "../../../protocol/schema/value-v1.schema.json";
+import schema from "../../../protocol/schema/observe-v1.schema.json";
+import fixture from "../../../protocol/fixtures/observe-v1.json";
+const ajv = new Ajv({ strict: false });
+ajv.addSchema(value);
+const validate = ajv.compile(schema);
+for (const c of fixture.valid) test(`Observe accepts ${c.id}`, () => expect(validate(c.document)).toBe(true));
+for (const c of fixture.invalid) test(`Observe rejects ${c.id}`, () => expect(validate(c.document)).toBe(false));

@@ -217,3 +217,4 @@ int gua_value_get_element_type(const gua_value_t* v) { return v?v->element:0; }
 int gua_value_copy_json(const gua_value_t* v,char* out,int cap) { try { return v?copy(serialize(*v),out,cap):0; } catch(...) { return 0; } }
 int gua_value_equals(const gua_value_t* a,const gua_value_t* b,int* result,gua_value_error_t* error) { if(result) *result=0; return protect(error,[&] { if(!a||!b||!result) fail(GUA_VALUE_STRUCTURE); *result=equal(*a,*b)?1:0; }); }
 }
+extern "C" gua_value_t* gua_value_clone(const gua_value_t* value) { try { return value ? new gua_value_t(*value) : nullptr; } catch (...) { return nullptr; } }

@@ -1133,7 +1133,10 @@ const char* action_name(int action)
 
 } // namespace
 
+#include "observe_state.hpp"
+
 struct gua_context_t {
+    ObserveState observe;
     mutable std::mutex mutex;
     std::string screen = "unknown";
     std::vector<Node> nodes;
@@ -1970,6 +1973,8 @@ std::string build_player_diagnostics_json(const gua_context_t& ctx)
 
 } // namespace
 
+#include "observe.inc"
+
 extern "C" gua_context_t* gua_create_context(void)
 {
     return new gua_context_t();
@@ -1987,6 +1992,7 @@ extern "C" void gua_begin_frame(gua_context_t* ctx, const char* screen)
     }
 
     const std::lock_guard lock(ctx->mutex);
+    observe_discard(*ctx, true);
     ctx->staging_screen = screen != nullptr ? screen : "unknown";
     ctx->staging_nodes.clear();
     ctx->frame_in_progress = true;
@@ -2043,6 +2049,7 @@ extern "C" void gua_end_frame(gua_context_t* ctx)
         ++ctx->player_revision;
         ctx->previous_player_semantic_snapshot = player_semantic_snapshot;
     }
+    observe_frame(*ctx, true);
     ctx->json_cache.clear();
 }
 
@@ -2648,6 +2655,7 @@ extern "C" int gua_begin_world_frame(gua_context_t* ctx, const char* scene)
     if (ctx == nullptr || scene == nullptr || scene[0] == '\0') return 0;
     const std::lock_guard lock(ctx->mutex);
     if (ctx->world_frame_in_progress) return 0;
+    observe_discard(*ctx, false);
     ctx->staging_world_scene = scene;
     ctx->staging_world_objects.clear();
     ctx->world_frame_in_progress = true;
@@ -2799,6 +2807,7 @@ extern "C" int gua_end_world_frame(gua_context_t* ctx)
         ++ctx->player_world_revision;
         ctx->previous_player_world_snapshot = player_semantic;
     }
+    observe_frame(*ctx, false);
     ctx->world_json_cache_debug.clear(); ctx->world_json_cache_player.clear();
     return 1;
 }
@@ -3433,6 +3442,7 @@ extern "C" int gua_reset_context(gua_context_t* ctx, const gua_reset_options_t* 
     ctx->player_world_revision = 0;
     ctx->world_json_cache_debug.clear();
     ctx->world_json_cache_player.clear();
+    observe_reset(*ctx);
     ++ctx->session_epoch;
     out_report->session_epoch = ctx->session_epoch;
     out_report->result = GUA_RESET_SUCCEEDED;

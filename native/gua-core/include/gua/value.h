@@ -51,6 +51,8 @@ int gua_value_create(const gua_value_descriptor_v1_t* descriptor, const gua_enum
     gua_value_t** out_value, gua_value_error_t* error);
 int gua_value_from_json(gua_value_text_t json, const gua_enum_catalog_t* catalog,
     gua_value_t** out_value, gua_value_error_t* error);
+/* Deep copy, independent of the source lifetime. NULL on allocation failure. */
+gua_value_t* gua_value_clone(const gua_value_t* value);
 void gua_value_destroy(gua_value_t* value);
 int gua_value_get_type(const gua_value_t* value);
 int gua_value_get_element_type(const gua_value_t* value);
