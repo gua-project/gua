@@ -694,11 +694,12 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             var root = document.rootVisualElement;
             if (root == null) continue;
             var rootId = ExplicitOrObjectId(document.gameObject, "uidocument");
-            CollectVisualElement(root, rootId, null, 0, document.isActiveAndEnabled && document.gameObject.activeInHierarchy);
+            var documentVisible = document.isActiveAndEnabled && document.gameObject.activeInHierarchy;
+            CollectVisualElement(root, rootId, null, 0, documentVisible, documentVisible);
         }
     }
 
-    private void CollectVisualElement(VisualElement element, string id, string? parentId, int index, bool hostVisible)
+    private void CollectVisualElement(VisualElement element, string id, string? parentId, int index, bool hostVisible, bool documentVisible, string? tabListId = null)
     {
         var explicitId = !string.IsNullOrWhiteSpace(element.viewDataKey) ? element.viewDataKey : element.name;
         var resolved = FitNodeId(string.IsNullOrWhiteSpace(explicitId)
@@ -710,9 +711,15 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         if (sensitive) label = string.IsNullOrWhiteSpace(element.name) ? resolved : element.name;
         var range = VisualRange(element);
         if (sensitive) range.value = null;
-        var visible = hostVisible && element.resolvedStyle.display != DisplayStyle.None && element.resolvedStyle.visibility == Visibility.Visible;
+        // A Tab's content is hidden when inactive; its header remains actionable.
+        var interactionElement = element is Tab tab ? tab.tabHeader : element;
+        var contentVisible = hostVisible && element.resolvedStyle.display != DisplayStyle.None && element.resolvedStyle.visibility == Visibility.Visible;
+        // TabView reparents headers outside its content container. Follow that
+        // actual hierarchy, while keeping hidden content hidden in the tree.
+        var visible = element is Tab ? documentVisible && IsVisualHierarchyVisible(interactionElement) : contentVisible;
         var enabled = element.enabledInHierarchy;
-        var registered = Register(resolved, role, label, VisualBounds(element), visible, enabled, parentId,
+        var semanticParentId = element is Tab ? tabListId ?? parentId : parentId;
+        var registered = Register(resolved, role, label, VisualBounds(interactionElement), visible, enabled, semanticParentId,
             text: !sensitive && (role is "text" or "textbox") ? label : null,
             value: sensitive ? null : VisualValue(element), focused: ReferenceEquals(frameFocusTarget, element),
             checkedValue: element is UnityEngine.UIElements.Toggle toggle ? toggle.value : null,
@@ -724,7 +731,8 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             return;
         }
         for (var childIndex = 0; childIndex < element.hierarchy.childCount; childIndex++)
-            CollectVisualElement(element.hierarchy[childIndex], resolved, resolved, childIndex, visible);
+            CollectVisualElement(element.hierarchy[childIndex], resolved, resolved, childIndex, contentVisible, documentVisible,
+                element is TabView ? resolved : tabListId);
     }
 
     private void CollectListViewItems(ListView listView, string parentId, bool parentVisible, bool parentEnabled)
@@ -798,10 +806,15 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         (double? value, double? min, double? max) range, Target target)
     {
         if (!ids.Add(id)) { runtime!.AddLog(3, $"Duplicate Unity Gua id ignored: {id}"); return false; }
+        var agentPolicy = GuaUnityAdapterRegistry.PolicyFor(AgentPolicyTarget(target.Value));
+        // A Tab's semantic parent is its tablist rather than its hidden body
+        // container. Preserve private restrictions from both physical branches.
+        if (target.Value is Tab tab && (IsPrivateVisualHierarchy(tab.hierarchy.parent) || IsPrivateVisualHierarchy(tab.tabHeader)))
+            agentPolicy = new GuaAgentPolicy(Exposure: GuaAgentExposure.Private);
         runtime!.RegisterNode(new GuaNodeDescriptor(id, role, label, bounds, visible, enabled, parentId, text, value,
             Focused: focused, Checked: checkedValue, Selected: selectedValue,
             RangeValue: range.value, RangeMin: range.min, RangeMax: range.max,
-            AgentPolicy: GuaUnityAdapterRegistry.PolicyFor(AgentPolicyTarget(target.Value))));
+            AgentPolicy: agentPolicy));
         targets[id] = new Target(target.Value, target.Role, visible, enabled, target.PolicyHost);
         return true;
     }
@@ -867,6 +880,44 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             var resultRequest = focusedTarget == null ? global : ProtectSensitiveResult(global, focused.Key, focusedTarget.Value);
             runtime.EmitActionResult(resultRequest, ok, ok ? GuaActionError.None : failure, value);
         }
+    }
+
+    private static bool ClickVisualElement(VisualElement element, out GuaActionError failure)
+    {
+        failure = GuaActionError.Hidden;
+        var panel = element.panel;
+        if (panel == null) return false;
+        for (var parent = element.hierarchy.parent; parent != null; parent = parent.hierarchy.parent)
+            if (parent is ScrollView scroll && !scroll.contentViewport.worldBound.Contains(element.worldBound.center))
+                scroll.ScrollTo(element);
+
+        // worldBound and Pick both use panel coordinates, including scaled/texture panels.
+        var bounds = element.worldBound;
+        var center = bounds.center;
+        if (bounds.width <= 0 || bounds.height <= 0 || float.IsNaN(center.x) || float.IsNaN(center.y) ||
+            float.IsInfinity(center.x) || float.IsInfinity(center.y)) return false;
+        var picked = panel.Pick(center);
+        if (picked == null || (picked != element && !element.Contains(picked))) return false;
+
+        // Clickable listens for down/up, not a synthetic ClickEvent. Let the panel
+        // generate ClickEvent itself so application pointer/click handlers run too.
+        SendVisualPointer(element, EventType.MouseMove, center, 0);
+        try { SendVisualPointer(element, EventType.MouseDown, center, 1); }
+        finally { SendVisualPointer(panel.visualTree, EventType.MouseUp, center, 1); }
+        failure = GuaActionError.None;
+        return true;
+    }
+
+    private static void SendVisualPointer(VisualElement element, EventType type, Vector2 position, int clickCount)
+    {
+        var source = new Event { type = type, mousePosition = position, button = 0, clickCount = clickCount };
+        using EventBase pointer = type switch
+        {
+            EventType.MouseDown => PointerDownEvent.GetPooled(source),
+            EventType.MouseUp => PointerUpEvent.GetPooled(source),
+            _ => PointerMoveEvent.GetPooled(source),
+        };
+        element.SendEvent(pointer);
     }
 
     private void ObserveClick(object target, string id)
@@ -946,9 +997,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             return false;
         }
         if (target is UnityEngine.UIElements.Button visualButton && request.Action == GuaActionType.Click)
-        {
-            using var click = ClickEvent.GetPooled(); visualButton.SendEvent(click); return true;
-        }
+            return ClickVisualElement(visualButton, out failure);
         if (target is Button button && request.Action == GuaActionType.Click)
         {
             if (EventSystem.current != null) ExecuteEvents.Execute(button.gameObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerClickHandler);
@@ -1000,7 +1049,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             tabView.selectedTabIndex = tabIndex; value = tabIndex.ToString(CultureInfo.InvariantCulture); return true;
         }
         if (target is Tab tab && request.Action is GuaActionType.Click or GuaActionType.Select)
-        { using var click = ClickEvent.GetPooled(); tab.SendEvent(click); value = tab.label; return true; }
+        { var success = ClickVisualElement(tab.tabHeader, out failure); if (success) value = tab.label; return success; }
         if (target is ListView scrollingList && request.Action == GuaActionType.Scroll)
         {
             var listScrollView = scrollingList.Q<ScrollView>();
@@ -1160,8 +1209,25 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         Component component => ReferenceEquals(frameFocusTarget, component.gameObject),
         _ => false,
     };
+    private static bool IsVisualHierarchyVisible(VisualElement element)
+    {
+        if (element.panel == null) return false;
+        for (var current = element; current != null; current = current.hierarchy.parent)
+            if (current.resolvedStyle.display == DisplayStyle.None || current.resolvedStyle.visibility != Visibility.Visible)
+                return false;
+        return true;
+    }
+
+    private static bool IsPrivateVisualHierarchy(VisualElement? element)
+    {
+        for (var current = element; current != null; current = current.hierarchy.parent)
+            if (GuaUnityAdapterRegistry.PolicyFor(current)?.Exposure == GuaAgentExposure.Private) return true;
+        return false;
+    }
+
     private static bool IsCurrentlyVisible(object target, bool collectedVisible) => target switch
     {
+        Tab tab => IsVisualHierarchyVisible(tab.tabHeader),
         VisualElement visual => visual.panel != null && visual.visible && visual.resolvedStyle.display != DisplayStyle.None,
         ListItemTarget item => item.List.panel != null && item.List.visible && item.List.resolvedStyle.display != DisplayStyle.None,
         GameObject gameObject => gameObject != null && gameObject.activeInHierarchy,
@@ -1185,6 +1251,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         var policy = GuaUnityAdapterRegistry.PolicyFor(policyTarget);
         if (policy?.Exposure == GuaAgentExposure.Private ||
             (policy?.AllowedActions != null && !policy.AllowedActions.Contains(action))) return false;
+        if (policyTarget is Tab tab && (IsPrivateVisualHierarchy(tab.hierarchy.parent) || IsPrivateVisualHierarchy(tab.tabHeader))) return false;
         var policyHost = target.PolicyHost ?? policyTarget switch
         {
             GameObject gameObject => gameObject,

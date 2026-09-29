@@ -32,7 +32,11 @@ public static class GuaRuntimeUiSample
         var documentObject = new GameObject("ToolkitDocument", typeof(UIDocument));
         var document = documentObject.GetComponent<UIDocument>();
         document.rootVisualElement.Add(new UnityEngine.UIElements.Label("Toolkit Ready") { name = "toolkit-label" });
-        document.rootVisualElement.Add(new UnityEngine.UIElements.Button { name = "toolkit-button", text = "Toolkit Start" });
+        var clickCount = 0;
+        var clickStatus = new UnityEngine.UIElements.Label("Toolkit clicks: 0") { name = "toolkit-click-status" };
+        document.rootVisualElement.Add(new UnityEngine.UIElements.Button(() => clickStatus.text = $"Toolkit clicks: {++clickCount}")
+            { name = "toolkit-button", text = "Toolkit Start" });
+        document.rootVisualElement.Add(clickStatus);
         document.rootVisualElement.Add(new TextField("Callsign") { name = "toolkit-input", value = "alpha" });
 
         var doorObject = new GameObject("Door A");
