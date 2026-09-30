@@ -73,12 +73,26 @@ public sealed partial record GuaLocatorQuery
     private async Task<GuaActionEvent> ActAsync(GuaActionRequest request, TimeSpan? timeout, TimeSpan? pollInterval, CancellationToken cancellationToken)
     {
         var budget = new LocatorBudget(timeout, pollInterval);
-        await WaitForMatchAsync(request.Action, budget, cancellationToken).ConfigureAwait(false);
-        // Resolve again immediately before sending. Never retry once enqueue is attempted.
-        var node = await WaitForMatchAsync(request.Action, budget, cancellationToken).ConfigureAwait(false);
-        CheckBudget(budget, request.Action, "enqueue", cancellationToken);
-        return await GuaActionCompletion.EnqueueWithBudgetAsync(_context, request with { NodeId = node.Id },
-            budget.Limit, budget.Interval, budget.Clock, Describe(true), budget.LastState, cancellationToken).ConfigureAwait(false);
+        var trace = GuaTraceAction.Begin(_context, request, Describe(true));
+        try
+        {
+            await WaitForMatchAsync(request.Action, budget, cancellationToken).ConfigureAwait(false);
+            // Resolve again immediately before sending. Never retry once enqueue is attempted.
+            var node = await WaitForMatchAsync(request.Action, budget, cancellationToken).ConfigureAwait(false);
+            CheckBudget(budget, request.Action, "enqueue", cancellationToken);
+            trace?.Resolved(node.Id, Describe(true));
+            return await GuaActionCompletion.EnqueueWithBudgetAsync(_context, request with { NodeId = node.Id },
+                budget.Limit, budget.Interval, budget.Clock, Describe(true), budget.LastState, cancellationToken, trace).ConfigureAwait(false);
+        }
+        catch (GuaActionException error) when (error.RequestId == 0)
+        {
+            trace?.Failure(error);
+            trace?.End(error.Kind == GuaActionFailureKind.Cancelled ? GuaTraceOutcome.Interrupted : GuaTraceOutcome.Failed,
+                "before-send-" + error.Kind.ToString().ToLowerInvariant());
+            throw;
+        }
+        catch (OperationCanceledException) { trace?.End(GuaTraceOutcome.Interrupted, "actionability-cancelled"); throw; }
+        catch { trace?.End(GuaTraceOutcome.Unknown, "actionability-or-operation-failed"); throw; }
     }
 
     private async Task<GuaNodeSnapshot> WaitForMatchAsync(GuaActionType? action, LocatorBudget budget, CancellationToken cancellationToken)

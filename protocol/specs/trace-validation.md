@@ -1,5 +1,38 @@
 # #109 Trace 基盤の検証記録
 
+## T-02 lifecycle相関（#124、2026-09-30）
+
+Windows / MSVC 19.51 / Ninja Debug / .NET 10.0.401で実施した。
+nativeは `build/trace-124` に生成し、GUA_NATIVE_DIRで今回のDLLを指定した。
+
+| 検証 | 結果 |
+| --- | --- |
+| core/shared/runtime MSVC build | 成功 |
+| Gua.Selector.Tests全体 | 211/211成功、skip 0 |
+| 追加TraceLifecycleTests | 14/14成功（上記に含む） |
+| TraceTests / TraceStorageTests | 60/60成功、skip 0 |
+| native gua-core-state-tests | 1/1成功 |
+| Inspector Trace reader/Viewer | 13/13成功 |
+| bun run check | 全workspace成功 |
+| Gua.Testing netstandard2.1 | build成功、警告/エラー0 |
+| native実測factの新journal schema検証 | Ajv2020で成功 |
+| git diff --check | 成功 |
+
+追加fixtureはsource locationなしのraw context、Selector/解決ID、自動/明示Stepの
+一体化、別contextの同じrequestId、異なるepoch、同じruntimeへの複数WebSocket接続、
+繰り返し操作、未完了enqueue、有限履歴のoverflow、Timeout後の遅い完了、別要求の
+completion保持、Semantic/Keyboard保持、lease期限切れ後の解除確認、owner切断、
+秘密値、例外type/stack維持、保存失敗、停止しないdiagnostics読取の終了時間制限、
+native source切替直後の最初の自動操作のStep一体化を検証する。
+既存Trace contention試験は準備記録がSelector解決前に移ったため、解決完了後の
+send境界で意図的に競合するhandshakeへ更新し、取消/期限切れ後のenqueue禁止を維持した。
+初回監査の3件は親側で再現し、正常完了のlate誤分類、送信前cancel/timeoutの
+Unknown誤分類、source切替時のStep分裂を修正した。各回帰試験を上記に含む。
+
+Godot/Unityのゲーム画面でのE2E、他OS、remote CIは未実行。
+GDScript-only等のnative journal未提供hostは未提供品質として扱う。
+native履歴を読んだだけで、入力適用時刻、解除成功、期待状態、時計同期を補完しない。
+
 2026-09-29、Windows x64、MSVC 19.51.36260.0、.NET SDK 10.0.401、Bun 1.4.0。
 これはローカルの実行証拠であり、公開 NuGet やリモート CI の完了証拠ではない。
 親 Issue 全体の残りは [trace-v1.md](trace-v1.md) の対応表に記載する。
