@@ -72,11 +72,40 @@ describe("Inspector C# generation", () => {
     }
     const literals = [hostile, "", "\\u0041", '"; throw new Exception(); //', ...Array.from({ length: 256 }, (_, i) => String.fromCharCode(i))];
     const methods = snippets.map((code, i) => `static async Task Case${i}(IGuaContext context, string secretValue) { ${code}\n }`).join("\n");
+    const runtimeMethods: string[] = [];
+    const runtimeCalls: string[] = [];
+    for (const value of ["expected", false, true, 1.5e-20, 1, 0]) {
+      const sample = { ...node, id: "n", parentId: undefined, label: "", text: "expected", value };
+      const tree = JSON.stringify({ schemaVersion: 2, sessionEpoch: 1, frameSequence: 1, revision: 1, screen: "test", nodes: [sample] });
+      const before = JSON.stringify({ schemaVersion: 2, sessionEpoch: 1, frameSequence: 0, revision: 0, screen: "test", nodes: [{ ...sample, text: "before", value: "before" }] });
+      for (const state of generateNodeCode(sample).states) {
+        const method = `Runtime${runtimeMethods.length}`;
+        // Simulate a host transition after ResolveAsync. The assertion must use
+        // the expectation returned by the wait, rather than the resolved snapshot.
+        const code = state.code.replace("var node = await locator.ResolveAsync();", `var node = await locator.ResolveAsync();\n((Fixture)context).Json = ${csharpString(tree)};`);
+        runtimeMethods.push(`static async Task ${method}(IGuaContext context) { ${code}\n }`);
+        runtimeCalls.push(`await ${method}(new Fixture(${csharpString(before)}));`);
+      }
+    }
     try {
       writeFileSync(join(directory, "Generated.csproj"), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><NoWarn>CS1998</NoWarn></PropertyGroup><ItemGroup><ProjectReference Include="${project.replaceAll("&", "&amp;")}" /></ItemGroup></Project>`);
       // Compare code units directly; Encoding replaces isolated surrogates.
       const directChecks = literals.map((value) => `if (!System.Linq.Enumerable.SequenceEqual(${csharpString(value)}, new char[] { ${Array.from({ length: value.length }, (_, i) => `(char)${value.charCodeAt(i)}`).join(",")} })) throw new Exception("Literal mismatch");`).join("\n");
-      writeFileSync(join(directory, "Program.cs"), `using Gua.Core; using Gua.Testing; class Program { ${methods}\nstatic void Main() { ${directChecks} } }`);
+      const fixture = `sealed class Fixture(string json) : IGuaContext {
+        public string Json = json;
+        public string GetUiTreeJson() => Json;
+        public GuaNodeState GetNodeState(string id) => new(true, false);
+        public string FindNodeById(string id) => id;
+        public string FindNodeByRole(string role, string? name = null) => "n";
+        public string FindNodeByText(string text) => "n";
+        public GuaQueryResult Query(GuaSelector selector) => new(true, [new GuaNodeQueryMatch("n", "textbox", "", null)]);
+        public bool EnqueueClick(string id) => throw new Exception("Code generation must not enqueue actions");
+        public GuaActionError EnqueueAction(GuaActionRequest request, out ulong requestId) { requestId = 0; throw new Exception("Code generation must not enqueue actions"); }
+        public bool TryPollActionEvent(out GuaActionEvent e) { e = default; return false; }
+        public bool TryPollActionEvent(ulong id, out GuaActionEvent e) { e = default; return false; }
+        public bool TryPollEvent(out GuaEvent e) { e = default; return false; }
+      }`;
+      writeFileSync(join(directory, "Program.cs"), `using Gua.Core; using Gua.Testing; class Program { ${methods}\n${runtimeMethods.join("\n")}\nstatic async Task Main() { ${directChecks}\n${runtimeCalls.join("\n")} } } ${fixture}`);
       const process = Bun.spawn(["dotnet", "run", "--project", join(directory, "Generated.csproj"), "--configuration", "Release"], { stdout: "pipe", stderr: "pipe" });
       const [stdout, stderr, exitCode] = await Promise.all([new Response(process.stdout).text(), new Response(process.stderr).text(), process.exited]);
       expect({ exitCode, diagnostics: exitCode === 0 ? "" : stdout + stderr }).toEqual({ exitCode: 0, diagnostics: "" });

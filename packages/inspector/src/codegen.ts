@@ -48,7 +48,7 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
   }));
   const states: CodeChoice[] = [];
   const add = (id: string, wait: string, assertion: string) => states.push({
-    id, label: id, code: prefix + `var node = await locator.ResolveAsync();\nawait node.${wait};\nnode.${assertion};`,
+    id, label: id, code: prefix + `var node = await locator.ResolveAsync();\nnode = await node.${wait};\nnode.${assertion};`,
   });
   add("visible", node.visible ? "WaitUntilVisibleAsync()" : "WaitUntilHiddenAsync()", node.visible ? "ToBeVisible()" : "ToBeHidden()");
   add("enabled", node.enabled ? "WaitUntilEnabledAsync()" : "WaitUntilDisabledAsync()", node.enabled ? "ToBeEnabled()" : "ToBeDisabled()");
