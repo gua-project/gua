@@ -468,6 +468,7 @@ jobs:
 
       - name: Test TypeScript packages
         run: |
+          bun test scripts/verify-godot-web-release.test.ts
           bun run --filter gua-webmcp test
           bun run --filter gua-value test
           bun run --filter @gua/bridge-ws test
