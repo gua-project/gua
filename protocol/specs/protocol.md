@@ -108,6 +108,20 @@ epoch, but never action payload values. Clean sessions do not create artifacts.
 
 ## Failure diagnostics and artifact version 1
 
+### .NET locator の auto-wait
+
+`GuaLocatorQuery` の遅延解決 API は既存の query、UI snapshot、semantic action と
+request-correlated completion を組み合わせる client helper であり、C ABI や wire
+schema は変更しない。0 件、hidden、disabled、対象 action 未公開を総 timeout 内で
+再検索し、複数一致は即座に strict violation とする。操作直前にも再解決して得た
+node ID を一度だけ enqueue し、その request ID の observed completion を待つ。
+enqueue acceptance は操作完了ではない。actionability・送信・completion は同じ
+単調時計の予算を共有し、残り予算以下の poll delay と cancellation を使用する。
+同期 transport 呼び出しは中断できないため、呼び出し復帰時にも予算を確認する。
+送信後の timeout/cancel は副作用の不在を意味せず、自動再送しない。
+completion 後の UI/World postcondition は既存の状態 wait で明示する。
+旧 eager `Get()` と `GuaNodeExpectation` の意味は維持する。
+
 The opt-in [Gua Trace v1](trace-v1.md) recorder adds a bounded, versioned timeline
 and offline viewer without replacing diagnostics or Recording. It separates
 caller outcome, capture quality, observation times and host completion.

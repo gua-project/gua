@@ -105,9 +105,9 @@ public static partial class GuaAssertions
         throw new GuaAssertionException(message + suffix);
     }
 
-    internal static GuaNodeSnapshot? TryGetSnapshot(IGuaContext context, string id)
+    internal static GuaNodeSnapshot? TryGetSnapshot(IGuaContext context, string id, string? uiTreeJson = null)
     {
-        using var document = JsonDocument.Parse(context.GetUiTreeJson());
+        using var document = JsonDocument.Parse(uiTreeJson ?? context.GetUiTreeJson());
         if (!document.RootElement.TryGetProperty("nodes", out var nodes) || nodes.ValueKind != JsonValueKind.Array)
         {
             return null;

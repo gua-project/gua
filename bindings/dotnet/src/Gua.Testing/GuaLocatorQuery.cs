@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 namespace Gua.Testing;
 
-public sealed record GuaLocatorQuery
+public sealed partial record GuaLocatorQuery
 {
     private readonly IGuaContext _context;
     private readonly GuaSelector _selector;
@@ -163,36 +163,37 @@ public sealed record GuaLocatorQuery
         new(_context, _selector, value ?? _value, valueMatch ?? _valueMatch,
             focused ?? _focused, selected ?? _selected, @checked ?? _checked, action ?? _action);
 
-    private bool MatchesV2(GuaNodeSnapshot? node)
+    private bool MatchesV2(GuaNodeSnapshot? node, TimeSpan? regexTimeout = null)
     {
         if (node is null) return false;
-        if (_value is not null && !Matches(node.Value, _value, _valueMatch)) return false;
+        if (_value is not null && !Matches(node.Value, _value, _valueMatch, regexTimeout)) return false;
         if (_focused is not null && node.Focused != _focused) return false;
         if (_selected is not null && node.Selected != _selected) return false;
         if (_checked is not null && node.Checked != _checked) return false;
         return _action is null || node.Actions.Contains(_action, StringComparer.Ordinal);
     }
 
-    private static bool Matches(string? actual, string expected, GuaMatchMode mode) => mode switch
+    private static bool Matches(string? actual, string expected, GuaMatchMode mode, TimeSpan? regexTimeout = null) => mode switch
     {
         GuaMatchMode.Exact => string.Equals(actual, expected, StringComparison.Ordinal),
         GuaMatchMode.Contains => actual?.Contains(expected, StringComparison.Ordinal) == true,
         GuaMatchMode.Regex => actual is not null && System.Text.RegularExpressions.Regex.IsMatch(actual, expected,
-            System.Text.RegularExpressions.RegexOptions.CultureInvariant),
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+            regexTimeout ?? System.Text.RegularExpressions.Regex.InfiniteMatchTimeout),
         _ => false,
     };
 
-    private string Describe()
+    private string Describe(bool redact = false)
     {
         var fields = new List<string>();
         if (_selector.Id is not null) fields.Add($"id={_selector.IdMatch}:{_selector.Id}");
         if (_selector.Role is not null) fields.Add($"role={_selector.RoleMatch}:{_selector.Role}");
-        if (_selector.Name is not null) fields.Add($"name={_selector.NameMatch}:{_selector.Name}");
-        if (_selector.Text is not null) fields.Add($"text={_selector.TextMatch}:{_selector.Text}");
+        if (_selector.Name is not null) fields.Add($"name={_selector.NameMatch}:{(redact ? "<redacted>" : _selector.Name)}");
+        if (_selector.Text is not null) fields.Add($"text={_selector.TextMatch}:{(redact ? "<redacted>" : _selector.Text)}");
         if (_selector.ParentId is not null) fields.Add($"scope={_selector.ParentId} ({(_selector.DirectChild ? "direct children" : "descendants")})");
         if (_selector.Visible != GuaStateFilter.Any) fields.Add($"visible={_selector.Visible == GuaStateFilter.True}");
         if (_selector.Enabled != GuaStateFilter.Any) fields.Add($"enabled={_selector.Enabled == GuaStateFilter.True}");
-        if (_value is not null) fields.Add($"value={_valueMatch}:{_value}");
+        if (_value is not null) fields.Add($"value={_valueMatch}:{(redact ? "<redacted>" : _value)}");
         if (_focused is not null) fields.Add($"focused={_focused}");
         if (_selected is not null) fields.Add($"selected={_selected}");
         if (_checked is not null) fields.Add($"checked={_checked}");
