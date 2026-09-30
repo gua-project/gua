@@ -1,6 +1,27 @@
 import { expect, test } from "bun:test";
-import { createGuaInPageBridge, registerGuaWebMcp, type GuaInPagePort } from "../src/index";
+import { createGodotWebBridge, createUnityWebGlBridge, createGuaInPageBridge, registerGuaWebMcp, type GuaInPagePort } from "../src/index";
 const snapshot = { document: {schemaVersion: 1, sourceId: "page", sessionEpoch: 1, profile: "player", sequence: 0, revision: 0, uiFrame: 0, uiRevision: 0, worldFrame: 0, worldRevision: 0, kind: "snapshot", entries: []}, catalogs: [] };
+for (const create of [createGodotWebBridge, createUnityWebGlBridge]) {
+  test(`${create.name} keeps reused subscription IDs bound to their original engine port`, async () => {
+    const name="__guaObserveReplacementTest", calls:number[]=[];
+    const port=(generation:number):GuaInPagePort=>({capabilities:["observe_v1"],invoke:async command=> {
+      if(command.type==="subscribe_observations") return {subscriptionId:1,snapshot};
+      if(command.type==="poll_observations" || command.type==="unsubscribe_observations") calls.push(generation);
+      const {entries,...metadata}=snapshot.document;
+      return command.type==="unsubscribe_observations" ? null : {document:{...metadata,kind:"changes",status:"ok",events:[]},catalogs:[]};
+    }});
+    const globals=globalThis as Record<string,unknown>; globals[name]=port(1);
+    const bridge=create(name,{observe:true});
+    try {
+      const old=await bridge.subscribeObservations!(); globals[name]=port(2);
+      const fresh=await bridge.subscribeObservations!();
+      await expect(bridge.pollObservations!(old.subscriptionId)).rejects.toThrow("inactive connection");
+      await bridge.unsubscribeObservations!(old.subscriptionId); expect(calls).not.toContain(2);
+      await bridge.pollObservations!(fresh.subscriptionId); await bridge.unsubscribeObservations!(fresh.subscriptionId);
+      expect(calls.filter(g=>g===2)).toEqual([2,2]);
+    } finally {await bridge.disposeObservations!();delete globals[name];}
+  });
+}
 test("observe tools require capability and release subscriptions on unregister", async () => {
   const calls: string[] = [];
   const port: GuaInPagePort = { capabilities: ["observe_v1"], invoke: async c => { calls.push(c.type); return c.type === "subscribe_observations" ? {subscriptionId: 1, snapshot} : snapshot; } };

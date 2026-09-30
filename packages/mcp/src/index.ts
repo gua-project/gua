@@ -999,16 +999,31 @@ function compactResult<T extends Record<string, unknown>>(value: T): T {
 
 export class GuaBridgeClient {
   async observeCommand(type: "get_observe_snapshot" | "subscribe_observations" | "poll_observations" | "unsubscribe_observations", subscriptionId?: number, signal?: AbortSignal): Promise<unknown> {
-    const version = await this.request<{ capabilities: string[] }>({ type: "get_version" }, this.requestTimeoutMs, signal);
+    const needsId = type === "poll_observations" || type === "unsubscribe_observations";
+    const owner = needsId ? this.observeSubscriptions.get(observeSubscriptionId(subscriptionId)) : undefined;
+    if (needsId && (!owner || owner.socket !== this.socket || owner.socket.readyState !== WebSocket.OPEN)) {
+      if (type === "unsubscribe_observations") { this.observeSubscriptions.delete(subscriptionId!); return null; }
+      throw new Error("Observe subscription belongs to an inactive connection.");
+    }
+    const socket = owner?.socket ?? await this.connectForRequest("get_version", this.requestTimeoutMs, signal);
+    const version = await this.request<{ capabilities: string[] }>({ type: "get_version" }, this.requestTimeoutMs, signal, socket);
     if (!version.capabilities.includes("observe_v1")) throw new Error("observe_v1 is unsupported.");
-    const result = await this.request<any>(subscriptionId === undefined ? { type: type as "get_observe_snapshot" | "subscribe_observations" } : { type: type as "poll_observations" | "unsubscribe_observations", subscriptionId }, this.requestTimeoutMs, signal);
-    if (type === "unsubscribe_observations") return null;
-    if (type === "subscribe_observations") return { subscriptionId: observeSubscriptionId(result.subscriptionId), snapshot: parseObserveTransport(result.snapshot) };
+    const result = await this.request<any>(owner === undefined ? { type: type as "get_observe_snapshot" | "subscribe_observations" } : { type: type as "poll_observations" | "unsubscribe_observations", subscriptionId: owner.remoteId }, this.requestTimeoutMs, signal, socket);
+    if (type === "unsubscribe_observations") { this.observeSubscriptions.delete(subscriptionId!); return null; }
+    if (type === "subscribe_observations") {
+      const remoteId = observeSubscriptionId(result.subscriptionId), snapshot = parseObserveTransport(result.snapshot);
+      if (socket !== this.socket || socket.readyState !== WebSocket.OPEN) throw new Error("Observe subscription belongs to an inactive connection.");
+      const handle = observeSubscriptionId(this.nextObserveHandle++);
+      this.observeSubscriptions.set(handle, { socket, remoteId });
+      return { subscriptionId: handle, snapshot };
+    }
     return parseObserveTransport(result);
   }
   private socket: WebSocket | null = null;
   private connectionAttempt: ConnectionAttempt | null = null;
   private nextId = 1;
+  private nextObserveHandle = 1;
+  private readonly observeSubscriptions = new Map<number, { socket: WebSocket; remoteId: number }>();
   private readonly pending = new Map<number, PendingRequest>();
 
   constructor(
@@ -1171,6 +1186,7 @@ export class GuaBridgeClient {
   }
 
   close(): void {
+    this.observeSubscriptions.clear();
     const error = new Error("Gua MCP bridge client closed.");
     this.rejectAll(error);
     const attempt = this.connectionAttempt;
@@ -1182,10 +1198,11 @@ export class GuaBridgeClient {
   }
 
   private async request<T>(command: BridgeCommandInput, timeoutMs = this.requestTimeoutMs,
-    signal?: AbortSignal): Promise<T> {
+    signal?: AbortSignal, ownerSocket?: WebSocket): Promise<T> {
     throwIfAborted(signal);
     const deadline = Date.now() + timeoutMs;
-    const socket = await this.connectForRequest(command.type, timeoutMs, signal);
+    const socket = ownerSocket ?? await this.connectForRequest(command.type, timeoutMs, signal);
+    if (ownerSocket && (socket !== this.socket || socket.readyState !== WebSocket.OPEN)) throw new Error("Observe subscription belongs to an inactive connection.");
     throwIfAborted(signal);
     const remainingTimeoutMs = deadline - Date.now();
     if (remainingTimeoutMs <= 0) {
@@ -1304,6 +1321,7 @@ export class GuaBridgeClient {
     });
 
     socket.addEventListener("close", () => {
+      for (const [id, owner] of this.observeSubscriptions) if (owner.socket === socket) this.observeSubscriptions.delete(id);
       if (this.connectionAttempt === attempt) {
         this.connectionAttempt = null;
         rejectAttempt(new Error("Gua bridge WebSocket connection closed."));

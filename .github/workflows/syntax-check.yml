@@ -227,7 +227,7 @@ jobs:
         run: dotnet restore bindings/dotnet/tests/Gua.Selector.Tests/Gua.Selector.Tests.csproj
 
       - name: Test remote bridge and selector contracts
-        run: dotnet test bindings/dotnet/tests/Gua.Selector.Tests/Gua.Selector.Tests.csproj --configuration Release --no-restore
+        run: dotnet test bindings/dotnet/tests/Gua.Selector.Tests/Gua.Selector.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=normal"
         env:
           GUA_NATIVE_DIR: ${{ github.workspace }}/${{ matrix.core-dir }}
           GUA_RUNTIME_NATIVE_DIR: ${{ github.workspace }}/${{ matrix.runtime-dir }}

@@ -2,6 +2,62 @@ import { expect, test } from "bun:test";
 import { WebSocketInspectorClient } from "../../inspector/src/core";
 import { GuaBridgeClient } from "../../mcp/src/index";
 const envelope = {document:{schemaVersion:1,sourceId:"wire",sessionEpoch:1,profile:"debug",sequence:0,revision:0,uiFrame:0,uiRevision:0,worldFrame:0,worldRevision:0,kind:"snapshot",entries:[{ownerId:1,registrationId:1,source:"object",runtimeId:"enemy",name:"phase",status:"available",value:{type:"integer",value:1}}]},catalogs:[{}]};
+test("Inspector ignores delayed close/error events from a timed-out Observe socket", async () => {
+  const original=globalThis.WebSocket, sockets:ControlledSocket[]=[];
+  class ControlledSocket extends EventTarget {
+    static OPEN=1; static CONNECTING=0; static CLOSING=2; static CLOSED=3;
+    readyState=0;
+    constructor(_url:string) {super();sockets.push(this);queueMicrotask(()=>{this.readyState=1;this.dispatchEvent(new Event("open"));});}
+    send(payload:string) {
+      const command=JSON.parse(payload);
+      if(command.type==="subscribe_observations" && this===sockets[0]) return;
+      const result=command.type==="get_version" ? {capabilities:["observe_v1"]} : command.type==="subscribe_observations" ? {subscriptionId:1,snapshot:envelope} : {document:{...envelope.document,kind:"changes",entries:undefined,events:[],status:"ok"},catalogs:[]};
+      queueMicrotask(()=>this.dispatchEvent(new MessageEvent("message",{data:JSON.stringify({id:command.id,ok:true,result})})));
+    }
+    close() {this.readyState=2;}
+    finishClose() {this.readyState=3;this.dispatchEvent(new Event("close"));this.dispatchEvent(new Event("error"));}
+  }
+  globalThis.WebSocket=ControlledSocket as unknown as typeof WebSocket;
+  const inspector=new WebSocketInspectorClient("ws://controlled",20);
+  try {
+    await expect(inspector.subscribeObservations()).rejects.toThrow("Timed out");
+    const fresh=await inspector.subscribeObservations();sockets[0]!.finishClose();
+    expect((await inspector.pollObservations(fresh.subscriptionId)).document.kind).toBe("changes");
+  } finally {inspector.close();globalThis.WebSocket=original;}
+});
+for (const kind of ["inspector", "mcp"] as const) {
+  test(`${kind} stale handles cannot poll or remove a reused cursor after reconnect`, async () => {
+    const peers = new Set<any>(), operations: string[] = [];
+    const server = Bun.serve({port:0, fetch(request, server) {return server.upgrade(request) ? undefined : new Response(null,{status:400});}, websocket:{
+      open(ws) {peers.add(ws);}, close(ws) {peers.delete(ws);},
+      message(ws,data) {
+        const command = JSON.parse(String(data));
+        let result: unknown;
+        if(command.type === "get_version") result={capabilities:["observe_v1"]};
+        else if(command.type === "subscribe_observations") result={subscriptionId:1,snapshot:envelope};
+        else {
+          operations.push(`${command.type}:${command.subscriptionId}`);
+          result=command.type === "unsubscribe_observations" ? null : {document:{...envelope.document,kind:"changes",entries:undefined,events:[],status:"ok"},catalogs:[]};
+        }
+        ws.send(JSON.stringify({id:command.id,ok:true,result}));
+      }
+    }});
+    const url=`ws://127.0.0.1:${server.port}`, inspector=new WebSocketInspectorClient(url), mcp=new GuaBridgeClient(url);
+    const subscribe=()=>kind === "inspector" ? inspector.subscribeObservations() : mcp.observeCommand("subscribe_observations") as Promise<{subscriptionId:number}>;
+    const poll=(id:number)=>kind === "inspector" ? inspector.pollObservations(id) : mcp.observeCommand("poll_observations",id);
+    const unsubscribe=(id:number)=>kind === "inspector" ? inspector.unsubscribeObservations(id) : mcp.observeCommand("unsubscribe_observations",id);
+    try {
+      const old=await subscribe(); for(const ws of peers) ws.close();
+      for(let i=0;i<100&&peers.size;i++) await Bun.sleep(5);
+      expect(peers.size).toBe(0); await Bun.sleep(5);
+      const fresh=await subscribe();
+      await expect(poll(old.subscriptionId)).rejects.toThrow("inactive connection");
+      await unsubscribe(old.subscriptionId); expect(operations).toEqual([]);
+      await poll(fresh.subscriptionId); await unsubscribe(fresh.subscriptionId);
+      expect(operations).toEqual(["poll_observations:1","unsubscribe_observations:1"]);
+    } finally {inspector.close();mcp.close();for(const ws of peers) ws.close();server.stop(true);}
+  });
+}
 for (const mutation of ["epoch", "value", "id", "duplicate"] as const) {
   test(`Inspector and MCP reject malformed original ${mutation} integer/correlation wire`, async () => {
     const peers = new Set<any>();

@@ -32,6 +32,7 @@ export type GuaInPageCommand =
   | { type: "get_screenshot" };
 
 export interface GuaInPageBridgeOptions { screenshot?: boolean; world?: boolean; gameInput?: boolean; observe?: boolean }
+const portResolvers = new WeakMap<GuaInPagePort, () => GuaInPagePort>();
 
 interface GuaWorldWireSelector {
   worldId?: string;
@@ -62,25 +63,35 @@ export function createGuaInPageBridge(port: GuaInPagePort, options: GuaInPageBri
   };
   if (options.screenshot) bridge.getScreenshot = async () => parseScreenshot(await invoke(port, { type: "get_screenshot" }));
   if (options.observe ?? port.capabilities?.includes("observe_v1")) {
-    const subscriptions = new Set<number>(); let generation = 0;
+    const subscriptions = new Map<number, { port: GuaInPagePort; remoteId: number }>(); let generation = 0, nextHandle = 1;
+    const currentPort = () => portResolvers.get(port)?.() ?? port;
     bridge.getObserveSnapshot = async options => parseObserveTransport(await invoke(port, { type: "get_observe_snapshot" }, options), "snapshot");
     bridge.subscribeObservations = async options => {
       const started = generation;
-      const result = await invoke(port, { type: "subscribe_observations" }, options) as ObserveSubscription;
-      const subscriptionId = observeSubscriptionId(result.subscriptionId);
-      if (started !== generation || options?.signal?.aborted) {
-        await invoke(port, { type: "unsubscribe_observations", subscriptionId });
+      const ownerPort = currentPort();
+      const result = await invoke(ownerPort, { type: "subscribe_observations" }, options) as ObserveSubscription;
+      const remoteId = observeSubscriptionId(result.subscriptionId);
+      if (started !== generation || options?.signal?.aborted || ownerPort !== currentPort()) {
+        await invoke(ownerPort, { type: "unsubscribe_observations", subscriptionId: remoteId });
         throw new GuaWebError("aborted", "Observation registration ended.");
       }
-      try { const snapshot = parseObserveTransport(result.snapshot, "snapshot"); subscriptions.add(subscriptionId); return { subscriptionId, snapshot }; }
-      catch (error) { await invoke(port, { type: "unsubscribe_observations", subscriptionId }); throw error; }
+      try { const snapshot = parseObserveTransport(result.snapshot, "snapshot"), subscriptionId = observeSubscriptionId(nextHandle++);
+        subscriptions.set(subscriptionId, {port: ownerPort, remoteId}); return { subscriptionId, snapshot }; }
+      catch (error) { await invoke(ownerPort, { type: "unsubscribe_observations", subscriptionId: remoteId }); throw error; }
     };
-    bridge.pollObservations = async (subscriptionId, options) => parseObserveTransport(await invoke(port, { type: "poll_observations", subscriptionId: observeSubscriptionId(subscriptionId) }, options), "changes");
+    bridge.pollObservations = async (subscriptionId, options) => {
+      const owner = subscriptions.get(observeSubscriptionId(subscriptionId));
+      if (!owner || owner.port !== currentPort()) throw new GuaWebError("invalid_request", "Observe subscription belongs to an inactive connection.");
+      return parseObserveTransport(await invoke(owner.port, { type: "poll_observations", subscriptionId: owner.remoteId }, options), "changes");
+    };
     bridge.unsubscribeObservations = async (subscriptionId, options) => {
-      await invoke(port, { type: "unsubscribe_observations", subscriptionId: observeSubscriptionId(subscriptionId) }, options); subscriptions.delete(subscriptionId);
+      const owner = subscriptions.get(observeSubscriptionId(subscriptionId));
+      if (!owner) return;
+      // Cleanup targets the captured port even after the global port is replaced.
+      await invoke(owner.port, { type: "unsubscribe_observations", subscriptionId: owner.remoteId }, options); subscriptions.delete(subscriptionId);
     };
-    bridge.disposeObservations = async () => { generation++; const ids = [...subscriptions]; subscriptions.clear();
-      await Promise.all(ids.map(subscriptionId => invoke(port, { type: "unsubscribe_observations", subscriptionId }).catch(() => undefined))); };
+    bridge.disposeObservations = async () => { generation++; const owners = [...subscriptions.values()]; subscriptions.clear();
+      await Promise.all(owners.map(owner => invoke(owner.port, { type: "unsubscribe_observations", subscriptionId: owner.remoteId }).catch(() => undefined))); };
   }
   if (options.world) {
     bridge.getWorldObjectTree = async (callOptions) => parseWorldObjectTree(await invoke(port, { type: "get_world_object_tree" }, callOptions));
@@ -139,16 +150,19 @@ function compact<T extends Record<string, unknown>>(value: T): T {
 }
 
 function globalPort(name: string, engine: string): GuaInPagePort {
-  return {
+  const resolvePort = () => {
+    const port = (globalThis as Record<string, unknown>)[name] as GuaInPagePort | undefined;
+    if (!port || typeof port.invoke !== "function") throw new GuaWebError("engine_unsupported", `${engine} did not install the same-page Gua port '${name}'.`);
+    return port;
+  };
+  const dynamicPort: GuaInPagePort = {
     get capabilities() { return ((globalThis as Record<string, unknown>)[name] as GuaInPagePort | undefined)?.capabilities; },
     async invoke(command, options) {
-      const port = (globalThis as Record<string, unknown>)[name] as GuaInPagePort | undefined;
-      if (!port || typeof port.invoke !== "function") {
-        throw new GuaWebError("engine_unsupported", `${engine} did not install the same-page Gua port '${name}'.`);
-      }
-      return await port.invoke(command, options);
+      return await resolvePort().invoke(command, options);
     },
   };
+  portResolvers.set(dynamicPort, resolvePort);
+  return dynamicPort;
 }
 
 async function invoke(port: GuaInPagePort, command: GuaInPageCommand, options?: GuaBridgeCallOptions): Promise<unknown> {

@@ -24,6 +24,8 @@ transport clientの作成時もhostの上限を適用する。hostがDebugから
 subscribeの応答喪失・不正な成功応答・timeout・cancelでIDが不明な場合は、所有接続を閉じて購読を回収する。
 再接続は可能だが既存tokenは復元しない。明示的なサーバー拒否では既存購読を維持する。
 古い接続のtokenはpollを拒否し、Disposeは新しい接続へunsubscribeを送らない。
+Inspector/MCP/WebMCPが返すsubscriptionIdはclient内の再利用しないhandleである。
+そのclientへ返して使用し、clientが所有socket/engine portとwireのsubscriptionIdへ変換する。
 enum候補はValue生成時のcatalogの必要な型だけを所有コピーして運ぶ。
 秘密値のcatalogを含めて除外する。候補定義を別途Observeへ再登録しない。
 

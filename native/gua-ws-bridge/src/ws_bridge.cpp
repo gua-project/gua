@@ -833,8 +833,12 @@ bool json_has_only_top_level_fields(std::string_view json, const std::array<std:
 Command parse_command(std::string_view json)
 {
     Command command;
-    command.id = json_int_field(json, "id").value_or(0);
     command.type = json_string_field(json, "type").value_or("");
+    // Observe validates the full request and its safe-width ID in handle_command.
+    // Do not first narrow it through the legacy std::stoi parser.
+    if (command.type == "get_observe_snapshot" || command.type == "subscribe_observations" ||
+        command.type == "poll_observations" || command.type == "unsubscribe_observations") return command;
+    command.id = json_int_field(json, "id").value_or(0);
     command.node_id = json_string_field(json, "nodeId").value_or("");
     command.key = json_string_field(json, "key").value_or("");
     command.selector.id = json_string_field(json, "selectorId").value_or("");
