@@ -10,17 +10,24 @@ public sealed record GuaLintTreeMetadata(int SchemaVersion, ulong SessionEpoch, 
 public sealed record GuaLintSummary(int Error, int Warning, int Info, int Total);
 public sealed record GuaLintFinding(string RuleId, GuaLintSeverity Severity, string Message, string TargetKind, string TargetId, string Path);
 public sealed record GuaSemanticLintReport(int SchemaVersion, GuaObservationProfile Profile, GuaLintTreeMetadata UiTree,
-    GuaLintTreeMetadata? WorldObjectTree, GuaLintSummary Summary, IReadOnlyList<GuaLintFinding> Findings)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] GuaLintTreeMetadata? WorldObjectTree, GuaLintSummary Summary, IReadOnlyList<GuaLintFinding> Findings)
 {
     private static readonly JsonSerializerOptions JsonOptions = CreateOptions();
     private static JsonSerializerOptions CreateOptions() {
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)); return options;
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false)); return options;
     }
     public static GuaSemanticLintReport Parse(string json) {
         var report = JsonSerializer.Deserialize<GuaSemanticLintReport>(json, JsonOptions) ?? throw new ArgumentException("Invalid lint report.", nameof(json));
         if (report.SchemaVersion != 1 || report.UiTree is null || report.Summary is null || report.Findings is null)
             throw new ArgumentException("Unsupported lint report.", nameof(json));
+        if (report.Profile is not GuaObservationProfile.Debug and not GuaObservationProfile.Player ||
+            report.UiTree.SchemaVersion != 2 || report.UiTree.SessionEpoch < 1 || string.IsNullOrEmpty(report.UiTree.Screen) ||
+            (report.WorldObjectTree is { } world && (world.SchemaVersion != 1 || world.SessionEpoch < 1 || string.IsNullOrEmpty(world.Scene))) ||
+            report.Summary.Total != report.Findings.Count || report.Summary.Error != report.Findings.Count(f => f.Severity == GuaLintSeverity.Error) ||
+            report.Summary.Warning != report.Findings.Count(f => f.Severity == GuaLintSeverity.Warning) || report.Summary.Info != report.Findings.Count(f => f.Severity == GuaLintSeverity.Info) ||
+            report.Findings.Any(f => f.TargetKind is not "ui" and not "world" || string.IsNullOrEmpty(f.RuleId) || string.IsNullOrEmpty(f.TargetId) || string.IsNullOrEmpty(f.Path) || string.IsNullOrEmpty(f.Message)))
+            throw new ArgumentException("Invalid lint report.", nameof(json));
         return report;
     }
     public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);

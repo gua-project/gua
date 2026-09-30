@@ -3,6 +3,8 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <locale>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -22,8 +24,9 @@ std::string string(const json& value, const std::string& name) {
 double numeric(const json& value) {
     if (value.type != json::number) fail(GUA_VALUE_STRUCTURE);
     double n = 0;
-    const auto result = std::from_chars(value.text.data(), value.text.data() + value.text.size(), n);
-    if (result.ec != std::errc{} || !std::isfinite(n)) fail(GUA_VALUE_STRUCTURE);
+    std::istringstream stream(value.text);
+    stream.imbue(std::locale::classic());
+    if (!(stream >> n) || !stream.eof() || !std::isfinite(n)) fail(GUA_VALUE_STRUCTURE);
     return n;
 }
 std::string metadata(const json& tree, bool world) {

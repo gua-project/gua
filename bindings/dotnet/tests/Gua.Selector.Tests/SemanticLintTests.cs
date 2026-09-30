@@ -16,6 +16,9 @@ public class SemanticLintTests
             Assert.That(player.Findings, Is.EqualTo(debug.Findings));
             Assert.That(debug.Summary.Total, Is.EqualTo(debug.Findings.Count));
             Assert.That(GuaSemanticLintReport.Parse(debug.ToJson()).Findings, Is.EqualTo(debug.Findings));
+            using var serialized = JsonDocument.Parse(debug.ToJson());
+            Assert.That(serialized.RootElement.GetProperty("uiTree").TryGetProperty("scene", out _), Is.False);
+            Assert.That(serialized.RootElement.GetProperty("worldObjectTree").TryGetProperty("screen", out _), Is.False);
         }
     }
     [Test]
@@ -29,6 +32,7 @@ public class SemanticLintTests
         var player = GuaSemanticLinter.Analyze(context, new(GuaObservationProfile.Player));
         Assert.That(debug.Findings.Single().TargetId, Is.EqualTo("secret"));
         Assert.That(player.Findings, Is.Empty);
+        Assert.That(GuaSemanticLinter.Analyze(context, new(IncludeWorld:false)).ToJson(), Does.Contain("\"worldObjectTree\":null"));
         var tree = context.GetUiTreeJson();
         context.BeginFrame("staging");
         context.RegisterNode("staging", "button", "", new(0,0,1,1));
