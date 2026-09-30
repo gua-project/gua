@@ -2,6 +2,7 @@ add_library(gua-core
     src/gua.cpp
     src/value.cpp
     src/semantic_lint.cpp
+    src/spatial.cpp
 )
 
 add_library(gua::core ALIAS gua-core)
@@ -10,6 +11,7 @@ add_library(gua SHARED
     src/gua.cpp
     src/value.cpp
     src/semantic_lint.cpp
+    src/spatial.cpp
 )
 
 add_library(gua::shared ALIAS gua)
@@ -75,6 +77,15 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(gua-spatial-tests tests/spatial_tests.cpp)
+    target_link_libraries(gua-spatial-tests PRIVATE gua-core)
+    target_compile_definitions(gua-spatial-tests PRIVATE GUA_SPATIAL_FIXTURE="${PROJECT_SOURCE_DIR}/protocol/fixtures/spatial-r1.json")
+    target_compile_options(gua-spatial-tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<CXX_COMPILER_ID:MSVC>:/EHsc> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+    add_test(NAME gua-spatial-tests COMMAND gua-spatial-tests)
+    add_executable(gua-spatial-c-tests tests/spatial_c_tests.c)
+    target_link_libraries(gua-spatial-c-tests PRIVATE gua)
+    target_compile_options(gua-spatial-c-tests PRIVATE $<$<C_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<C_COMPILER_ID:MSVC>>:-UNDEBUG>)
+    add_test(NAME gua-spatial-c-tests COMMAND gua-spatial-c-tests)
     add_executable(gua-semantic-lint-tests tests/semantic_lint_tests.cpp)
     target_link_libraries(gua-semantic-lint-tests PRIVATE gua-core)
     target_compile_definitions(gua-semantic-lint-tests PRIVATE GUA_LINT_FIXTURE="${PROJECT_SOURCE_DIR}/protocol/fixtures/semantic-lint-v1.json")

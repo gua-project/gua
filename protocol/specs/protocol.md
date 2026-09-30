@@ -1,5 +1,11 @@
 # Gua Protocol Draft
 
+## Spatial-r1 contracts
+
+[Spatial-r1](spatial-r1.md) defines independent versioned 3D query, result and
+provider DTOs, offline native/.NET validation, and additive capability negotiation.
+Spatial-01 does not execute physics or advertise an initialized spatial provider.
+
 ## Explicit Semantic Lint
 
 [Semantic Lint v1](semantic-lint-v1.md) inspects published UI/World snapshots on
