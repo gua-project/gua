@@ -116,7 +116,9 @@ public sealed class InputMetadataTests
         using var socket = new ClientWebSocket();
         await socket.ConnectAsync(new Uri(runtime.InspectorBridgeUrl), CancellationToken.None);
         foreach (var (id, type, version) in new[] { (1, "get_game_input_actions", 1), (2, "get_game_input_actions_v2", 2),
-            (3, "find_game_input_actions", 1), (4, "find_game_input_actions_v2", 2) }) {
+            (3, "find_game_input_actions", 1), (4, "find_game_input_actions_v2", 2),
+            (5, "get_game_input_actions_v2", 0), (6, "find_game_input_actions_v2", 0) }) {
+            if (id == 5) runtime.EnableGameInput(GuaGameInputCapabilities.None, () => {});
             var request = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { id, type }));
             await socket.SendAsync(request, WebSocketMessageType.Text, true, CancellationToken.None);
             var buffer = new byte[16384];
@@ -136,6 +138,11 @@ public sealed class InputMetadataTests
                 if (message.RootElement.TryGetProperty("id", out var correlation) && correlation.GetInt32() == id) break;
             } while (true);
             using var response = JsonDocument.Parse(text);
+            if (version == 0) {
+                Assert.That(response.RootElement.GetProperty("ok").GetBoolean(), Is.False);
+                Assert.That(text, Does.Not.Contain("Horizontal movement"));
+                continue;
+            }
             Assert.That(response.RootElement.GetProperty("ok").GetBoolean(), Is.True);
             var data = response.RootElement.GetProperty("result");
             Assert.That(data.GetProperty("schemaVersion").GetInt32(), Is.EqualTo(version));

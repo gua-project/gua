@@ -66,6 +66,9 @@ button/text declaration are rejected. Schema and range are a single combined
 contract: a standalone JSON Schema evaluator also needs the descriptor range.
 
 Examples must satisfy the valueType, range, schema and transport limit together.
+Each original example JSON literal must be shorter than the existing 512-byte
+Set payload buffer, including whitespace within the literal. Surrounding array
+formatting does not count. Discovery never publishes an oversized Set example.
 For non-holdable buttons, examples must be absent or empty: Set is unsupported.
 Press and Release do not take values and have no value examples. No internal
 game-command parameters or new value types are introduced.

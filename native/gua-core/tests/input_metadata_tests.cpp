@@ -95,6 +95,25 @@ int main() {
         auto bad = valid; bad.examples_json = type == GUA_GAME_INPUT_BUTTON ? "[1]" : type == GUA_GAME_INPUT_AXIS1D ? "[1]" : "[\"abc\"]"; invalid(context, bad);
         if (type == GUA_GAME_INPUT_BUTTON) { bad = valid; bad.base.base.holdable = 0; invalid(context, bad); bad.examples_json = "[]"; publish(context, bad); }
     }
+    // Every original example literal must fit the existing 512-byte Set buffer.
+    auto axis = descriptor(GUA_GAME_INPUT_AXIS1D);
+    axis.value_schema_json = R"({"type":"number"})";
+    const auto oversized = std::string("[0.1") + std::string(600, '0') + "]";
+    axis.examples_json = oversized.c_str();
+    invalid(context, axis);
+    const auto oversized_vector = std::string("[{\"x\":0,\"y\":") + std::string(600, ' ') + "0}]";
+    auto padded = descriptor(GUA_GAME_INPUT_VECTOR2);
+    padded.examples_json = oversized_vector.c_str();
+    invalid(context, padded);
+    const auto exact_limit = std::string("[0.1") + std::string(509, '0') + "]";
+    axis.examples_json = exact_limit.c_str();
+    invalid(context, axis);
+    const auto under_limit = std::string("[0.1") + std::string(508, '0') + "]";
+    axis.examples_json = under_limit.c_str();
+    publish(context, axis);
+    const auto set_literal = under_limit.substr(1, under_limit.size() - 2);
+    request.value_json = set_literal.c_str();
+    assert(gua_enqueue_game_input_v2(context, &request, &request_id) == GUA_GAME_INPUT_OK);
     gua_destroy_context(context);
     // Public C++ binding round-trip uses the same ABI contract.
     gua::Context cpp; gua::GameInputAction cpp_action;

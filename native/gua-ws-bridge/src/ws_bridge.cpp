@@ -1431,10 +1431,10 @@ private:
                 return result.empty() ? error_response(command.id, "invalid game input selector") : ok_response(command.id, result);
             }
             if (command.type == "get_game_input_actions_v2") {
-                return handlers_.get_game_input_actions_json_v2 && handlers_.game_input_supported &&
-                        handlers_.game_input_supported(1U)
-                    ? ok_response(command.id, handlers_.get_game_input_actions_json_v2())
-                    : error_response(command.id, "unsupported");
+                if (!handlers_.get_game_input_actions_json_v2 || !handlers_.game_input_supported || !handlers_.game_input_supported(1U))
+                    return error_response(command.id, "unsupported");
+                const auto result = handlers_.get_game_input_actions_json_v2();
+                return result.empty() ? error_response(command.id, "unsupported") : ok_response(command.id, result);
             }
             if (command.type == "find_game_input_actions_v2") {
                 if (!command.game_input_selector_valid) return error_response(command.id, "invalid game input selector");

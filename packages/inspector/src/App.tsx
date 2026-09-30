@@ -63,6 +63,8 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
   const [clock, setClock] = useState<GuaClockStatus | null>(null);
   const [gameInputActions, setGameInputActions] = useState<GuaGameInputActions | null>(null);
   const [gameInputState, setGameInputState] = useState<GuaGameInputState | null>(null);
+  const [gameInputMetadata, setGameInputMetadata] = useState(false);
+  const inputDiscovery = useRef<{ selector: GuaGameInputActionSelector; metadata: boolean }>({ selector: { limit: 20 }, metadata: false });
   const clockRefresh = useRef<{
     client: GuaInspectorClient;
     run: () => Promise<void>;
@@ -103,10 +105,15 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
       const snapshot = await readSnapshot(inspectorClient);
       setState((current) => updateInspectorState(current, snapshot));
       await refreshClock();
+      const discovery = inputDiscovery.current;
       try {
-        const [actions, inputState] = await Promise.all([findGameInputActionsCompatible(inspectorClient, { limit: 20 }), inspectorClient.getGameInputState()]);
-        setGameInputActions(actions); setGameInputState(inputState);
-      } catch { setGameInputActions(null); setGameInputState(null); }
+        const [actions, inputState] = await Promise.all([(discovery.metadata ? findGameInputActionsMetadataCompatible : findGameInputActionsCompatible)(inspectorClient, discovery.selector), inspectorClient.getGameInputState()]);
+        if (inputDiscovery.current === discovery) setGameInputActions(actions);
+        setGameInputState(inputState);
+      } catch {
+        if (inputDiscovery.current === discovery) setGameInputActions(null);
+        setGameInputState(null);
+      }
       setStatus("idle");
     } catch (caught) {
       setError((caught as Error).message);
@@ -311,7 +318,18 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
         <GameInputPanel
           actions={gameInputActions}
           state={gameInputState}
-          onSearch={async (selector, metadata) => setGameInputActions(await (metadata ? findGameInputActionsMetadataCompatible : findGameInputActionsCompatible)(inspectorClient, selector))}
+          metadata={gameInputMetadata}
+          onMetadataChange={(metadata) => {
+            inputDiscovery.current = { ...inputDiscovery.current, metadata };
+            setGameInputMetadata(metadata);
+            void refresh();
+          }}
+          onSearch={async (selector, metadata = false) => {
+            const discovery = { selector, metadata };
+            inputDiscovery.current = discovery;
+            const actions = await (metadata ? findGameInputActionsMetadataCompatible : findGameInputActionsCompatible)(inspectorClient, selector);
+            if (inputDiscovery.current === discovery) setGameInputActions(actions);
+          }}
           onInput={async (command) => {
             const currentCommand = await prepareManualGameInput(
               command,
@@ -355,8 +373,9 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
   );
 }
 
-function GameInputPanel({ actions, state, onSearch, onInput, onError }: {
+function GameInputPanel({ actions, state, metadata, onMetadataChange, onSearch, onInput, onError }: {
   actions: GuaGameInputActions | null; state: GuaGameInputState | null;
+  metadata: boolean; onMetadataChange(metadata: boolean): void;
   onSearch(selector: GuaGameInputActionSelector, metadata?: boolean): Promise<void>;
   onInput(command: GameInputCommandInput): Promise<void>; onError(message: string): void;
 }) {
@@ -366,7 +385,6 @@ function GameInputPanel({ actions, state, onSearch, onInput, onError }: {
   const [tags, setTags] = useState("");
   const [valueType, setValueType] = useState("");
   const [activeOnly, setActiveOnly] = useState(true);
-  const [metadata, setMetadata] = useState(false);
   const run = (command: GameInputCommandInput) => {
     void onInput(command).catch((caught) => onError((caught as Error).message));
   };
@@ -387,7 +405,7 @@ function GameInputPanel({ actions, state, onSearch, onInput, onError }: {
         <option value="vector2">vector2</option><option value="text">text</option>
       </select>
       <label><input type="checkbox" checked={activeOnly} onChange={(event) => setActiveOnly(event.currentTarget.checked)} />Active</label>
-      <label><input type="checkbox" checked={metadata} onChange={(event) => setMetadata(event.currentTarget.checked)} />Include value schema and examples</label>
+      <label><input type="checkbox" checked={metadata} onChange={(event) => onMetadataChange(event.currentTarget.checked)} />Include value schema and examples</label>
       <button type="submit">Find</button>
     </form>
     {actions?.actions.map((action) => <div className="gua-game-action" key={action.id}>

@@ -104,6 +104,30 @@ inline bool validate_metadata(const std::string& schema, const std::string& exam
         if (!examples.empty()) {
             auto e = gua_value_detail::parser(examples).parse();
             if (e.type != json::array || e.items.size() > 16 || (type == 1 && !holdable && !e.items.empty())) return false;
+            // The parsed document is valid JSON. Measure each original literal,
+            // including whitespace inside an object, rather than its decoded value.
+            size_t start = examples.find('[') + 1;
+            int depth = 1;
+            bool quoted = false, escaped = false;
+            for (size_t i = start; i < examples.size(); ++i) {
+                const char c = examples[i];
+                if (quoted) {
+                    if (escaped) escaped = false;
+                    else if (c == '\\') escaped = true;
+                    else if (c == '"') quoted = false;
+                    continue;
+                }
+                if (c == '"') quoted = true;
+                else if (c == '[' || c == '{') ++depth;
+                else if (c == ']' || c == '}') --depth;
+                if ((c == ',' && depth == 1) || depth == 0) {
+                    auto end = i;
+                    while (start < end && std::string_view(" \t\r\n").find(examples[start]) != std::string_view::npos) ++start;
+                    while (end > start && std::string_view(" \t\r\n").find(examples[end - 1]) != std::string_view::npos) --end;
+                    if (end - start >= 512) return false;
+                    start = i + 1;
+                }
+            }
             for (const auto& value : e.items)
                 if (!value_valid(value, type, has_range, minimum, maximum, s ? &*s : nullptr)) return false;
         }
