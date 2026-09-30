@@ -50,7 +50,10 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
   const add = (id: string, wait: string, assertion: string) => states.push({
     id, label: id, code: prefix + `var node = await locator.ResolveAsync();\nnode = await node.${wait};\nnode.${assertion};`,
   });
-  add("visible", node.visible ? "WaitUntilVisibleAsync()" : "WaitUntilHiddenAsync()", node.visible ? "ToBeVisible()" : "ToBeHidden()");
+  if (node.visible) add("visible", "WaitUntilVisibleAsync()", "ToBeVisible()");
+  else states.push({ id: "visible", label: "visible",
+    code: prefix + "// Hidden or removed: no visible matches remain, including when already absent.\nawait locator.WhereVisible().WaitForCountAsync(0);",
+  });
   add("enabled", node.enabled ? "WaitUntilEnabledAsync()" : "WaitUntilDisabledAsync()", node.enabled ? "ToBeEnabled()" : "ToBeDisabled()");
   if (!sensitive && typeof node.text === "string") add("text", `WaitForTextAsync(${csharpString(node.text)})`, `ToHaveText(${csharpString(node.text)})`);
   // Gua.Testing reads top-level value, not legacy state.value. Numeric JSON spelling

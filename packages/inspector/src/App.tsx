@@ -287,6 +287,7 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
         <WorldTreePanel objects={state.worldObjectTree.objects} scene={state.worldObjectTree.scene} />
         <ObservePanel client={inspectorClient} />
         <NodeDetailPanel
+          key={selectedNode?.id ?? "no-selection"}
           node={selectedNode}
           onClick={() => void clickSelected()}
           onFocus={() => void focusSelected()}

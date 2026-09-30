@@ -36,7 +36,8 @@ describe("Inspector C# generation", () => {
     expect(output.states.map((choice) => choice.id)).toEqual(["visible", "enabled"]);
     expect(output.locators).toHaveLength(2);
     expect(output.locators[1]!.code).toContain('.ByRole("button")');
-    expect(output.states[0]!.code).toContain("WaitUntilHiddenAsync()");
+    expect(output.states[0]!.code).toContain("WhereVisible().WaitForCountAsync(0)");
+    expect(output.states[0]!.code).not.toContain("ResolveAsync()");
     expect(generateNodeCode({ ...minimal, value: "", text: "", state: { value: false } }).states).toHaveLength(4);
   });
   test("sensitive mode omits text/value and uses a secret variable", () => {
@@ -87,18 +88,36 @@ describe("Inspector C# generation", () => {
         runtimeCalls.push(`await ${method}(new Fixture(${csharpString(before)}));`);
       }
     }
+    const hidden = { ...node, id: "n", parentId: undefined, label: "", visible: false };
+    const hiddenTree = JSON.stringify({ schemaVersion: 2, frameSequence: 1, revision: 1, screen: "test", nodes: [hidden] });
+    const visibleTree = JSON.stringify({ schemaVersion: 2, frameSequence: 1, revision: 1, screen: "test", nodes: [{ ...hidden, visible: true }] });
+    const removedTree = JSON.stringify({ schemaVersion: 2, frameSequence: 2, revision: 2, screen: "test", nodes: [] });
+    const hiddenCode = generateNodeCode(hidden).states.find((state) => state.id === "visible")!.code;
+    runtimeMethods.push(`static async Task Hidden(IGuaContext context) { ${hiddenCode}\n }`);
+    runtimeCalls.push(`await Hidden(new Fixture(${csharpString(hiddenTree)}));`, `await Hidden(new Fixture(${csharpString(removedTree)}));`,
+      `await Hidden(new Fixture(${csharpString(visibleTree)}) { NextJson = ${csharpString(removedTree)} });`);
     try {
       writeFileSync(join(directory, "Generated.csproj"), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><NoWarn>CS1998</NoWarn></PropertyGroup><ItemGroup><ProjectReference Include="${project.replaceAll("&", "&amp;")}" /></ItemGroup></Project>`);
       // Compare code units directly; Encoding replaces isolated surrogates.
       const directChecks = literals.map((value) => `if (!System.Linq.Enumerable.SequenceEqual(${csharpString(value)}, new char[] { ${Array.from({ length: value.length }, (_, i) => `(char)${value.charCodeAt(i)}`).join(",")} })) throw new Exception("Literal mismatch");`).join("\n");
       const fixture = `sealed class Fixture(string json) : IGuaContext {
         public string Json = json;
+        public string? NextJson;
         public string GetUiTreeJson() => Json;
         public GuaNodeState GetNodeState(string id) => new(true, false);
         public string FindNodeById(string id) => id;
         public string FindNodeByRole(string role, string? name = null) => "n";
         public string FindNodeByText(string text) => "n";
-        public GuaQueryResult Query(GuaSelector selector) => new(true, [new GuaNodeQueryMatch("n", "textbox", "", null)]);
+        public GuaQueryResult Query(GuaSelector selector) {
+          using var document = System.Text.Json.JsonDocument.Parse(Json);
+          var matches = new System.Collections.Generic.List<GuaNodeQueryMatch>();
+          foreach (var node in document.RootElement.GetProperty("nodes").EnumerateArray()) {
+            if (selector.Visible == GuaStateFilter.True && !node.GetProperty("visible").GetBoolean()) continue;
+            matches.Add(new GuaNodeQueryMatch("n", "textbox", "", null));
+          }
+          if (NextJson != null) { Json = NextJson; NextJson = null; }
+          return new(true, matches);
+        }
         public bool EnqueueClick(string id) => throw new Exception("Code generation must not enqueue actions");
         public GuaActionError EnqueueAction(GuaActionRequest request, out ulong requestId) { requestId = 0; throw new Exception("Code generation must not enqueue actions"); }
         public bool TryPollActionEvent(out GuaActionEvent e) { e = default; return false; }
