@@ -116,6 +116,9 @@ public class SemanticSnapshotTests
             Assert.That(result.Differences.Any(d => d.Kind == SemanticDifferenceKind.Changed && d.Path == "/ui/nodes/@c/text"), Is.True);
             Assert.That(result.Differences.Any(d => d.Kind == SemanticDifferenceKind.Order), Is.True);
         });
+        using var diff = JsonDocument.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath, "diff.json")));
+        Assert.That(diff.RootElement.EnumerateArray().Select(d => d.GetProperty("kind").GetString()).Distinct(),
+            Is.EquivalentTo(new[] { "added", "removed", "changed", "order" }));
         Assert.That(Compare(Ui(Node("d"), Node("a"), Node("b"), Node("c"))).Differences.Any(d => d.Kind == SemanticDifferenceKind.Order), Is.False);
     }
 
