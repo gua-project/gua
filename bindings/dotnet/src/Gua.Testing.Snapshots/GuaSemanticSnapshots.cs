@@ -68,30 +68,30 @@ public static class GuaSemanticSnapshots
         try { gate.WaitOne(); } catch (AbandonedMutexException) { /* Ownership was granted; atomic files remain readable. */ }
         try
         {
-        if (File.Exists(baseline))
-        {
-            // Reapply today's rules to both sides; never copy the raw baseline into artifacts.
-            var stored = JsonNode.Parse(File.ReadAllText(baseline)) as JsonObject ?? throw new InvalidDataException("Invalid semantic baseline document.");
-            if (stored["snapshotVersion"]?.GetValue<int>() != 1 || stored["ui"] is not JsonObject)
-                throw new InvalidDataException("Unsupported semantic baseline version or missing UI tree.");
-            expected = Transform(stored, "", null, options);
-            Diff(expected, actual, "", differences);
-            reason = differences.Count == 0 ? "matched" : "semantic_difference";
-        }
-        if (update)
-        {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(baseline)!);
-            // Unique temporary files plus same-directory atomic replacement prevent partial reads under parallel approval.
-            var temporary = baseline + "." + runId + ".tmp";
-            try
+            if (File.Exists(baseline))
             {
-                File.WriteAllText(temporary, Serialize(actual));
-                if (File.Exists(baseline)) File.Replace(temporary, baseline, null);
-                else File.Move(temporary, baseline);
+                // Reapply today's rules to both sides; never copy the raw baseline into artifacts.
+                var stored = JsonNode.Parse(File.ReadAllText(baseline)) as JsonObject ?? throw new InvalidDataException("Invalid semantic baseline document.");
+                if (stored["snapshotVersion"]?.GetValue<int>() != 1)
+                    throw new InvalidDataException("Unsupported semantic baseline version.");
+                expected = Transform(stored, "", null, options);
+                Diff(expected, actual, "", differences);
+                reason = differences.Count == 0 ? "matched" : "semantic_difference";
             }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
-            reason = "baseline_updated";
-        }
+            if (update)
+            {
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(baseline)!);
+                // Unique temporary files plus same-directory atomic replacement prevent partial reads under parallel approval.
+                var temporary = baseline + "." + runId + ".tmp";
+                try
+                {
+                    File.WriteAllText(temporary, Serialize(actual));
+                    if (File.Exists(baseline)) File.Replace(temporary, baseline, null);
+                    else File.Move(temporary, baseline);
+                }
+                finally { if (File.Exists(temporary)) File.Delete(temporary); }
+                reason = "baseline_updated";
+            }
         }
         finally { gate.ReleaseMutex(); }
         var result = new SemanticSnapshotComparisonResult(update || reason == "matched", update, reason, baseline, artifact, runId, differences.AsReadOnly());
@@ -147,6 +147,15 @@ public static class GuaSemanticSnapshots
         }
         if (node is JsonArray array)
         {
+            // Index-based removal changes subsequent positions in an approved document. Stable
+            // selector rules use wildcard + ItemId so applying them again remains idempotent.
+            var parentSegments = path.Split('/').Length;
+            foreach (var rule in options.Rules)
+            {
+                var segments = rule.Path.Split('/');
+                if (segments.Length > parentSegments && Matches(string.Join("/", segments.Take(parentSegments)), path) && segments[parentSegments] != "*")
+                    throw new ArgumentException("Rules targeting array children must use '*' and optional ItemId; numeric array indices cannot be persisted safely.");
+            }
             var result = new JsonArray();
             for (var i = 0; i < array.Count; i++)
             {
@@ -217,7 +226,8 @@ public static class GuaSemanticSnapshots
                 else if (!am.ContainsKey(id)) Add(SemanticDifferenceKind.Removed, child, em[id], null);
                 else Diff(em[id], am[id], child, result);
             }
-            var eo = em.Keys.Where(am.ContainsKey).ToArray(); var ao = am.Keys.Where(em.ContainsKey).ToArray();
+            var eo = ea.Select(n => n!["id"]!.GetValue<string>()).Where(am.ContainsKey).ToArray();
+            var ao = aa.Select(n => n!["id"]!.GetValue<string>()).Where(em.ContainsKey).ToArray();
             if (!eo.SequenceEqual(ao)) Add(SemanticDifferenceKind.Order, path, JsonSerializer.SerializeToNode(eo), JsonSerializer.SerializeToNode(ao));
             return;
         }
@@ -244,6 +254,8 @@ public static class GuaSemanticSnapshots
             throw new ArgumentException("Name, variant and directories are required.");
         if (options.Rules is null || options.Rules.Any(r => r is null || string.IsNullOrEmpty(r.Path) || !r.Path.StartsWith("/", StringComparison.Ordinal) || !Enum.IsDefined(typeof(SemanticSnapshotRuleAction), r.Action)))
             throw new ArgumentException("Rules require JSON Pointer paths and valid actions.");
+        if (options.Rules.Any(r => Matches(r.Path, "/snapshotVersion")))
+            throw new ArgumentException("Rules cannot replace the baseline envelope version.");
         // Stable identity is needed to apply selector rules again when reading an approved baseline.
         if (options.Rules.Any(r =>
         {

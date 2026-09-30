@@ -204,6 +204,39 @@ public class SemanticSnapshotTests
         Assert.That(Directory.Exists(_root), Is.False);
     }
 
+    [TestCase(SemanticSnapshotRuleAction.Ignore)] [TestCase(SemanticSnapshotRuleAction.Mask)]
+    public void UnstableArrayIndexRulesFailBeforeArtifacts(SemanticSnapshotRuleAction action)
+    {
+        Assert.Throws<ArgumentException>(() => Compare(Ui(Node("a"), Node("b")), Options(true,
+            rules: [new("/ui/nodes/0", action)])));
+        Assert.That(Directory.Exists(_root), Is.False);
+    }
+
+    [Test] public void NumericWorldStateKeysRemainMaskable()
+    {
+        var world = World("a"); world["objects"]![0]!["state"]!["0"] = "secret";
+        var rules = new SemanticSnapshotRule[] { new("/world/objects/*/state/0", SemanticSnapshotRuleAction.Mask, "a") };
+        var result = Compare(Ui(), Options(true, rules: rules, world: () => world.ToJsonString()));
+        Assert.That(File.ReadAllText(result.BaselinePath), Does.Not.Contain("secret"));
+        Assert.That(Compare(Ui(), Options(rules: rules, world: () => world.ToJsonString())).Matched, Is.True);
+    }
+
+    [TestCase(SemanticSnapshotRuleAction.Ignore)] [TestCase(SemanticSnapshotRuleAction.Mask)]
+    public void EntireTreeRulesRemainIdempotent(SemanticSnapshotRuleAction action)
+    {
+        var rules = new SemanticSnapshotRule[] { new("/ui", action) };
+        var result = Compare(Ui(Node("a", "secret")), Options(true, rules: rules));
+        Assert.That(File.ReadAllText(result.BaselinePath), Does.Not.Contain("secret"));
+        Assert.That(Compare(Ui(Node("b", "another-secret")), Options(rules: rules)).Matched, Is.True);
+    }
+
+    [Test] public void EnvelopeVersionCannotBeMaskedOrIgnored()
+    {
+        Assert.Throws<ArgumentException>(() => Compare(Ui(), Options(true, rules: [new("/snapshotVersion", SemanticSnapshotRuleAction.Mask)])));
+        Assert.Throws<ArgumentException>(() => Compare(Ui(), Options(true, rules: [new("/*", SemanticSnapshotRuleAction.Ignore)])));
+        Assert.That(Directory.Exists(_root), Is.False);
+    }
+
     private sealed class FakeContext(string json) : IGuaContext
     {
         public string GetUiTreeJson() => json;

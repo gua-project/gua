@@ -33,8 +33,7 @@ or exactly `GUA_UPDATE_SEMANTIC_BASELINES=1`. The Visual environment variable
 in regular CI and review baseline diffs before committing them.
 
 The version-1 baseline envelope contains `ui` and optionally `world`. Object
-properties sort ordinally; numeric spellings normalize to decimal when exactly
-representable. Arrays preserve publication order, including nodes, objects,
+properties sort ordinally; numeric tokens normalize without rounding, including arbitrarily large or small values. Arrays preserve publication order, including nodes, objects,
 actions and tags. All semantic properties, unknown versus present false/null,
 screen/scene, IDs, parent relationships, role/kind, text/value, visibility,
 enabled/active and state remain significant. Root sessionEpoch/frameSequence/
@@ -51,11 +50,13 @@ escaping; `@id` diff segments identify items instead of unstable indices.
 
 Rules use absolute JSON Pointer patterns (`~0`, `~1` escaping), with `*` matching
 one segment. Optional `ItemId` selects an exact UI or World item ID. Ignore wins
-over mask. Rules apply before comparison, approval, expected/actual output and
+over mask. Whole-tree `/ui` or `/world` rules are allowed; the baseline envelope
+version is reserved and cannot be masked or ignored. Rules apply before comparison, approval, expected/actual output and
 diff output; raw baselines are never copied to artifacts. IDs cannot be masked or
 ignored individually because selectors need stable identity; ignore an entire
-item instead. Prefer wildcard plus ItemId over numeric array indices, which refer
-to each input's original publication positions. Removing an item from comparison
+item instead. Array child paths must use wildcard plus optional ItemId; numeric
+array indices are rejected because removal changes positions in saved baselines.
+Numeric object/state property names are supported. Removing an item from comparison
 also removes its place in order comparison. Masks retain a `[MASKED]` marker on
 present fields; unknown versus present stays significant. Rules do not rewrite
 an existing baseline unless approval is explicit.
