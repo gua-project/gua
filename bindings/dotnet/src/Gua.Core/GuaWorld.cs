@@ -77,7 +77,7 @@ public sealed partial class GuaContext : IGuaWorldContext
     public void EndWorldFrame()
     {
         ThrowIfDisposed();
-        if (Native.gua_end_world_frame(_handle) == 0) throw new InvalidOperationException("The Gua world frame was rejected.");
+        lock (ObserveGate) { ThrowIfDisposed(); SampleObservations(false); if (ObserveDisposed) return; if (Native.gua_end_world_frame(ObserveHandle) == 0) throw new InvalidOperationException("The Gua world frame was rejected."); }
     }
 
     public void AbortWorldFrame()

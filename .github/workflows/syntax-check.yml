@@ -235,6 +235,14 @@ jobs:
       - name: Build Value managed targets
         run: dotnet build bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release --no-restore
 
+      - name: Verify Observe dynamic and static imports
+        shell: pwsh
+        run: |
+          scripts/verify-observe-imports.ps1 -AssemblyPath bindings/dotnet/src/Gua.Core/bin/Release/netstandard2.1/Gua.Core.dll -ExpectedLibrary gua
+          dotnet build bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release --no-restore -f netstandard2.1 -p:DefineConstants=GUA_STATIC_LINK -o build/observe-static-link
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File scripts/verify-observe-imports.ps1 -AssemblyPath build/observe-static-link/Gua.Core.dll -ExpectedLibrary __Internal
+
       - name: Stage native package assets
         shell: pwsh
         run: |

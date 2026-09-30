@@ -37,7 +37,7 @@ public sealed partial class GuaContext : IGuaContext, IGuaClockContext, IDisposa
     public void EndFrame()
     {
         ThrowIfDisposed();
-        Native.gua_end_frame(_handle);
+        lock (ObserveGate) { ThrowIfDisposed(); SampleObservations(true); if (!ObserveDisposed) Native.gua_end_frame(ObserveHandle); }
     }
 
     public void RegisterNode(
@@ -241,7 +241,9 @@ public sealed partial class GuaContext : IGuaContext, IGuaClockContext, IDisposa
         { WorldFrameSequence = status.WorldFrameSequence, WorldRevision = status.WorldRevision, WorldObjectCount = status.WorldObjectCount };
     }
 
-    public unsafe GuaResetReport Reset(GuaResetOptions? options = null)
+    public GuaResetReport Reset(GuaResetOptions? options = null) { lock (ObserveGate) return ResetCore(options); }
+
+    private unsafe GuaResetReport ResetCore(GuaResetOptions? options)
     {
         ThrowIfDisposed();
         options ??= new GuaResetOptions();
@@ -602,7 +604,9 @@ public sealed partial class GuaContext : IGuaContext, IGuaClockContext, IDisposa
         }
     }
 
-    public void Dispose()
+    public void Dispose() { lock (ObserveGate) DisposeCore(); }
+
+    private void DisposeCore()
     {
         if (_handle == 0)
         {

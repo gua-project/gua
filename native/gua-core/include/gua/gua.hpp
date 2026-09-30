@@ -3,6 +3,8 @@
 #include "gua/gua.h"
 
 #include <algorithm>
+#include <functional>
+#include <list>
 #include <stdexcept>
 #include <cstdint>
 #include <optional>
@@ -19,6 +21,7 @@ class Context;
 
 struct ContextLifetime {
     Context* context = nullptr;
+    std::list<std::shared_ptr<std::function<bool(bool)>>> frame_observers;
 };
 
 struct Rect {
@@ -199,6 +202,19 @@ public:
         return context_;
     }
 
+    std::weak_ptr<ContextLifetime> lifetime() const { return lifetime_; }
+
+    void sample_observations(bool ui) {
+        auto lifetime = lifetime_;
+        if (!lifetime) return;
+        // Keep the registry live during reentrant teardown. The copy retains
+        // callbacks with weak getter references; exceptions leave it intact.
+        auto observers = lifetime->frame_observers;
+        for (const auto& observer : observers)
+            if (!(*observer)(ui)) lifetime->frame_observers.remove(observer);
+    }
+    void end_world_frame() { auto lifetime = lifetime_; sample_observations(false); if (lifetime && lifetime->context == this && !gua_end_world_frame(context_)) throw std::runtime_error("World frame rejected"); }
+
     void mark_node_sensitive(std::string_view id)
     {
         sensitive_node_ids_.emplace(id);
@@ -230,7 +246,9 @@ public:
 
     void end_frame()
     {
-        gua_end_frame(context_);
+        auto lifetime = lifetime_;
+        sample_observations(true);
+        if (lifetime && lifetime->context == this) gua_end_frame(context_);
     }
 
     void node(
