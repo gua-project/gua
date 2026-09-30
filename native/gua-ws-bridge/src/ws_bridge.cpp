@@ -77,6 +77,7 @@ struct Command {
     double input_y = 0;
     bool world_selector_valid = true;
     bool game_input_selector_valid = true;
+    bool game_input_metadata_get_valid = true;
 };
 
 struct ClientConnection {
@@ -933,6 +934,9 @@ Command parse_command(std::string_view json)
             valid_optional_int_range(json, "valueType", 1, 4) && valid_optional_int_range(json, "active", 0, 2) &&
             valid_optional_int_range(json, "limit", 1, 100) &&
             gua::ws::detail::valid_game_input_query_selector(command.game_input_selector));
+    const auto metadata_get_fields = std::array { std::string_view("id"), std::string_view("type") };
+    command.game_input_metadata_get_valid = command.type != "get_game_input_actions_v2" ||
+        json_has_only_top_level_fields(json, metadata_get_fields);
     command.value = json_string_field(json, "value").value_or("");
     command.delta_x = static_cast<float>(json_number_field(json, "deltaX").value_or(0));
     command.delta_y = static_cast<float>(json_number_field(json, "deltaY").value_or(0));
@@ -1431,6 +1435,7 @@ private:
                 return result.empty() ? error_response(command.id, "invalid game input selector") : ok_response(command.id, result);
             }
             if (command.type == "get_game_input_actions_v2") {
+                if (!command.game_input_metadata_get_valid) return error_response(command.id, "invalid game input metadata request");
                 if (!handlers_.get_game_input_actions_json_v2 || !handlers_.game_input_supported || !handlers_.game_input_supported(1U))
                     return error_response(command.id, "unsupported");
                 const auto result = handlers_.get_game_input_actions_json_v2();

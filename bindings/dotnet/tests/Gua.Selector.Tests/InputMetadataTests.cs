@@ -117,9 +117,12 @@ public sealed class InputMetadataTests
         await socket.ConnectAsync(new Uri(runtime.InspectorBridgeUrl), CancellationToken.None);
         foreach (var (id, type, version) in new[] { (1, "get_game_input_actions", 1), (2, "get_game_input_actions_v2", 2),
             (3, "find_game_input_actions", 1), (4, "find_game_input_actions_v2", 2),
+            (7, "get_game_input_actions_v2", 0), (8, "get_game_input_actions", 1),
             (5, "get_game_input_actions_v2", 0), (6, "find_game_input_actions_v2", 0) }) {
             if (id == 5) runtime.EnableGameInput(GuaGameInputCapabilities.None, () => {});
-            var request = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { id, type }));
+            var request = Encoding.UTF8.GetBytes(id is 7 or 8
+                ? JsonSerializer.Serialize(new { id, type, confirmed = true })
+                : JsonSerializer.Serialize(new { id, type }));
             await socket.SendAsync(request, WebSocketMessageType.Text, true, CancellationToken.None);
             var buffer = new byte[16384];
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
