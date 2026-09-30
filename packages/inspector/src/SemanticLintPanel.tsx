@@ -35,13 +35,13 @@ export function SemanticLintPanel({ client, ui, world }: { client: SemanticLintC
     } catch { if (request === generation.current) setError("Semantic lint failed or is unsupported. Connect to a runtime with semantic_lint_v1 and retry."); }
     finally { if (request === generation.current) setPending(false); }
   };
-  return <section className="gua-panel gua-world-panel">
-    <header><h2>Semantic lint</h2><button disabled={pending} onClick={() => void run()}>{pending ? "Linting…" : "Run lint"}</button>
+  return <section className="gua-panel gua-lint-panel">
+    <header><h2>Semantic lint</h2><button disabled={pending || !client.analyzeSemanticLint} onClick={() => void run()}>{pending ? "Linting…" : "Run lint"}</button>
       <label>Severity <select value={severity} onChange={event => setSeverity(event.target.value as LintSeverity | "all")}>
         <option value="all">All</option><option value="error">Error</option><option value="warning">Warning</option><option value="info">Info</option>
       </select></label></header>
     {error && <p role="alert">{error}</p>}
-    {!report && !error && <p>Run lint to inspect the runtime's published UI and World snapshots.</p>}
+    {!report && !error && <p>{client.analyzeSemanticLint ? "Run lint to inspect the runtime's published UI and World snapshots." : "Semantic lint is unavailable on this connection. Connect to a runtime with semantic_lint_v1."}</p>}
     {report && <>{!lintReportIsCurrent(report, ui, world) && <p>Snapshot changed since this report. Run lint again to inspect the current snapshots.</p>}
       <SemanticLintFindings report={report} severity={severity} /></>}
   </section>;

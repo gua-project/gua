@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GuaTraceFileViewer } from "./TraceViewer";
 import { ObservePanel } from "./ObservePanel";
+import { SemanticLintPanel } from "./SemanticLintPanel";
 import { NodeCodePanel } from "./NodeCodePanel";
 
 import {
@@ -286,6 +287,9 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
         />
         <WorldTreePanel objects={state.worldObjectTree.objects} scene={state.worldObjectTree.scene} />
         <ObservePanel client={inspectorClient} />
+        <SemanticLintPanel client={inspectorClient}
+          ui={{ sessionEpoch: state.uiTree.sessionEpoch ?? 0, frameSequence: state.uiTree.frameSequence, revision: state.uiTree.revision }}
+          world={state.worldObjectTree} />
         <NodeDetailPanel
           key={JSON.stringify([selectedNode?.id, selectedNode?.actions.includes("set_value")])}
           node={selectedNode}
