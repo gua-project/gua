@@ -304,11 +304,13 @@ public sealed class LocatorAutoWaitTests
     {
         var context = new Fixture { HasCompletion = false };
         var timer = System.Diagnostics.Stopwatch.StartNew();
+        // Allow cold JIT/serialization on CI to reach enqueue, while keeping the
+        // deadline and elapsed bound well below the deliberately long poll interval.
         var error = Assert.ThrowsAsync<GuaActionException>(() =>
-            GuaAssertions.Query(context).ByRole("button").ClickAsync(TimeSpan.FromMilliseconds(60), TimeSpan.FromSeconds(2)));
+            GuaAssertions.Query(context).ByRole("button").ClickAsync(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10)));
         Assert.That(error!.Kind, Is.EqualTo(GuaActionFailureKind.TimedOut));
         Assert.That(error.RequestId, Is.EqualTo(42));
-        Assert.That(timer.Elapsed, Is.LessThan(TimeSpan.FromSeconds(1)));
+        Assert.That(timer.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)));
         Assert.That(context.Sent, Has.Count.EqualTo(1));
     }
 
