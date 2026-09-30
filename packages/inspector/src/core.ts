@@ -26,6 +26,7 @@ export interface GuaNodeState {
   hovered?: boolean;
   pressed?: boolean;
   checked?: boolean;
+  selected?: boolean;
   value?: number | string | boolean | null;
 }
 
@@ -34,6 +35,8 @@ export interface GuaNode {
   parentId?: string;
   role: string;
   label?: string;
+  text?: string;
+  value?: number | string | boolean | null;
   visible: boolean;
   enabled: boolean;
   bounds: GuaBounds;
