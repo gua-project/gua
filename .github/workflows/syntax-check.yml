@@ -175,6 +175,15 @@ jobs:
       - name: Run Release Web in-page bridge smoke
         run: bun scripts/verify-godot-web-release.ts artifacts/godot-web-release
 
+      - name: Preserve failed Web Release export for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-web-release-diagnostics
+          path: artifacts/godot-web-release
+          if-no-files-found: ignore
+          retention-days: 3
+
   portable-native:
     name: Native bridge / ${{ matrix.rid }}
     strategy:
