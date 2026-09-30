@@ -175,6 +175,15 @@ jobs:
       - name: Run Release Web in-page bridge smoke
         run: bun scripts/verify-godot-web-release.ts artifacts/godot-web-release
 
+      - name: Preserve Web Release export for diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-web-release-diagnostics
+          path: artifacts/godot-web-release
+          if-no-files-found: ignore
+          retention-days: 3
+
   portable-native:
     name: Native bridge / ${{ matrix.rid }}
     strategy:
@@ -459,6 +468,7 @@ jobs:
 
       - name: Test TypeScript packages
         run: |
+          bun test scripts/verify-godot-web-release.test.ts
           bun run --filter gua-webmcp test
           bun run --filter gua-value test
           bun run --filter @gua/bridge-ws test

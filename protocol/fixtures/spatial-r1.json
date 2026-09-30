@@ -1,0 +1,495 @@
+{
+  "schemaVersion": "spatial-r1",
+  "valid": [
+    {
+      "id": "sphere-sweep",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}"
+    },
+    {
+      "id": "provider-units",
+      "type": "provider",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}"
+    },
+    {
+      "id": "sweep-clear",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\"}"
+    },
+    {
+      "id": "sphere-overlap",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"overlap\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5}}"
+    },
+    {
+      "id": "finite-ray",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"raycast\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"segment\":{\"from\":{\"x\":0,\"y\":0,\"z\":0},\"to\":{\"x\":2,\"y\":0,\"z\":0}}}"
+    },
+    {
+      "id": "coincident-capsule-is-sphere",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"capsule\",\"pointA\":{\"x\":0,\"y\":0,\"z\":0},\"pointB\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}"
+    },
+    {
+      "id": "oriented-box",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"box\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"halfExtents\":{\"x\":0.5,\"y\":1,\"z\":0.5},\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}}},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}"
+    },
+    {
+      "id": "zero-sweep",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":0,\"y\":0,\"z\":0}}"
+    },
+    {
+      "id": "blocked-anonymous-truncated-bracket",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeBracket\",\"source\":\"native cast_motion\",\"error\":{\"state\":\"unknown\",\"reason\":\"unmeasured\"},\"safeFraction\":0.25,\"unsafeFraction\":0.3}}"
+    },
+    {
+      "id": "blocked-estimate",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeEstimate\",\"source\":\"native distance\",\"error\":{\"state\":\"known\",\"absolute\":0.01},\"distance\":0.6,\"fraction\":0.3}}"
+    },
+    {
+      "id": "initial-contact",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"initialOverlap\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"contact\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"detected\"}"
+    },
+    {
+      "id": "initial-deep-penetration",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"initialOverlap\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"penetration\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"detected\"}"
+    },
+    {
+      "id": "initial-unknown",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"indeterminate\",\"coverage\":{\"state\":\"unknown\",\"reason\":\"unloaded\"},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"indeterminate\"}"
+    },
+    {
+      "id": "no-hit-unknown-coverage",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"raycast\",\"status\":\"completed\",\"outcome\":\"noHit\",\"coverage\":{\"state\":\"unknown\",\"reason\":\"undeclared\"},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"nearest\":\"none\",\"originInside\":\"unknown\"}"
+    },
+    {
+      "id": "ray-hit-published-world",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"raycast\",\"status\":\"completed\",\"outcome\":\"hit\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"contact\",\"position\":{\"x\":1,\"y\":0,\"z\":0},\"distance\":1,\"normal\":{\"x\":-1,\"y\":0,\"z\":0},\"collisionRef\":\"opaque-7\",\"worldObjectId\":\"public-wall\",\"missing\":{}}],\"nearest\":\"policyRegion\",\"originInside\":\"unknown\"}"
+    },
+    {
+      "id": "overlap-detected-no-details",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"overlap\",\"status\":\"completed\",\"outcome\":\"detected\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}]}"
+    },
+    {
+      "id": "zero-sweep-overlap-only",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"zeroLength\",\"distance\":0}}"
+    },
+    {
+      "id": "rejected-stale_space",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"rejected\",\"error\":{\"code\":\"stale_space\"}}"
+    },
+    {
+      "id": "unsupported-unsupported_shape",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"unsupported\",\"error\":{\"code\":\"unsupported_shape\"}}"
+    },
+    {
+      "id": "unsupported-unsupported_consistency",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"unsupported\",\"error\":{\"code\":\"unsupported_consistency\"}}"
+    },
+    {
+      "id": "failed-internal",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"failed\",\"error\":{\"code\":\"internal\"}}"
+    },
+    {
+      "id": "cancelled-cancelled",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"cancelled\",\"error\":{\"code\":\"cancelled\"}}"
+    },
+    {
+      "id": "deadlineExceeded-deadline_exceeded",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"deadlineExceeded\",\"error\":{\"code\":\"deadline_exceeded\"}}"
+    },
+    {
+      "id": "metadata-1e0",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1e0,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}"
+    },
+    {
+      "id": "metadata-1.0",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1.0,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}"
+    },
+    {
+      "id": "metadata-9007199254740991.0",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":9007199254740991.0,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}"
+    },
+    {
+      "id": "integral-provider-limits",
+      "type": "provider",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64e0,\"maxHitsPerQuery\":32.0,\"maxDeadlineMs\":1000}}"
+    }
+  ],
+  "invalid": [
+    {
+      "id": "future-version",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r2\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 2,
+      "schemaReject": true
+    },
+    {
+      "id": "negative-radius",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":-1},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 3,
+      "schemaReject": true
+    },
+    {
+      "id": "zero-radius",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 3,
+      "schemaReject": true
+    },
+    {
+      "id": "negative-half-extent",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"box\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"halfExtents\":{\"x\":-1,\"y\":1,\"z\":1},\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}}},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 3,
+      "schemaReject": false
+    },
+    {
+      "id": "nonorthogonal-box",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"box\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"halfExtents\":{\"x\":0.5,\"y\":1,\"z\":0.5},\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":1,\"y\":0,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}}},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 3,
+      "schemaReject": false
+    },
+    {
+      "id": "nonunit-box",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"box\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"halfExtents\":{\"x\":0.5,\"y\":1,\"z\":0.5},\"basis\":{\"x\":{\"x\":2,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}}},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 3,
+      "schemaReject": false
+    },
+    {
+      "id": "zero-ray",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"raycast\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"segment\":{\"from\":{\"x\":0,\"y\":0,\"z\":0},\"to\":{\"x\":0,\"y\":0,\"z\":0}}}",
+      "error": 3,
+      "schemaReject": false
+    },
+    {
+      "id": "overflow",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":1e9999,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 3,
+      "schemaReject": true
+    },
+    {
+      "id": "NaN",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":NaN,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "Infinity",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":Infinity,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "mesh-not-approximated",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"mesh\",\"vertices\":[]},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "rotation-sweep",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0},\"rotation\":{\"x\":1,\"y\":0,\"z\":0}}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "arbitrary-mask",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0},\"layerMask\":65535}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "unsafe-id-exclusions",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0},\"exclude\":[\"wall\"]}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "wrong-dto-shape",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"overlap\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":0,\"y\":0,\"z\":0}}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "request-id-rounding",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1.00000000000000001,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 1,
+      "schemaReject": false
+    },
+    {
+      "id": "duplicate-key",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "error": 1,
+      "schemaReject": false
+    },
+    {
+      "id": "too-many-hits",
+      "type": "request",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0},\"maxHits\":33}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "complete-without-region",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\"},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\"}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "initial-overlap-cannot-clear",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"detected\"}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "unknown-initial-cannot-clear",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"indeterminate\"}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "clear-unknown-coverage",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"unknown\",\"reason\":\"unloaded\"},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\"}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "no-hit-cannot-have-hits",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"raycast\",\"status\":\"completed\",\"outcome\":\"noHit\",\"coverage\":{\"state\":\"unknown\",\"reason\":\"undeclared\"},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"nearest\":\"none\",\"originInside\":\"unknown\"}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "no-hit-cannot-truncate",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"raycast\",\"status\":\"completed\",\"outcome\":\"noHit\",\"coverage\":{\"state\":\"unknown\",\"reason\":\"undeclared\"},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"nearest\":\"none\",\"originInside\":\"unknown\"}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "zero-normal-not-placeholder",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"},\"normal\":{\"x\":0,\"y\":0,\"z\":0}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeBracket\",\"source\":\"native cast_motion\",\"error\":{\"state\":\"unknown\",\"reason\":\"unmeasured\"},\"safeFraction\":0.25,\"unsafeFraction\":0.3}}",
+      "error": 3,
+      "schemaReject": false
+    },
+    {
+      "id": "omitted-normal-needs-reason",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeBracket\",\"source\":\"native cast_motion\",\"error\":{\"state\":\"unknown\",\"reason\":\"unmeasured\"},\"safeFraction\":0.25,\"unsafeFraction\":0.3}}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "inverted-bracket",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeBracket\",\"source\":\"native cast_motion\",\"error\":{\"state\":\"unknown\",\"reason\":\"unmeasured\"},\"safeFraction\":0.5,\"unsafeFraction\":0.2}}",
+      "error": 6,
+      "schemaReject": false
+    },
+    {
+      "id": "estimate-cannot-have-safe-bound",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeEstimate\",\"source\":\"native distance\",\"error\":{\"state\":\"known\",\"absolute\":0.01},\"distance\":0.6,\"fraction\":0.3,\"safeFraction\":0.2}}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "failed-no-hit",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"failed\",\"error\":{\"code\":\"internal\"},\"outcome\":\"noHit\"}",
+      "error": 6,
+      "schemaReject": true
+    },
+    {
+      "id": "batch-over-cap",
+      "type": "provider",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":65,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 1,
+      "schemaReject": true
+    },
+    {
+      "id": "clear-cannot-have-intermediate-unsafe-bracket",
+      "type": "result",
+      "json": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeBracket\",\"source\":\"native\",\"error\":{\"state\":\"known\",\"absolute\":0},\"safeFraction\":0.25,\"unsafeFraction\":0.3}}",
+      "error": 6,
+      "schemaReject": true
+    }
+  ],
+  "requestChecks": [
+    {
+      "id": "matching",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 0
+    },
+    {
+      "id": "other-space",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"other\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 4
+    },
+    {
+      "id": "stale-epoch",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":2,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 4
+    },
+    {
+      "id": "shape-unsupported",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"capsule\",\"pointA\":{\"x\":0,\"y\":0,\"z\":0},\"pointB\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 5
+    },
+    {
+      "id": "consistency-unsupported",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"samePhysicsSample\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 5
+    },
+    {
+      "id": "policy-unsupported",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"unregistered\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 5
+    },
+    {
+      "id": "operation-unsupported",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"overlap\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":32,\"maxDeadlineMs\":1000}}",
+      "error": 5
+    },
+    {
+      "id": "lower-host-limit",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0},\"maxHits\":8}",
+      "provider": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"provider\",\"providerId\":\"fixture\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"worldSpace\":\"world3d\",\"basis\":{\"x\":{\"x\":1,\"y\":0,\"z\":0},\"y\":{\"x\":0,\"y\":1,\"z\":0},\"z\":{\"x\":0,\"y\":0,\"z\":1}},\"up\":{\"x\":0,\"y\":1,\"z\":0},\"unit\":{\"label\":\"host tiles\"},\"precision\":{\"representation\":\"binary64\",\"reason\":\"fixture only; no engine measurement\"},\"operations\":[\"raycast\",\"overlap\",\"sweep\"],\"shapes\":[\"sphere\",\"capsule\",\"box\"],\"policies\":[\"testing\"],\"consistencies\":[\"bestEffort\"],\"engine\":{\"name\":\"contract-fixture\",\"version\":\"1\",\"backend\":\"none\",\"backendVersion\":\"none\"},\"limits\":{\"maxQueriesPerBatch\":64,\"maxHitsPerQuery\":4,\"maxDeadlineMs\":1000}}",
+      "error": 1
+    }
+  ],
+  "resultChecks": [
+    {
+      "id": "clear",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\"}",
+      "error": 0
+    },
+    {
+      "id": "bracket",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeBracket\",\"source\":\"native cast_motion\",\"error\":{\"state\":\"unknown\",\"reason\":\"unmeasured\"},\"safeFraction\":0.25,\"unsafeFraction\":0.3}}",
+      "error": 0
+    },
+    {
+      "id": "estimate",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeEstimate\",\"source\":\"native distance\",\"error\":{\"state\":\"known\",\"absolute\":0.01},\"distance\":0.6,\"fraction\":0.3}}",
+      "error": 0
+    },
+    {
+      "id": "contact",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"initialOverlap\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"contact\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"detected\"}",
+      "error": 0
+    },
+    {
+      "id": "ray-unknown-coverage",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"raycast\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"segment\":{\"from\":{\"x\":0,\"y\":0,\"z\":0},\"to\":{\"x\":2,\"y\":0,\"z\":0}}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"raycast\",\"status\":\"completed\",\"outcome\":\"noHit\",\"coverage\":{\"state\":\"unknown\",\"reason\":\"undeclared\"},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"nearest\":\"none\",\"originInside\":\"unknown\"}",
+      "error": 0
+    },
+    {
+      "id": "zero-sweep",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":0,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"zeroLength\",\"distance\":0}}",
+      "error": 0
+    },
+    {
+      "id": "epoch-mismatch",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":2,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\"}",
+      "error": 4
+    },
+    {
+      "id": "request-mismatch",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":2,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\"}",
+      "error": 4
+    },
+    {
+      "id": "zero-needs-zero-motion",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":0,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\"}",
+      "error": 6
+    },
+    {
+      "id": "nonzero-cannot-zero-motion",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"clear\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"zeroLength\",\"distance\":0}}",
+      "error": 6
+    },
+    {
+      "id": "zero-cannot-block",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":0,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"zeroLength\",\"distance\":0}}",
+      "error": 6
+    },
+    {
+      "id": "distance-over-delta",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeEstimate\",\"source\":\"native distance\",\"error\":{\"state\":\"known\",\"absolute\":0.01},\"distance\":3,\"fraction\":0.3}}",
+      "error": 6
+    },
+    {
+      "id": "hit-limit",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"sweep\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"shape\":{\"type\":\"sphere\",\"center\":{\"x\":0,\"y\":0,\"z\":0},\"radius\":0.5},\"delta\":{\"x\":2,\"y\":0,\"z\":0},\"maxHits\":1}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"sweep\",\"status\":\"completed\",\"outcome\":\"blocked\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":true,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}},{\"relation\":\"unknown\",\"missing\":{\"position\":\"unavailable\",\"distance\":\"unavailable\",\"normal\":\"unavailable\",\"collisionRef\":\"notPublished\",\"worldObjectId\":\"notRegistered\"}}],\"initialOverlap\":\"notDetected\",\"motion\":{\"type\":\"nativeBracket\",\"source\":\"native cast_motion\",\"error\":{\"state\":\"unknown\",\"reason\":\"unmeasured\"},\"safeFraction\":0.25,\"unsafeFraction\":0.3}}",
+      "error": 6
+    },
+    {
+      "id": "ray-distance-outside-segment",
+      "request": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"request\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"queryPolicyId\":\"testing\",\"kind\":\"raycast\",\"deadlineMs\":100,\"consistency\":\"bestEffort\",\"segment\":{\"from\":{\"x\":0,\"y\":0,\"z\":0},\"to\":{\"x\":2,\"y\":0,\"z\":0}}}",
+      "result": "{\"schemaVersion\":\"spatial-r1\",\"documentType\":\"result\",\"requestId\":1,\"sessionEpoch\":1,\"queryId\":\"q1\",\"spaceId\":\"room\",\"spaceEpoch\":1,\"kind\":\"raycast\",\"status\":\"completed\",\"outcome\":\"hit\",\"coverage\":{\"state\":\"complete\",\"loadedRegion\":{\"min\":{\"x\":-10,\"y\":-10,\"z\":-10},\"max\":{\"x\":10,\"y\":10,\"z\":10}}},\"truncated\":false,\"sample\":{\"physicsSampleId\":\"sample-1\",\"tick\":1,\"observedAtMs\":5},\"hits\":[{\"relation\":\"contact\",\"position\":{\"x\":1,\"y\":0,\"z\":0},\"distance\":100,\"normal\":{\"x\":-1,\"y\":0,\"z\":0},\"collisionRef\":\"opaque-7\",\"worldObjectId\":\"public-wall\",\"missing\":{}}],\"nearest\":\"policyRegion\",\"originInside\":\"unknown\"}",
+      "error": 6
+    }
+  ]
+}

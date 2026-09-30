@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../../../../protocol/fixtures/spatial-r1.json" Link="spatial-r1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../../protocol/fixtures/observe-v1.json" Link="observe-v1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../../protocol/fixtures/semantic-lint-v1.json" Link="semantic-lint-v1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../../protocol/fixtures/value-v1.json" Link="value-v1.json" CopyToOutputDirectory="PreserveNewest" />
