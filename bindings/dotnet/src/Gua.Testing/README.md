@@ -1,5 +1,41 @@
 # Gua.Testing
 
+## Locator の遅延解決と auto-wait
+
+`GuaAssertions.Query(context)` の locator は、操作時に最新の strict single match を
+解決する。`Get()` と既存 `GuaNodeExpectation` の即時解決・操作の意味は変わらない。
+
+```csharp
+var play = GuaAssertions.Query(context).ByRole("button", "Play");
+var completion = await play.ClickAsync(
+    timeout: TimeSpan.FromSeconds(5),
+    pollInterval: TimeSpan.FromMilliseconds(10),
+    cancellationToken: cancellationToken);
+// completion は同じ request ID に対する host の結果。画面遷移は別途待つ。
+await GuaAssertions.Query(context).ById("game-screen").ResolveAsync();
+```
+
+`ResolveAsync` は出現を待ち、`WaitForActionableAsync(GuaActionType.Click)` は
+可視・有効・指定 action の公開も待つ。どちらも enqueue せず、解決済みの
+`GuaNodeExpectation` を返す。その後も遅延解決したい場合は元の locator を使う。
+`ClickAsync` / `FocusAsync` / `SetValueAsync` / `SetCheckedAsync` / `SelectAsync` /
+`ScrollAsync` / `PressKeyAsync` は actionability を待ち、enqueue 直前に再解決し、
+同じ request ID の observed completion を返す。`Async` のない同名 API は同期
+wrapper であり、completion まで待つ。
+
+- 0 件・hidden・disabled・action 未公開は再検索する。複数一致は直ちに失敗する。
+- resolve/actionability → enqueue → completion が一つの timeout 予算を共有する。
+  既定値は `GuaActionCompletion.DefaultTimeout` / `DefaultPollInterval`。
+  timeout は非負、poll interval は正である必要があり、ゼロ予算では操作しない。
+- 同期 transport 呼び出し自体は中断できない。復帰後に残り予算・キャンセルを確認する。
+- enqueue の拒否や host failure を自動 retry しない。送信後の timeout/cancel は
+  副作用がなかったことを保証しない。完了後の UI/World 状態は明示的に待つ。
+- action の失敗は `GuaActionException.Kind` と `RequestId` で識別できる。
+  送信前は request ID が 0。診断には selector、phase、最終状態と frame/revision を
+  含め、selector の name/text/value および action payload は平文で出力しない。
+- local、WebSocket、Godot、Unity は同じ `IGuaContext` helper を使用する。
+  strict query を提供しない旧 context に対して、先頭一致への fallback は行わない。
+
 ## Virtual clock
 
 Contexts implementing `IGuaClockContext` can use

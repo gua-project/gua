@@ -48,72 +48,116 @@ public static class GuaActionCompletion
         TimeSpan? pollInterval = null) =>
         EnqueueAndWaitAsync(context, request, timeout, pollInterval).GetAwaiter().GetResult();
 
-    public static async Task<GuaActionEvent> EnqueueAndWaitAsync(
+    public static Task<GuaActionEvent> EnqueueAndWaitAsync(
         IGuaContext context,
         GuaActionRequest request,
         TimeSpan? timeout = null,
         TimeSpan? pollInterval = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        EnqueueWithBudgetAsync(context, request, timeout ?? DefaultTimeout, pollInterval ?? DefaultPollInterval,
+            null, null, null, cancellationToken);
+
+    internal static async Task<GuaActionEvent> EnqueueWithBudgetAsync(
+        IGuaContext context, GuaActionRequest request, TimeSpan timeout, TimeSpan pollInterval,
+        Stopwatch? budget, string? selector, string? lastState, CancellationToken cancellationToken)
     {
         Guard.NotNull(context, nameof(context));
-        var limit = timeout ?? DefaultTimeout;
-        var interval = pollInterval ?? DefaultPollInterval;
+        var limit = timeout;
+        var interval = pollInterval;
         if (limit < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
         if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(pollInterval));
 
+        var phase = "enqueue";
+        GuaActionException Failure(GuaActionFailureKind kind, ulong id, GuaActionError actionError, string message, Exception? inner = null) =>
+            Create(context, kind, id, request.Action, request.NodeId, actionError,
+                selector is null ? message : $"{message} selector={selector}, phase={phase}, last state: {lastState}.", inner, snapshotMetadata: selector is null ? null : "");
+        if (cancellationToken.IsCancellationRequested)
+            throw Failure(GuaActionFailureKind.Cancelled, 0, GuaActionError.None, "Gua action cancelled before enqueue.");
+        if (budget is not null && budget.Elapsed >= limit)
+            throw Failure(GuaActionFailureKind.TimedOut, 0, GuaActionError.None, "Gua action timed out before enqueue.");
         var trace = GuaTraceAction.Begin(context, request);
+        // Trace recording can block; recheck at the actual send boundary.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            trace?.End(GuaTraceOutcome.Interrupted, "cancelled-before-enqueue");
+            throw Failure(GuaActionFailureKind.Cancelled, 0, GuaActionError.None, "Gua action cancelled before enqueue.");
+        }
+        if (budget is not null && budget.Elapsed >= limit)
+        {
+            trace?.End(GuaTraceOutcome.Failed, "timeout-before-enqueue");
+            throw Failure(GuaActionFailureKind.TimedOut, 0, GuaActionError.None, "Gua action timed out before enqueue.");
+        }
         GuaActionError error;
         ulong requestId;
         try { error = context.EnqueueAction(request, out requestId); }
         catch { trace?.End(GuaTraceOutcome.Unknown, "send-exception"); throw; }
         trace?.Accepted(requestId, error);
+        if (budget is not null && cancellationToken.IsCancellationRequested)
+        {
+            trace?.End(GuaTraceOutcome.Interrupted, error == GuaActionError.None ? "cancelled-side-effects-unknown" : "cancelled-after-rejection");
+            throw Failure(GuaActionFailureKind.Cancelled, requestId, error, "Gua action cancelled during enqueue.");
+        }
+        if (budget is not null && budget.Elapsed >= limit)
+        {
+            trace?.End(GuaTraceOutcome.Unknown, error == GuaActionError.None ? "timeout-side-effects-unknown" : "timeout-after-rejection");
+            throw Failure(GuaActionFailureKind.TimedOut, requestId, error, "Gua action timed out during enqueue.");
+        }
         if (error != GuaActionError.None)
         {
             trace?.End(GuaTraceOutcome.Failed, "rejected");
-            throw Create(context, GuaActionFailureKind.Rejected, requestId, request.Action, request.NodeId, error,
+            throw Failure(GuaActionFailureKind.Rejected, requestId, error,
                 $"Gua action was rejected: requestId={requestId}, action={request.Action}, nodeId='{request.NodeId ?? "<focused>"}', error={error}.");
         }
 
-        var stopwatch = Stopwatch.StartNew();
+        var stopwatch = budget ?? Stopwatch.StartNew();
+        phase = "completion";
         try
         {
             do
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (budget is not null && stopwatch.Elapsed >= limit) break;
                 if (context.TryPollActionEvent(requestId, out var result))
                 {
                     trace?.Completed(result);
+                    if (budget is not null)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (stopwatch.Elapsed >= limit) break;
+                    }
                     trace?.End(result.Succeeded ? GuaTraceOutcome.Passed : GuaTraceOutcome.Failed, "host-result");
                     if (!result.Succeeded)
                     {
-                        throw Create(context, GuaActionFailureKind.Failed, requestId, request.Action, request.NodeId, result.Error,
+                        throw Failure(GuaActionFailureKind.Failed, requestId, result.Error,
                             $"Gua action failed: requestId={requestId}, action={request.Action}, nodeId='{request.NodeId ?? "<focused>"}', error={result.Error}.");
                     }
                     return result;
                 }
                 if (stopwatch.Elapsed >= limit) break;
-                await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
+                var remaining = limit - stopwatch.Elapsed;
+                if (remaining <= TimeSpan.Zero) break;
+                await Task.Delay(remaining < interval ? remaining : interval, cancellationToken).ConfigureAwait(false);
             }
             while (true);
         }
         catch (OperationCanceledException cancellationError) when (cancellationToken.IsCancellationRequested)
         {
             trace?.End(GuaTraceOutcome.Interrupted, "cancelled-side-effects-unknown");
-            throw Create(context, GuaActionFailureKind.Cancelled, requestId, request.Action, request.NodeId, GuaActionError.None,
+            throw Failure(GuaActionFailureKind.Cancelled, requestId, GuaActionError.None,
                 $"Gua action wait was cancelled: requestId={requestId}, action={request.Action}, nodeId='{request.NodeId ?? "<focused>"}'.", cancellationError);
         }
         catch { trace?.End(GuaTraceOutcome.Unknown, "receive-exception"); throw; }
 
         trace?.End(GuaTraceOutcome.Unknown, "timeout-side-effects-unknown");
-        throw Create(context, GuaActionFailureKind.TimedOut, requestId, request.Action, request.NodeId, GuaActionError.None,
+        throw Failure(GuaActionFailureKind.TimedOut, requestId, GuaActionError.None,
             $"Timed out after {limit:g} waiting for Gua action: requestId={requestId}, action={request.Action}, nodeId='{request.NodeId ?? "<focused>"}'.");
     }
 
-    private static GuaActionException Create(
+    internal static GuaActionException Create(
         IGuaContext context, GuaActionFailureKind kind, ulong requestId, GuaActionType action,
-        string? nodeId, GuaActionError error, string message, Exception? inner = null)
+        string? nodeId, GuaActionError error, string message, Exception? inner = null, string? snapshotMetadata = null)
     {
-        var suffix = GuaAssertions.DescribeSnapshot(context);
+        var suffix = snapshotMetadata ?? GuaAssertions.DescribeSnapshot(context);
         var failure = new GuaActionException(kind, requestId, action, nodeId, error, $"{message} {suffix}", inner);
         var session = GuaAssertions.Options.DiagnosticsSession;
         if (session is not null)
