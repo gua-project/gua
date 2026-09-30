@@ -152,7 +152,7 @@ public sealed class LocatorAutoWaitTests
     [TestCase(true)]
     public async Task TraceContentionCannotEnqueueAfterCancellationOrDeadline(bool cancel)
     {
-        using var trace = new GuaTraceSession(new() { OutputDirectory = Path.Combine(Path.GetTempPath(), "gua-107-trace-tests"), SavePolicy = GuaTraceSavePolicy.OnFailure });
+        using var trace = new GuaTraceSession(new() { OutputDirectory = Path.Combine(TestContext.CurrentContext.WorkDirectory, "gua-107-trace-tests"), SavePolicy = GuaTraceSavePolicy.OnFailure });
         using var cancellation = new CancellationTokenSource();
         using var snapshotReady = new ManualResetEventSlim();
         using var continueToSend = new ManualResetEventSlim();
