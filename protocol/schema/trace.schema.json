@@ -15,7 +15,7 @@
         "continuity": { "const": "continuous" },
         "change": { "enum": ["added", "changed", "removed", "unavailable", "recovered"] },
         "host": { "type": "object", "required": ["sourceId", "sessionEpoch", "revision"] },
-        "catalogs": { "type": "object" },
+        "catalogs": { "$ref": "https://gua.dev/schema/observe-transport-v1.schema.json#/properties/catalogs/items" },
         "received": {
           "type": "object", "required": ["schemaVersion", "sourceId", "sessionEpoch", "profile", "sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision", "ownerId", "registrationId", "source", "runtimeId", "name", "kind", "boundary"],
           "properties": {
@@ -61,7 +61,14 @@
             { "if": { "properties": { "kind": { "const": "recovered" } } }, "then": { "required": ["beforeError", "after"] } }
           ]
         }
-      }
+      },
+      "allOf": [
+        { "if": { "properties": { "change": { "const": "added" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "added" } } } } } },
+        { "if": { "properties": { "change": { "const": "changed" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "changed" } } } } } },
+        { "if": { "properties": { "change": { "const": "removed" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "removed" } } } } } },
+        { "if": { "properties": { "change": { "const": "unavailable" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "unavailable" } } } } } },
+        { "if": { "properties": { "change": { "const": "recovered" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "recovered" } } } } } }
+      ]
     },
     "request": {
       "type": "object", "required": ["sourceId", "sessionEpoch", "requestId"],

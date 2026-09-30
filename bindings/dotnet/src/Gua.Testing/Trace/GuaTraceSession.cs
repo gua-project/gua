@@ -190,6 +190,8 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
         lock (_gate)
         {
             if (_closed || _stopped || !_byId.TryGetValue(stepId, out var step)) return "";
+            if (availability is "partial" or "gap" or "stale" or "failed" or "outsideRetention" && _issues.Count < 64)
+                _issues.Add("observation-" + availability);
             var observationId = Guid.NewGuid().ToString("N");
             var blobs = new Dictionary<string, byte[]>();
             string? blob = null;

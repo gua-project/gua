@@ -93,6 +93,8 @@ hostの認可は既存経路の責務であり、Traceのprofileで昇格しな�
   以降のPollも確認済みの欠損理由を再購読まで維持し、stale/failedをgapへ読み替えない。
   取得を再試行して成功した空履歴に読み替えない。保存上限も`observe-storage-gap`で示す。
   成功した主結果でも、これらの品質issueがあればOnFailureで破棄しない。
+  汎用`Observe`でもpartial/gap/stale/failed/outsideRetentionを品質issueへ記録し、
+  正常不在のabsentとは分けて、成功した主結果のTraceを保持する。
 - `Snapshot(stepId, reason)` は最新公開値の新しい読取時点。cursorを進めず、連続性はunverified。
   古い購読epochとは別epochのSnapshotはstale。`Resubscribe`は新しいintervalIdと
   Snapshot+cursorから始めるが、過去の欠損は残る。background pollingや自動再購読は行わない。
@@ -107,8 +109,10 @@ getter例外本文は保存しない。検索partial/truncatedは汎用`Observe(
 
 呼出側はbefore/input-complete/wait-end/main-result/after-cleanupの各実取得時点で
 PollとSnapshotを呼ぶ。主結果決定時とcleanup後は別Observation Recordであり上書きしない。
-schemaVersion 1の追加event dataとして旧readerも汎用JSON表示できる。既存Observe APIの
-引数・binary signatureは保持する。Reader/Viewerはgap/stale/failed/partial/outsideRetentionを
+schemaVersion 1の追加event dataとして旧readerも汎用JSON表示できる。
+`observation.change`の`change`と`received.kind`は一致が必須であり、`catalogs`は
+Observe transportと共通のbefore/after/value別single-enum catalog契約で検証する。
+既存Observe APIの引数・binary signatureは保持する。Reader/Viewerはgap/stale/failed/partial/outsideRetentionを
 記録品質として示し、Viewerの前後比較は同一channel/source/epochの読取に限る。
 
 ## 保存と上限（OPEN-10）
