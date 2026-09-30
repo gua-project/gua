@@ -750,12 +750,27 @@ bool GuaContext::publish_game_input_actions(const String& input_context, const A
             category.is_empty() ? nullptr : category_utf8.get_data(), alias_pointers.empty() ? nullptr : alias_pointers.data(),
             static_cast<uint32_t>(alias_pointers.size()), tag_pointers.empty() ? nullptr : tag_pointers.data(),
             static_cast<uint32_t>(tag_pointers.size()), exposure == "private" ? GUA_AGENT_EXPOSURE_PRIVATE : GUA_AGENT_EXPOSURE_AUTO };
-        if ((exposure != "auto" && exposure != "private") || gua_runtime_register_game_input_action_v2(runtime_, &descriptor) == 0) {
+        const String schema = source.has("value_schema") ? JSON::stringify(source["value_schema"]) : String();
+        const String examples = source.has("examples") ? JSON::stringify(source["examples"]) : String();
+        const CharString schema_utf8 = schema.utf8(), examples_utf8 = examples.utf8();
+        const gua_game_input_action_descriptor_v3_t extended { sizeof(extended), descriptor,
+            source.has("value_schema") ? schema_utf8.get_data() : nullptr, source.has("examples") ? examples_utf8.get_data() : nullptr };
+        const int registered = source.has("value_schema") || source.has("examples")
+            ? gua_runtime_register_game_input_action_v3(runtime_, &extended) : gua_runtime_register_game_input_action_v2(runtime_, &descriptor);
+        if ((exposure != "auto" && exposure != "private") || registered == 0) {
             gua_runtime_abort_game_input_frame(runtime_);
             return false;
         }
     }
     return gua_runtime_end_game_input_frame(runtime_) != 0;
+}
+
+String GuaContext::get_game_input_actions_json_v2(int observation_profile) const
+{
+    const auto copy = [&](char* output, int size) { return gua_runtime_copy_game_input_actions_json_v2(runtime_, observation_profile, output, size); };
+    const int required = copy(nullptr, 0); if (required <= 0) return String("{}");
+    std::vector<char> output(static_cast<std::size_t>(required)); copy(output.data(), required);
+    return String::utf8(output.data());
 }
 
 String GuaContext::get_game_input_actions_json() const
@@ -769,6 +784,10 @@ String GuaContext::get_player_game_input_actions_json() const
 }
 
 String GuaContext::find_game_input_actions_json(const Dictionary& selector, int observation_profile) const
+{ return find_game_input_actions_json_impl(selector, observation_profile, false); }
+String GuaContext::find_game_input_actions_json_v2(const Dictionary& selector, int observation_profile) const
+{ return find_game_input_actions_json_impl(selector, observation_profile, true); }
+String GuaContext::find_game_input_actions_json_impl(const Dictionary& selector, int observation_profile, bool metadata) const
 {
     const auto invalid_selector = []() {
         return String("{\"code\":\"invalid_request\",\"message\":\"Invalid game input selector.\"}");
@@ -810,7 +829,8 @@ String GuaContext::find_game_input_actions_json(const Dictionary& selector, int 
         query.is_empty() ? nullptr : query_utf8.get_data(), native_type, active, context.is_empty() ? nullptr : context_utf8.get_data(),
         category.is_empty() ? nullptr : category_utf8.get_data(), tag_pointers.empty() ? nullptr : tag_pointers.data(),
         static_cast<uint32_t>(tag_pointers.size()), static_cast<uint32_t>(limit) };
-    const auto copy = [&](char* output, int size) { return gua_runtime_query_game_input_actions_json(runtime_, &native, observation_profile, output, size); };
+    const auto copy = [&](char* output, int size) { return metadata ? gua_runtime_query_game_input_actions_json_v2(runtime_, &native, observation_profile, output, size)
+        : gua_runtime_query_game_input_actions_json(runtime_, &native, observation_profile, output, size); };
     const int required = copy(nullptr, 0); if (required <= 0) return invalid_selector();
     std::vector<char> output(static_cast<std::size_t>(required)); copy(output.data(), required);
     return String::utf8(output.data());
@@ -1091,6 +1111,8 @@ void GuaContext::_bind_methods()
     ClassDB::bind_method(D_METHOD("consume_clock_steps"), &GuaContext::consume_clock_steps);
     ClassDB::bind_method(D_METHOD("enable_virtual_clock_adapter"), &GuaContext::enable_virtual_clock_adapter);
     ClassDB::bind_method(D_METHOD("publish_game_input_actions", "input_context", "actions"), &GuaContext::publish_game_input_actions);
+    ClassDB::bind_method(D_METHOD("get_game_input_actions_json_v2", "observation_profile"), &GuaContext::get_game_input_actions_json_v2, DEFVAL(0));
+    ClassDB::bind_method(D_METHOD("find_game_input_actions_json_v2", "selector", "observation_profile"), &GuaContext::find_game_input_actions_json_v2, DEFVAL(0));
     ClassDB::bind_method(D_METHOD("get_game_input_actions_json"), &GuaContext::get_game_input_actions_json);
     ClassDB::bind_method(D_METHOD("get_player_game_input_actions_json"), &GuaContext::get_player_game_input_actions_json);
     ClassDB::bind_method(D_METHOD("find_game_input_actions_json", "selector", "observation_profile"), &GuaContext::find_game_input_actions_json, DEFVAL(0));

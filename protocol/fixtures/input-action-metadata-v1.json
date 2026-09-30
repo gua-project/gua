@@ -1,0 +1,801 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "vector axes",
+      "valid": true,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "axis",
+      "valid": true,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "axis1d",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "number",
+          "minimum": -0.5,
+          "maximum": 0.5
+        },
+        "examples": [
+          0.25
+        ]
+      }
+    },
+    {
+      "name": "text Unicode code point",
+      "valid": true,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "text",
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2
+        },
+        "examples": [
+          "😀"
+        ]
+      }
+    },
+    {
+      "name": "held button",
+      "valid": true,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "button",
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "boolean"
+        },
+        "examples": [
+          true,
+          false
+        ]
+      }
+    },
+    {
+      "name": "press-only button",
+      "valid": true,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "button",
+        "holdable": false,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "boolean"
+        },
+        "examples": []
+      }
+    },
+    {
+      "name": "metadata absent",
+      "valid": true,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false
+      }
+    },
+    {
+      "name": "wrong type",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "number"
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "external reference",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "$ref": "https://example.com"
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown keyword",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "default": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "range widening",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": -2
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "reversed bounds",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 0
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate required",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "x"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "null examples",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": null
+      }
+    },
+    {
+      "name": "out of range example",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": 2,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "extra coordinate",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "nested coordinate",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": {
+              "x": 0
+            },
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "wrong coordinate type",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": "0",
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "too many examples",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "examples": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid Unicode description",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "vector2",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal movement; positive moves right"
+            },
+            "y": {
+              "type": "number",
+              "description": "Forward movement; positive moves forward"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "description": "\ud800"
+        },
+        "examples": [
+          {
+            "x": 0.5,
+            "y": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "press-only cannot Set examples",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "button",
+        "holdable": false,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "boolean"
+        },
+        "examples": [
+          true
+        ]
+      }
+    },
+    {
+      "name": "text too long",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "text",
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "examples": [
+          "abc"
+        ]
+      }
+    },
+    {
+      "name": "numeric text range",
+      "valid": false,
+      "action": {
+        "id": "move",
+        "description": "Move the player",
+        "valueType": "text",
+        "range": {
+          "minimum": -1,
+          "maximum": 1
+        },
+        "holdable": true,
+        "active": true,
+        "bindings": [],
+        "risk": "safe",
+        "requiresConfirmation": false,
+        "valueSchema": {
+          "type": "string"
+        },
+        "examples": [
+          "abc"
+        ]
+      }
+    }
+  ]
+}

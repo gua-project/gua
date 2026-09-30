@@ -926,7 +926,7 @@ Command parse_command(std::string_view json)
         std::string_view("actionId"), std::string_view("query"), std::string_view("valueType"),
         std::string_view("active"), std::string_view("context"), std::string_view("category"),
         std::string_view("tags"), std::string_view("limit") };
-    command.game_input_selector_valid = command.type != "find_game_input_actions" ||
+    command.game_input_selector_valid = (command.type != "find_game_input_actions" && command.type != "find_game_input_actions_v2") ||
         (json_has_only_top_level_fields(json, game_input_query_fields) && game_input_tags.has_value() &&
             valid_optional_non_empty_string(json, "actionId") && valid_optional_non_empty_string(json, "query") &&
             valid_optional_non_empty_string(json, "context") && valid_optional_non_empty_string(json, "category") &&
@@ -1428,6 +1428,19 @@ private:
                 if (!handlers_.query_game_input_actions_json || !handlers_.game_input_supported || !handlers_.game_input_supported(1U))
                     return error_response(command.id, "unsupported");
                 const auto result = handlers_.query_game_input_actions_json(command.game_input_selector);
+                return result.empty() ? error_response(command.id, "invalid game input selector") : ok_response(command.id, result);
+            }
+            if (command.type == "get_game_input_actions_v2") {
+                return handlers_.get_game_input_actions_json_v2 && handlers_.game_input_supported &&
+                        handlers_.game_input_supported(1U)
+                    ? ok_response(command.id, handlers_.get_game_input_actions_json_v2())
+                    : error_response(command.id, "unsupported");
+            }
+            if (command.type == "find_game_input_actions_v2") {
+                if (!command.game_input_selector_valid) return error_response(command.id, "invalid game input selector");
+                if (!handlers_.query_game_input_actions_json_v2 || !handlers_.game_input_supported || !handlers_.game_input_supported(1U))
+                    return error_response(command.id, "unsupported");
+                const auto result = handlers_.query_game_input_actions_json_v2(command.game_input_selector);
                 return result.empty() ? error_response(command.id, "invalid game input selector") : ok_response(command.id, result);
             }
             if (command.type == "get_game_input_state") {

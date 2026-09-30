@@ -71,8 +71,8 @@ export interface GuaScreenshot {
 export interface GuaClockStatus { schemaVersion: 1; installed: boolean; state: "running" | "paused"; nowMs: number; defaultStepMs: number; pendingMs: number; generation: number; completedOperationSequence: number; operationSequence?: number; completionSessionEpoch?: number; completionAfterFrameSequence?: number; }
 export interface GuaContextStatus { sessionEpoch: number; frameSequence: number; revision: number; nodeCount: number; pendingRequestCount: number; inFlightRequestCount: number; unconsumedEventCount: number; logCount: number; hasScreenshot: boolean; firstPendingAction: number; firstPendingNodeId: string; firstEventAction: number; firstEventNodeId: string; }
 export type GuaGameInputValueType = "button" | "axis1d" | "vector2" | "text";
-export interface GuaGameInputAction { id: string; description?: string; valueType: GuaGameInputValueType; range?: { minimum: number; maximum: number }; holdable: boolean; active: boolean; bindings: unknown[]; risk: string; requiresConfirmation: boolean; category?: string; aliases?: string[]; tags?: string[]; agentExposure?: "auto" | "private"; }
-export interface GuaGameInputActions { schemaVersion: 1; sessionEpoch: number; revision: number; context: string; actions: GuaGameInputAction[]; }
+export interface GuaGameInputAction { id: string; description?: string; valueType: GuaGameInputValueType; range?: { minimum: number; maximum: number }; holdable: boolean; active: boolean; bindings: unknown[]; risk: string; requiresConfirmation: boolean; category?: string; aliases?: string[]; tags?: string[]; agentExposure?: "auto" | "private"; valueSchema?: Record<string, unknown>; examples?: unknown[]; }
+export interface GuaGameInputActions { schemaVersion: 1 | 2; sessionEpoch: number; revision: number; context: string; actions: GuaGameInputAction[]; }
 export interface GuaGameInputActionSelector { id?: string; query?: string; valueType?: GuaGameInputValueType; active?: boolean; context?: string; category?: string; tags?: string[]; limit?: number; }
 export interface GuaGameInputActionSearchResult extends GuaGameInputActions { count: number; truncated: boolean; }
 export interface GuaHeldGameInput { kind: number; target: string; deviceIndex: number; value: unknown; remainingLeaseMs: number; }
@@ -126,6 +126,7 @@ export interface GuaInspectorClient {
   pauseClock(): Promise<GuaClockStatus>;
   runClockFor(durationMs: number, stepMs?: number): Promise<GuaClockStatus>;
   resumeClock(): Promise<GuaClockStatus>;
+  findGameInputActionsV2?(selector: GuaGameInputActionSelector): Promise<GuaGameInputActionSearchResult>;
   getGameInputActions(): Promise<GuaGameInputActions>;
   findGameInputActions(selector: GuaGameInputActionSelector): Promise<GuaGameInputActionSearchResult>;
   getGameInputState(): Promise<GuaGameInputState>;
@@ -152,7 +153,7 @@ export type GuaInspectorCommand =
   | { id: number; type: "press_key"; nodeId?: string; key: string; modifiers?: number }
   | ({ id: number } & GameInputCommandInput)
   | { id: number; type: "get_game_input_actions" | "get_game_input_state" }
-  | { id: number; type: "find_game_input_actions"; actionId?: string; query?: string; valueType?: 1 | 2 | 3 | 4;
+  | { id: number; type: "find_game_input_actions" | "find_game_input_actions_v2"; actionId?: string; query?: string; valueType?: 1 | 2 | 3 | 4;
       active?: 0 | 1 | 2; context?: string; category?: string; tags?: string[]; limit?: number }
   | { id: number; type: "poll_game_input"; requestId: number };
 
@@ -179,7 +180,7 @@ type GuaInspectorCommandInput =
   | { type: "press_key"; nodeId?: string; key: string; modifiers?: number }
   | GameInputCommandInput
   | { type: "get_game_input_actions" | "get_game_input_state" }
-  | ({ type: "find_game_input_actions" } & GuaGameInputActionSelector)
+  | ({ type: "find_game_input_actions" | "find_game_input_actions_v2" } & GuaGameInputActionSelector)
   | { type: "poll_game_input"; requestId: number };
 
 export type GuaInspectorResponse =
@@ -522,6 +523,15 @@ export function createCoalescedAsyncRunner(task: () => Promise<void>): () => Pro
   };
 }
 
+export async function findGameInputActionsMetadataCompatible(client: GuaInspectorClient,
+  selector: GuaGameInputActionSelector): Promise<GuaGameInputActionSearchResult> {
+  if (client.findGameInputActionsV2) {
+    try { return await client.findGameInputActionsV2(selector); }
+    catch (error) { if (!/unsupported|unknown command/i.test((error as Error).message)) throw error; }
+  }
+  return findGameInputActionsCompatible(client, selector);
+}
+
 export async function findGameInputActionsCompatible(
   client: GuaInspectorClient,
   selector: GuaGameInputActionSelector,
@@ -624,6 +634,14 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
   }
   async resumeClock(): Promise<GuaClockStatus> { return this.request({ type: "clock_resume" }); }
   async getGameInputActions(): Promise<GuaGameInputActions> { return this.request({ type: "get_game_input_actions" }); }
+  async findGameInputActionsV2(selector: GuaGameInputActionSelector): Promise<GuaGameInputActionSearchResult> {
+    const version = await this.request<{ capabilities?: string[] }>({ type: "get_version" } as GuaInspectorCommandInput);
+    if (!version.capabilities?.includes("semantic_game_input_metadata_v1")) throw new Error("unsupported game input metadata");
+    const valueType = selector.valueType === undefined ? undefined : ({ button: 1, axis1d: 2, vector2: 3, text: 4 } as const)[selector.valueType];
+    const { id, ...rest } = selector;
+    return this.request({ type: "find_game_input_actions_v2", ...rest, actionId: id, valueType,
+      active: selector.active === undefined ? undefined : selector.active ? 2 : 1 } as unknown as GuaInspectorCommandInput);
+  }
   async findGameInputActions(selector: GuaGameInputActionSelector): Promise<GuaGameInputActionSearchResult> {
     const valueType = selector.valueType === undefined ? undefined : ({ button: 1, axis1d: 2, vector2: 3, text: 4 } as const)[selector.valueType];
     const { id, ...rest } = selector;

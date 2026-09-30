@@ -96,6 +96,14 @@ typedef struct gua_game_input_action_descriptor_v2_t {
     int agent_exposure;
 } gua_game_input_action_descriptor_v2_t;
 
+// Optional bounded JSON metadata. Null pointers mean absent; v1/v2 stay unchanged.
+typedef struct gua_game_input_action_descriptor_v3_t {
+    uint32_t struct_size;
+    gua_game_input_action_descriptor_v2_t base;
+    const char* value_schema_json;
+    const char* examples_json;
+} gua_game_input_action_descriptor_v3_t;
+
 typedef struct gua_game_input_action_selector_v1_t {
     uint32_t struct_size;
     const char* id;
@@ -683,9 +691,13 @@ int gua_reset_context(gua_context_t* ctx, const gua_reset_options_t* options, gu
 /* Game input action-map publication is atomic and independent from the UI tree. */
 int gua_begin_game_input_frame(gua_context_t* ctx, const char* input_context);
 int gua_register_game_input_action_v1(gua_context_t* ctx, const gua_game_input_action_descriptor_v1_t* descriptor);
+int gua_register_game_input_action_v3(gua_context_t* ctx, const gua_game_input_action_descriptor_v3_t* descriptor);
 int gua_register_game_input_action_v2(gua_context_t* ctx, const gua_game_input_action_descriptor_v2_t* descriptor);
 int gua_end_game_input_frame(gua_context_t* ctx);
 int gua_abort_game_input_frame(gua_context_t* ctx);
+int gua_copy_game_input_actions_json_v2(gua_context_t* ctx, int observation_profile, char* out_json, int out_json_size);
+int gua_query_game_input_actions_json_v2(gua_context_t* ctx, const gua_game_input_action_selector_v1_t* selector,
+    int observation_profile, char* out_json, int out_json_size);
 int gua_copy_game_input_actions_json(gua_context_t* ctx, char* out_json, int out_json_size);
 int gua_copy_game_input_actions_json_for_profile(gua_context_t* ctx, int observation_profile, char* out_json, int out_json_size);
 int gua_query_game_input_actions_json(gua_context_t* ctx, const gua_game_input_action_selector_v1_t* selector,

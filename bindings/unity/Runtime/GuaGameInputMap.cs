@@ -26,10 +26,13 @@ public sealed class GuaGameInputAction
     public string[] Aliases = Array.Empty<string>();
     public string[] Tags = Array.Empty<string>();
     public GuaAgentExposure AgentExposure;
+    [TextArea] public string ValueSchemaJson = "";
+    [TextArea] public string ExamplesJson = "";
 
     internal GuaGameInputActionDescriptor Descriptor() => new(
         Id, Description, ValueType, HasRange ? Minimum : null, HasRange ? Maximum : null,
-        Holdable, Active, Bindings, Risk, RequiresConfirmation, Category, Aliases, Tags, AgentExposure);
+        Holdable, Active, Bindings, Risk, RequiresConfirmation, Category, Aliases, Tags, AgentExposure) { ValueSchemaJson = string.IsNullOrEmpty(ValueSchemaJson) ? null : ValueSchemaJson,
+            ExamplesJson = string.IsNullOrEmpty(ExamplesJson) ? null : ExamplesJson };
 }
 
 public sealed class GuaGameInputMap : MonoBehaviour

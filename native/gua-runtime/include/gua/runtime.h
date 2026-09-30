@@ -116,6 +116,9 @@ void gua_runtime_set_player_game_input_capabilities(gua_runtime_t* runtime, uint
 uint32_t gua_runtime_get_game_input_capabilities(gua_runtime_t* runtime, int observation_profile);
 int gua_runtime_begin_game_input_frame(gua_runtime_t* runtime, const char* input_context);
 int gua_runtime_register_game_input_action_v1(gua_runtime_t* runtime, const gua_game_input_action_descriptor_v1_t* descriptor);
+int gua_runtime_register_game_input_action_v3(gua_runtime_t* runtime, const gua_game_input_action_descriptor_v3_t* descriptor);
+int gua_runtime_copy_game_input_actions_json_v2(gua_runtime_t* runtime, int observation_profile, char* output, int size);
+int gua_runtime_query_game_input_actions_json_v2(gua_runtime_t* runtime, const gua_game_input_action_selector_v1_t* selector, int observation_profile, char* output, int size);
 int gua_runtime_register_game_input_action_v2(gua_runtime_t* runtime, const gua_game_input_action_descriptor_v2_t* descriptor);
 int gua_runtime_end_game_input_frame(gua_runtime_t* runtime);
 int gua_runtime_abort_game_input_frame(gua_runtime_t* runtime);

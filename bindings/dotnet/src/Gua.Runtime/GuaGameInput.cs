@@ -22,7 +22,11 @@ public sealed record GuaGameInputActionDescriptor(
     double? Minimum = null, double? Maximum = null, bool Holdable = false, bool Active = true,
     IReadOnlyList<string>? Bindings = null, string Risk = "safe", bool RequiresConfirmation = false,
     string? Category = null, IReadOnlyList<string>? Aliases = null, IReadOnlyList<string>? Tags = null,
-    GuaAgentExposure AgentExposure = GuaAgentExposure.Auto);
+    GuaAgentExposure AgentExposure = GuaAgentExposure.Auto)
+{
+    public string? ValueSchemaJson { get; init; }
+    public string? ExamplesJson { get; init; }
+}
 
 public sealed record GuaGameInputActionSelector(
     string? Id = null, string? Query = null, GuaGameInputValueType? ValueType = null, bool? Active = null,
@@ -41,7 +45,11 @@ public sealed record GuaGameInputAction(
     [property: JsonPropertyName("category")] string? Category = null,
     [property: JsonPropertyName("aliases")] IReadOnlyList<string>? Aliases = null,
     [property: JsonPropertyName("tags")] IReadOnlyList<string>? Tags = null,
-    [property: JsonPropertyName("agentExposure")] string AgentExposure = "auto");
+    [property: JsonPropertyName("agentExposure")] string AgentExposure = "auto")
+{
+    [JsonPropertyName("valueSchema")] public JsonElement? ValueSchema { get; init; }
+    [JsonPropertyName("examples")] public IReadOnlyList<JsonElement>? Examples { get; init; }
+}
 
 public sealed record GuaGameInputActionRange(
     [property: JsonPropertyName("minimum")] double Minimum,
@@ -122,11 +130,11 @@ public sealed partial class GuaRuntime
             {
                 if (action.Minimum.HasValue != action.Maximum.HasValue)
                     throw new ArgumentException($"Action '{action.Id}' must specify both range bounds.");
-                if ((action.Category?.Contains('\0') ?? false) ||
+                if ((action.ValueSchemaJson?.Contains('\0') ?? false) || (action.ExamplesJson?.Contains('\0') ?? false) || (action.Category?.Contains('\0') ?? false) ||
                     (action.Aliases?.Any(value => value.Contains('\0')) ?? false) ||
                     (action.Tags?.Any(value => value.Contains('\0')) ?? false))
                     throw new ArgumentException($"Action '{action.Id}' category, aliases, and tags must not contain embedded NUL characters.", nameof(actions));
-                var strings = new[] { action.Id, action.Description, JsonSerializer.Serialize(action.Bindings ?? []), action.Risk, action.Category };
+                var strings = new[] { action.Id, action.Description, JsonSerializer.Serialize(action.Bindings ?? []), action.Risk, action.Category, action.ValueSchemaJson, action.ExamplesJson };
                 var pointers = strings.Select(value => value is null ? 0 : (nint)Marshal.StringToCoTaskMemUTF8(value)).ToArray();
                 var aliases = AllocateStrings(action.Aliases ?? [], out var aliasArray);
                 var tags = AllocateStrings(action.Tags ?? [], out var tagArray);
@@ -142,7 +150,12 @@ public sealed partial class GuaRuntime
                     var native = new Native.GameInputActionV2 { StructSize = (uint)Marshal.SizeOf<Native.GameInputActionV2>(),
                         Base = baseAction, Category = pointers[4], Aliases = aliasArray, AliasCount = (uint)aliases.Length,
                         Tags = tagArray, TagCount = (uint)tags.Length, AgentExposure = (int)action.AgentExposure };
-                    if (Native.gua_runtime_register_game_input_action_v2(_handle, in native) == 0)
+                    var extended = new Native.GameInputActionV3 { StructSize = (uint)Marshal.SizeOf<Native.GameInputActionV3>(),
+                        Base = native, ValueSchemaJson = pointers[5], ExamplesJson = pointers[6] };
+                    var registered = action.ValueSchemaJson is null && action.ExamplesJson is null
+                        ? Native.gua_runtime_register_game_input_action_v2(_handle, in native)
+                        : Native.gua_runtime_register_game_input_action_v3(_handle, in extended);
+                    if (registered == 0)
                         throw new ArgumentException($"Invalid game input action '{action.Id}'.", nameof(actions));
                 }
                 finally {
@@ -239,6 +252,17 @@ public sealed partial class GuaRuntime
         return Native.gua_runtime_tick_game_input_leases(_handle, unscaledElapsed.TotalMilliseconds);
     }
 
+    public unsafe string GetGameInputActionsJsonV2(GuaObservationProfile observationProfile = GuaObservationProfile.Debug)
+    {
+        int Copy(byte* output, int size) => Native.gua_runtime_copy_game_input_actions_json_v2(_handle, (int)observationProfile, output, size);
+        return CopyGameInputJson(Copy);
+    }
+    public GuaGameInputActionSearchResult FindGameInputActionsV2(GuaGameInputActionSelector selector,
+        GuaObservationProfile observationProfile = GuaObservationProfile.Debug) =>
+        JsonSerializer.Deserialize<GuaGameInputActionSearchResult>(FindGameInputActionsJsonV2(selector, observationProfile))
+        ?? throw new InvalidOperationException("Native game input search JSON is invalid.");
+    public string FindGameInputActionsJsonV2(GuaGameInputActionSelector selector,
+        GuaObservationProfile observationProfile = GuaObservationProfile.Debug) => FindGameInputActionsJsonImpl(selector, observationProfile, true);
     public unsafe string GetGameInputActionsJson() => CopyGameInputJson(0, false);
     public unsafe string GetPlayerGameInputActionsJson()
     {
@@ -252,8 +276,9 @@ public sealed partial class GuaRuntime
         return JsonSerializer.Deserialize<GuaGameInputActionSearchResult>(json)
             ?? throw new InvalidOperationException("Native game input search JSON is invalid.");
     }
-    public unsafe string FindGameInputActionsJson(GuaGameInputActionSelector selector,
-        GuaObservationProfile observationProfile = GuaObservationProfile.Debug)
+    public string FindGameInputActionsJson(GuaGameInputActionSelector selector,
+        GuaObservationProfile observationProfile = GuaObservationProfile.Debug) => FindGameInputActionsJsonImpl(selector, observationProfile, false);
+    private unsafe string FindGameInputActionsJsonImpl(GuaGameInputActionSelector selector, GuaObservationProfile observationProfile, bool metadata)
     {
         ThrowIfDisposed();
         if (selector is null) throw new ArgumentNullException(nameof(selector));
@@ -269,7 +294,9 @@ public sealed partial class GuaRuntime
                 Id = Text(selector.Id), Query = Text(selector.Query), ValueType = selector.ValueType.HasValue ? (int)selector.ValueType.Value : 0,
                 Active = selector.Active.HasValue ? (selector.Active.Value ? 2 : 1) : 0, Context = Text(selector.Context),
                 Category = Text(selector.Category), Tags = tagArray, TagCount = (uint)tagPointers.Length, Limit = selector.Limit };
-            int Copy(byte* output, int size) => Native.gua_runtime_query_game_input_actions_json(_handle, in native, (int)observationProfile, output, size);
+            int Copy(byte* output, int size) => metadata
+                ? Native.gua_runtime_query_game_input_actions_json_v2(_handle, in native, (int)observationProfile, output, size)
+                : Native.gua_runtime_query_game_input_actions_json(_handle, in native, (int)observationProfile, output, size);
             return CopyGameInputJson(Copy);
         } finally {
             foreach (var pointer in allocations) Marshal.FreeCoTaskMem(pointer);

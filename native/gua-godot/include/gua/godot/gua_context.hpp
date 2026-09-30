@@ -79,6 +79,9 @@ public:
     Array consume_clock_steps();
     void enable_virtual_clock_adapter();
     bool publish_game_input_actions(const String& input_context, const Array& actions);
+    String get_game_input_actions_json_v2(int observation_profile = 0) const;
+    String find_game_input_actions_json_v2(const Dictionary& selector, int observation_profile = 0) const;
+    String find_game_input_actions_json_impl(const Dictionary& selector, int observation_profile, bool metadata) const;
     String get_game_input_actions_json() const;
     String get_player_game_input_actions_json() const;
     String find_game_input_actions_json(const Dictionary& selector, int observation_profile = 0) const;

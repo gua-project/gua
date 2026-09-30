@@ -20,6 +20,7 @@ import {
   createCoalescedAsyncRunner,
   createInspectorState,
   findGameInputActionsCompatible,
+  findGameInputActionsMetadataCompatible,
   formatBounds,
   getSelectedNode,
   hasCompleteBounds,
@@ -310,7 +311,7 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
         <GameInputPanel
           actions={gameInputActions}
           state={gameInputState}
-          onSearch={async (selector) => setGameInputActions(await findGameInputActionsCompatible(inspectorClient, selector))}
+          onSearch={async (selector, metadata) => setGameInputActions(await (metadata ? findGameInputActionsMetadataCompatible : findGameInputActionsCompatible)(inspectorClient, selector))}
           onInput={async (command) => {
             const currentCommand = await prepareManualGameInput(
               command,
@@ -356,7 +357,7 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
 
 function GameInputPanel({ actions, state, onSearch, onInput, onError }: {
   actions: GuaGameInputActions | null; state: GuaGameInputState | null;
-  onSearch(selector: GuaGameInputActionSelector): Promise<void>;
+  onSearch(selector: GuaGameInputActionSelector, metadata?: boolean): Promise<void>;
   onInput(command: GameInputCommandInput): Promise<void>; onError(message: string): void;
 }) {
   const [rawCode, setRawCode] = useState("Space");
@@ -365,6 +366,7 @@ function GameInputPanel({ actions, state, onSearch, onInput, onError }: {
   const [tags, setTags] = useState("");
   const [valueType, setValueType] = useState("");
   const [activeOnly, setActiveOnly] = useState(true);
+  const [metadata, setMetadata] = useState(false);
   const run = (command: GameInputCommandInput) => {
     void onInput(command).catch((caught) => onError((caught as Error).message));
   };
@@ -375,7 +377,7 @@ function GameInputPanel({ actions, state, onSearch, onInput, onError }: {
       void onSearch({ query: query || undefined, category: category || undefined,
         tags: tags ? tags.split(",").map((tag) => tag.trim()).filter(Boolean) : undefined,
         valueType: valueType ? valueType as GuaGameInputActionSelector["valueType"] : undefined,
-        active: activeOnly ? true : undefined, limit: 20 }).catch((caught) => onError((caught as Error).message));
+        active: activeOnly ? true : undefined, limit: 20 }, metadata).catch((caught) => onError((caught as Error).message));
     }}>
       <input aria-label="Search game actions" placeholder="Search actions" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
       <input aria-label="Game action category" placeholder="Category" value={category} onChange={(event) => setCategory(event.currentTarget.value)} />
@@ -385,10 +387,14 @@ function GameInputPanel({ actions, state, onSearch, onInput, onError }: {
         <option value="vector2">vector2</option><option value="text">text</option>
       </select>
       <label><input type="checkbox" checked={activeOnly} onChange={(event) => setActiveOnly(event.currentTarget.checked)} />Active</label>
+      <label><input type="checkbox" checked={metadata} onChange={(event) => setMetadata(event.currentTarget.checked)} />Include value schema and examples</label>
       <button type="submit">Find</button>
     </form>
     {actions?.actions.map((action) => <div className="gua-game-action" key={action.id}>
       <span><strong>{action.id}</strong><small>{action.valueType} · {action.active ? "active" : "inactive"} · {action.risk}</small></span>
+      <span>{action.description}</span>
+      {action.valueSchema ? <details><summary>Value schema</summary><pre>{JSON.stringify(action.valueSchema, null, 2)}</pre></details> : null}
+      {action.examples ? <details><summary>Example Set values</summary><pre>{JSON.stringify(action.examples, null, 2)}</pre></details> : null}
       {action.valueType === "button" ? <>
         <button type="button" disabled={!action.active} onClick={() => run({ type: "press_game_input_action", actionId: action.id })}>Press</button>
         {action.holdable ? <button type="button" disabled={!action.active} onClick={() => run({ type: "set_game_input_action", actionId: action.id, value: true })}>Hold</button> : null}
