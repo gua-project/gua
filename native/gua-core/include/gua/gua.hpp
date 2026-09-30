@@ -21,7 +21,7 @@ class Context;
 
 struct ContextLifetime {
     Context* context = nullptr;
-    std::list<std::function<bool(bool)>> frame_observers;
+    std::list<std::shared_ptr<std::function<bool(bool)>>> frame_observers;
 };
 
 struct Rect {
@@ -207,21 +207,11 @@ public:
     void sample_observations(bool ui) {
         auto lifetime = lifetime_;
         if (!lifetime) return;
-        auto observers = std::move(lifetime->frame_observers);
-        try {
-            while (!observers.empty()) {
-                auto current = observers.begin();
-                if ((*current)(ui))
-                    lifetime->frame_observers.splice(lifetime->frame_observers.end(), observers, current);
-                else
-                    observers.erase(current);
-            }
-        } catch (...) {
-            // Preserve the throwing and unvisited callbacks without allocation.
-            // Already processed callbacks and reentrant registrations stay intact.
-            lifetime->frame_observers.splice(lifetime->frame_observers.end(), observers);
-            throw;
-        }
+        // Keep the registry live during reentrant teardown. The copy retains
+        // callbacks with weak getter references; exceptions leave it intact.
+        auto observers = lifetime->frame_observers;
+        for (const auto& observer : observers)
+            if (!(*observer)(ui)) lifetime->frame_observers.remove(observer);
     }
     void end_world_frame() { auto lifetime = lifetime_; sample_observations(false); if (lifetime && lifetime->context == this && !gua_end_world_frame(context_)) throw std::runtime_error("World frame rejected"); }
 

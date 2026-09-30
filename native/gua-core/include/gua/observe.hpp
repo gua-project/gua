@@ -19,13 +19,18 @@ struct ObserveGetter {
     uint64_t id = 0;
     int source = 0;
     std::function<Value()> getter;
+    std::weak_ptr<std::function<bool(bool)>> observer;
+    void detach() {
+        if (auto c=context.lock()) if (auto callback=observer.lock()) c->frame_observers.remove(callback);
+        observer.reset();
+    }
     gua_context_t* handle() const {
         auto c=context.lock(); return c && c->context ? c->context->native_handle() : nullptr;
     }
     void sample(bool stage) {
         if (!id || !handle()) return;
         int alive=gua_observe_registration_alive(handle(),id);
-        if(alive==GUA_OBSERVE_STALE) { id=0; getter={}; return; }
+        if(alive==GUA_OBSERVE_STALE) { id=0; getter={}; detach(); if(!stage) observe_check(alive); return; }
         observe_check(alive);
         std::optional<Value> value; int error=0;
         try { auto evaluate=getter; value.emplace(evaluate()); }
@@ -33,10 +38,10 @@ struct ObserveGetter {
         catch (...) { error=GUA_OBSERVE_GETTER_FAILED; }
         auto c=handle(); if(!c || !id) return;
         int status=gua_observe_publish(c,id,value ? value->get() : nullptr,error,stage ? 1 : 0);
-        if(status==GUA_OBSERVE_STALE) { id=0; getter={}; return; }
+        if(status==GUA_OBSERVE_STALE) { id=0; getter={}; detach(); return; }
         observe_check(status);
     }
-    ~ObserveGetter() { if(id && handle()) gua_observe_unregister(handle(),id); }
+    ~ObserveGetter() { detach(); if(id && handle()) gua_observe_unregister(handle(),id); }
 };
 class ObserveRegistration {
     std::shared_ptr<ObserveGetter> state_;
@@ -45,8 +50,8 @@ public:
     ObserveRegistration(ObserveRegistration&&)=default;
     ObserveRegistration& operator=(ObserveRegistration&&)=default;
     ObserveRegistration(const ObserveRegistration&)=delete;
-    void notify() { if(!state_ || !state_->id || !state_->handle()) throw ObserveError(GUA_OBSERVE_STALE); state_->sample(false); }
-    void reset() { if(state_) { if(state_->id && state_->handle()) gua_observe_unregister(state_->handle(),state_->id); state_->id=0; state_->getter={}; state_.reset(); } }
+    void notify() { auto state=state_; if(!state || !state->id || !state->handle()) throw ObserveError(GUA_OBSERVE_STALE); state->sample(false); }
+    void reset() { if(state_) { if(state_->id && state_->handle()) gua_observe_unregister(state_->handle(),state_->id); state_->id=0; state_->getter={}; state_->detach(); state_.reset(); } }
     ~ObserveRegistration() { reset(); }
 };
 class ObserveOwner {
@@ -74,11 +79,13 @@ public:
         gua_observe_registration_v1_t d{sizeof(d),id_,value_text(name),player?1:0,sensitive?1:0};
         observe_check(gua_observe_register_v1(handle(),&d,&state->id));
         auto lifetime=context_.lock(); std::weak_ptr<ObserveGetter> weak=state;
-        lifetime->frame_observers.push_back([weak](bool ui) {
+        auto callback=std::make_shared<std::function<bool(bool)>>([weak](bool ui) {
             auto entry=weak.lock(); if(!entry || !entry->id) return false;
             if((entry->source==GUA_OBSERVE_UI)==ui) entry->sample(true);
             return entry->id!=0;
         });
+        state->observer=callback;
+        lifetime->frame_observers.push_back(std::move(callback));
         return ObserveRegistration(std::move(state));
     }
 };

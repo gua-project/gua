@@ -35,6 +35,8 @@ in-place変更を検出する。set順序だけの変更はValue等価なので�
 成功したcontext resetはflagsにかかわらずepochを進め、全Owner・登録を失効させる。
 旧購読はstale_sessionを返し、unsubscribeで解放できる。失敗したresetでは変えない。
 getter実行前と結果公開時に登録の生存を確認し、途中で解除/resetした結果は捨てる。
+明示通知の開始時点で失効済みならstaleを返す。フレーム評価では失効登録を静かに除去する。
+wrapperの登録tokenを破棄するとgetterのフレーム登録も除去し、次のフレームを待たない。
 contextを破棄すれば観測状態も終了する。
 
 ## Snapshot、Change、連続性
@@ -78,7 +80,10 @@ subscribeはSnapshotと開始cursorを一つのcontext lockで取得する。pol
 sensitiveの値はコピー・Snapshot・通知履歴へ入れる前に除外し、取得不能理由だけを残す。
 getterは通常どおり評価するが、その戻り値・例外本文を診断へ出さない。
 
-PlayerとDebugのsequence/revision/historyは分離する。Playerで見えるOwner集合が
+PlayerとDebugのsequence/revision/historyは分離する。Playerで見えるOwner集合に
+含むのは、allow_playerの登録を一つ以上持ち、Owner投影条件も満たすOwnerだけである。
+登録なし・Debug専用登録だけのOwnerの作成・破棄ではPlayer履歴やrevisionを変更しない。
+Playerで見えるOwner集合が
 変わるとPlayer履歴を破棄して既存cursorをgapにする。これは削除・非表示・公開範囲変更を
 含む。Playerは再購読して現在の公開集合を取得する。Debugは通常のremoved等を受け取る。
 この再同期により、非公開化前の履歴を後からpollして読めない。

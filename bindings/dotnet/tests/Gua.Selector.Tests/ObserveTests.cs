@@ -5,6 +5,34 @@ namespace Gua.Selector.Tests;
 [TestFixture]
 public sealed class ObserveTests
 {
+    [Test]
+    public void ExplicitNotifyRejectsAlreadyStaleRegistration()
+    {
+        using var c = new GuaContext();
+        using var owner = c.CreateObserveOwner(GuaObserveSource.World);
+        int calls = 0;
+        using var r = owner.Property("stale", () => { ++calls; return GuaValue.Integer(1); });
+        owner.Dispose();
+        Assert.That(Assert.Throws<GuaObserveException>(r.Notify)!.Code, Is.EqualTo(2));
+        Assert.Throws<ObjectDisposedException>(r.Notify);
+        Assert.That(calls, Is.Zero);
+    }
+    [Test]
+    public void DisposedGettersAreRemovedWithoutFramesAndDuringSampling()
+    {
+        using var c = new GuaContext(); using var owner = c.CreateObserveOwner(GuaObserveSource.World);
+        var field = typeof(GuaContext).GetField("_observeGetters", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        int Count() => ((System.Collections.ICollection)field.GetValue(c)!).Count;
+        for (int i = 0; i < 100; ++i) {
+            using (var r = owner.Property("temporary", () => GuaValue.Integer(1))) r.Notify();
+            Assert.That(Count(), Is.Zero);
+        }
+        GuaObserveRegistration? first = null, second = null; int calls = 0;
+        first = owner.Property("first", () => { first!.Dispose(); second!.Dispose(); return GuaValue.Integer(1); });
+        second = owner.Property("second", () => { ++calls; return GuaValue.Integer(1); });
+        c.BeginWorldFrame("world"); c.EndWorldFrame();
+        Assert.That(Count(), Is.Zero); Assert.That(calls, Is.Zero);
+    }
     private static JsonElement Parse(string json) { using var d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
     private static JsonElement[] Entries(GuaContext c) => Parse(c.GetObserveSnapshotJson()).GetProperty("entries").EnumerateArray().ToArray();
     private static JsonElement[] Events(GuaObserveSubscription s) => Parse(s.PollJson()).GetProperty("events").EnumerateArray().ToArray();

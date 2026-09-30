@@ -52,6 +52,8 @@ public sealed partial class GuaContext
         lock (ObserveGate) CheckObserve(Native.gua_observe_set_limits(ObserveHandle, events, bytes));
     }
     internal void AddObserveGetter(GuaObserveRegistration registration) => _observeGetters.Add(new(registration));
+    internal void RemoveObserveGetter(GuaObserveRegistration registration) =>
+        _observeGetters.RemoveAll(w => !w.TryGetTarget(out var r) || ReferenceEquals(r, registration));
     private void SampleObservations(bool ui)
     {
         // A getter may explicitly dispose/register/reset; enumerate a copy.
@@ -111,12 +113,13 @@ public sealed class GuaObserveRegistration : IDisposable
     {
         lock (_context.ObserveGate) { if (Id == 0) throw new ObjectDisposedException(nameof(GuaObserveRegistration)); Sample(false); }
     }
+    private void Invalidate() { Id = 0; _getter = null; _context.RemoveObserveGetter(this); }
     internal void Sample(bool stage)
     {
         if (Id == 0 || _getter is null) return;
-        if (_context.ObserveDisposed) { Id = 0; _getter = null; return; }
+        if (_context.ObserveDisposed) { Invalidate(); if (!stage) GuaContext.CheckObserve(2); return; }
         int alive = Native.gua_observe_registration_alive(_context.ObserveHandle, Id);
-        if (alive == 2) { Id = 0; _getter = null; return; }
+        if (alive == 2) { Invalidate(); if (!stage) GuaContext.CheckObserve(alive); return; }
         GuaContext.CheckObserve(alive);
         GuaValue? value = null; int error = 0;
         try { value = _getter(); if (value is null) error = (int)GuaValueErrorCode.Structure; }
@@ -124,14 +127,14 @@ public sealed class GuaObserveRegistration : IDisposable
         catch { error = 100; }
         using (value) {
             if (Id == 0) return;
-            if (_context.ObserveDisposed) { Id = 0; _getter = null; return; }
+            if (_context.ObserveDisposed) { Invalidate(); return; }
             using var input = new ValueInputs();
             int status = Native.gua_observe_publish(_context.ObserveHandle, Id, input.Use(value?.Handle), error, stage ? 1 : 0);
-            if (status == 2) { Id = 0; _getter = null; return; }
+            if (status == 2) { Invalidate(); return; }
             GuaContext.CheckObserve(status);
         }
     }
-    public void Dispose() { lock (_context.ObserveGate) { _context.ReleaseObserve(Id, 1); Id = 0; _getter = null; } }
+    public void Dispose() { lock (_context.ObserveGate) { _context.ReleaseObserve(Id, 1); Invalidate(); } }
 }
 public sealed class GuaObserveSubscription : IDisposable
 {

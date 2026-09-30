@@ -41,7 +41,10 @@ void observe_authorize(gua_context_t& ctx) {
     std::unordered_set<uint64_t> allowed;
     const auto ui = project_nodes(ctx.nodes, GUA_OBSERVATION_PROFILE_PLAYER);
     const auto world = project_world_objects(ctx.world_objects, GUA_OBSERVATION_PROFILE_PLAYER);
-    for (const auto& [id,o] : s.owners) {
+    for (const auto& [registration_id,r] : s.registrations) {
+        if (!r.player) continue;
+        const auto& o = s.owners.at(r.owner);
+        const auto id = r.owner;
         if (o.source == GUA_OBSERVE_WORLD ||
             (o.source == GUA_OBSERVE_UI && std::any_of(ui.begin(), ui.end(), [&](const auto& n){return n.id == o.runtime_id;})) ||
             (o.source == GUA_OBSERVE_OBJECT && std::any_of(world.begin(), world.end(), [&](const auto& n){return n.id == o.runtime_id;}))) allowed.insert(id);
@@ -172,7 +175,7 @@ extern "C" int gua_observe_register_v1(gua_context_t* c,const gua_observe_regist
         for (const auto& [id,r]:s.registrations) if (r.owner==d->owner_id && r.name==name) return GUA_OBSERVE_DUPLICATE;
         ObserveRegistration r{s.next_id++,d->owner_id,name,d->allow_player!=0,d->sensitive!=0,{},std::nullopt};
         if (r.sensitive) r.current.error=GUA_OBSERVE_SENSITIVE;
-        s.registrations.emplace(r.id,r); observe_change(*c,r,nullptr,&r.current,"unavailable","lifecycle");
+        s.registrations.emplace(r.id,r); observe_authorize(*c); observe_change(*c,r,nullptr,&r.current,"unavailable","lifecycle");
         *out=r.id; return 0;
     } OBS_CATCH
 }
@@ -180,7 +183,7 @@ extern "C" int gua_observe_unregister(gua_context_t* c,uint64_t id) {
     if (!c) return GUA_OBSERVE_ARGUMENT;
     OBS_TRY { std::lock_guard lock(c->mutex); auto& s=c->observe; auto i=s.registrations.find(id);
         if(i==s.registrations.end()) return GUA_OBSERVE_STALE;
-        observe_change(*c,i->second,&i->second.current,nullptr,"removed","lifecycle"); s.registrations.erase(i); return 0;
+        observe_change(*c,i->second,&i->second.current,nullptr,"removed","lifecycle"); s.registrations.erase(i); observe_authorize(*c); return 0;
     } OBS_CATCH
 }
 extern "C" int gua_observe_publish(gua_context_t* c,uint64_t id,const gua_value_t* value,int error,int stage) {

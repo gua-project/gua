@@ -133,4 +133,52 @@ static void shared_fixture() {
         auto events=poll(c,sub).at("events").items;assert(events.size()==1);assert(events[0].at("kind").text==step.at("kind").text);
     }
 }
-int main() { try { cpp_sampling_failure_preserves_callbacks(); cpp_move_in_getter(); shared_fixture(); lifetimes();publication();continuity();privacy();cpp_getters(); } catch(const std::exception& e) { std::cerr << e.what() << std::endl; return 1; } }
+static void player_registration_authorization() {
+    gua::Context context; auto c=context.native_handle(); auto sub=subscribe(c,1);
+    auto initial=parse(snap(c,1));
+    auto quiet=[&] {
+        auto change=poll(c,sub);
+        if(change.at("status").text!="ok" || !change.at("events").items.empty() ||
+           change.at("revision").text!=initial.at("revision").text || change.at("sequence").text!=initial.at("sequence").text)
+            throw std::runtime_error("Debug lifecycle leaked to Player");
+    };
+    auto world=owner(c,3); quiet();
+    auto debug=reg(c,world); put(c,debug,1); quiet();
+    assert(!gua_observe_unregister(c,debug)); quiet();
+    assert(!gua_observe_destroy_owner(c,world)); quiet();
+    world=owner(c,3); auto first=reg(c,world,"first",true);
+    assert(poll(c,sub).at("status").text=="gap"); sub=subscribe(c,1);
+    auto second=reg(c,world,"second",true);
+    assert(poll(c,sub).at("status").text=="ok");
+    assert(!gua_observe_unregister(c,first));
+    auto removed=poll(c,sub); assert(removed.at("status").text=="ok");
+    assert(removed.at("events").items[0].at("kind").text=="removed");
+    assert(!gua_observe_unregister(c,second)); assert(poll(c,sub).at("status").text=="gap");
+    sub=subscribe(c,1); initial=parse(snap(c,1));
+    debug=reg(c,world); quiet(); assert(!gua_observe_destroy_owner(c,world)); quiet();
+}
+static void cpp_stale_and_teardown() {
+    gua::Context c; gua::ObserveOwner world(c,3); int calls=0;
+    auto r=world.property("stale",[&]{++calls;return gua::Value::integer(1);});
+    world.reset();
+    for(int i=0;i<2;++i) {
+        bool stale=false; try {r.notify();} catch(const gua::ObserveError& e) {stale=e.code==GUA_OBSERVE_STALE;}
+        if(!stale || calls) throw std::runtime_error("Explicit notify hid stale registration");
+    }
+    gua::ObserveOwner replacement(c,3);
+    for(int i=0;i<100;++i) {
+        { auto temporary=replacement.property("temporary",[]{return gua::Value::integer(1);}); temporary.notify(); }
+        if(!c.lifetime().lock()->frame_observers.empty()) throw std::runtime_error("Disposed getter retained without frames");
+    }
+    std::optional<gua::ObserveRegistration> first,second;
+    first.emplace(replacement.property("first",[&]{first.reset();second.reset();return gua::Value::integer(1);}));
+    second.emplace(replacement.property("second",[&]{++calls;return gua::Value::integer(1);}));
+    assert(gua_begin_world_frame(c.native_handle(),"world")); c.end_world_frame();
+    assert(calls==0 && c.lifetime().lock()->frame_observers.empty());
+    first.emplace(replacement.property("self",[&]{first.reset();return gua::Value::integer(1);}));
+    first->notify();
+    assert(c.lifetime().lock()->frame_observers.empty());
+    auto invalidated=replacement.property("reset",[&]{replacement.reset();return gua::Value::integer(1);});
+    invalidated.notify(); // Invalidation during the getter silently discards its result.
+}
+int main() { try { player_registration_authorization(); cpp_stale_and_teardown(); cpp_sampling_failure_preserves_callbacks(); cpp_move_in_getter(); shared_fixture(); lifetimes();publication();continuity();privacy();cpp_getters(); } catch(const std::exception& e) { std::cerr << e.what() << std::endl; return 1; } }
