@@ -2,6 +2,8 @@
 #include "value_json.hpp"
 #include <optional>
 #include <limits>
+#include <sstream>
+#include <locale>
 
 // Deliberately bounded JSON Schema 2020-12 subset, not a general evaluator.
 namespace gua_input_detail {
@@ -9,8 +11,12 @@ using gua_value_detail::json;
 inline double numeric(const json& value) {
     if (value.type != json::number) gua_value_detail::fail(GUA_VALUE_STRUCTURE);
     double result = 0;
-    auto parsed = std::from_chars(value.text.data(), value.text.data() + value.text.size(), result);
-    if (parsed.ec != std::errc{} || parsed.ptr != value.text.data() + value.text.size() || !std::isfinite(result))
+    // Apple's older libc++ lacks floating-point from_chars. The JSON parser
+    // already checks number grammar; use the classic locale on every platform.
+    std::istringstream stream(value.text);
+    stream.imbue(std::locale::classic());
+    stream >> result;
+    if (stream.fail() || !stream.eof() || !std::isfinite(result))
         gua_value_detail::fail(GUA_VALUE_RANGE);
     return result;
 }
