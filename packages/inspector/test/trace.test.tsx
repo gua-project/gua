@@ -10,6 +10,20 @@ const manifest = { schemaVersion: 1, traceId, captureMode: "recent", savePolicy:
 function event(sequence: number, type: string, data: unknown) { return { schemaVersion: 1, traceId, sequence, eventId: `e${sequence}`, stepId, type, collectedMilliseconds: sequence, data }; }
 const lines = (...events: unknown[]) => events.map(e => JSON.stringify(e)).join("\n") + "\n";
 describe("Trace v1 offline reader/viewer", () => {
+  test("missing complete streaming record is reported even when the tail is intact", () => {
+    const trace = parseTrace(JSON.stringify({ ...manifest, captureMode: "streaming", lastSequence: 3 }),
+      lines(event(1, "step.begin", {}), event(3, "step.end", { outcome: "passed" })));
+    expect(trace.events.length).toBe(2); expect(trace.issues).toContain("sequence-gap");
+    expect(renderToStaticMarkup(<GuaTraceViewer trace={trace} />)).toContain("Recording is incomplete");
+  });
+  test("recent eviction is a normal range change but missing parent is explicit", () => {
+    const trace = parseTrace(JSON.stringify({ ...manifest, lastSequence: 4, quality: { ...manifest.quality, evictedSteps: 1 } }),
+      lines(event(3, "step.begin", { parentStepId: "c".repeat(32) }), event(4, "step.end", { outcome: "passed" })));
+    expect(trace.issues).toContain("step-outside-retention"); expect(trace.issues).not.toContain("sequence-gap");
+    const retained = parseTrace(JSON.stringify({ ...manifest, lastSequence: 4, quality: { ...manifest.quality, evictedSteps: 1 } }),
+      lines(event(3, "step.begin", {}), event(4, "step.end", { outcome: "passed" })));
+    expect(retained.issues).toEqual([]);
+  });
   test("unknown annotations and hostile HTML remain inert text", () => {
     const hostile = '</script><img src="https://attacker.invalid/x" onerror="alert(1)">';
     const trace = parseTrace(JSON.stringify(manifest), lines(event(1, "step.begin", { kind: "assertion", label: hostile }),

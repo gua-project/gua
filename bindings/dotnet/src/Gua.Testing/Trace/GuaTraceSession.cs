@@ -34,7 +34,7 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
     private readonly Task _writer;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly string _startedAt = DateTimeOffset.UtcNow.ToString("O");
-    private long _sequence, _memoryBytes, _queuedBytes, _artifactBytes, _evicted, _dropped;
+    private long _sequence, _memoryBytes, _queuedBytes, _artifactBytes, _evicted, _dropped, _unfinishedSteps;
     private bool _stopped, _closed, _disposed, _outcomeSet;
     private GuaTraceOutcome _outcome;
     private Task<bool>? _pendingCheckpoint;
@@ -85,8 +85,9 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
             var step = new Step(); _steps.AddLast(step); _byId.Add(step.Id, step);
             if (request is not null) { step.Requests.Add(request); _requests.Add(request, step.Id); }
             var location = sourceFile?.Replace('\\', '/').Split('/').Last();
-            AppendUnsafe(step, "step.begin", GuaTraceJson.Element(new { kind, label, request, parentStepId,
-                source = location is null ? null : new { file = location, line = sourceLine } }));
+            if (AppendUnsafe(step, "step.begin", GuaTraceJson.Element(new { kind, label, request, parentStepId,
+                source = location is null ? null : new { file = location, line = sourceLine } })))
+                _unfinishedSteps++;
             return step.Id;
         }
     }
@@ -130,7 +131,13 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
         lock (_gate)
         {
             if (!_byId.TryGetValue(stepId, out var step) || step.Ended || _closed) return;
-            if (AppendUnsafe(step, "step.end", GuaTraceJson.Element(new { outcome }))) step.Ended = true;
+            if (!Enum.IsDefined(typeof(GuaTraceOutcome), outcome)) { _issues.Add("invalid-step-outcome"); return; }
+            if (AppendUnsafe(step, "step.end", GuaTraceJson.Element(new { outcome })))
+            {
+                step.Ended = true; _unfinishedSteps--;
+                if (outcome is GuaTraceOutcome.Unknown or GuaTraceOutcome.Interrupted)
+                    _issues.Add("uncertain-step-outcome");
+            }
         }
     }
     public string Mark(string label)
@@ -274,7 +281,12 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
                 if (_closed) return !_issues.Contains("write-failed") && !_issues.Contains("flush-timeout");
                 // A timed-out writer still owns its checkpoint; never accumulate retained-window copies.
                 if (_pendingCheckpoint is { IsCompleted: false }) { Stop("flush-pending"); return false; }
-                if (final) _closed = true;
+                if (final)
+                {
+                    // Retain uncertainty even when its beginning has left the bounded correlation window.
+                    if (_unfinishedSteps > 0) _issues.Add("unfinished-steps");
+                    _closed = true;
+                }
                 var discard = final && _outcome == GuaTraceOutcome.Passed &&
                     _options.SavePolicy == GuaTraceSavePolicy.OnFailure && !_stopped && _issues.Count == 0;
                 var events = _options.CaptureMode == GuaTraceCaptureMode.Recent

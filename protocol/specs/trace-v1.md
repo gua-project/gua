@@ -19,6 +19,9 @@ schemaVersion は 1。未知の major version は reader が拒否する。
 それ以前の完全レコードを読む。破損レコードでは読み取りを停止して欠損を示す。
 manifest は一時ファイルから置き換える。未 finalize・読取上限・hash 不一致も
 主結果とは独立した issue である。
+Streaming、および Step の通常 eviction がない Recent では、途中の完全レコードの
+欠落も `sequence-gap` で示す。末尾の sequence が一致するだけで完全とは判定しない。
+保持されていない `parentStepId` は `step-outside-retention` として示す。
 
 `sequence` は収集順の正整数。`collectedMilliseconds` は session 内の単調時計。
 `startedAt` は UTC 壁時計で、ホスト時計の同期保証には使わない。
@@ -93,6 +96,10 @@ queued/in-flight payload を含めた byte budget を超えて保持しない。
 品質サマリーは別枠から書く。保存失敗の生の例外文字列・絶対パスは記録しない。
 OnFailure で破棄するのは Passed かつ記録異常のないもののみ。中断・Unknown・
 必須記録失敗は残す。Streaming の OnFailure は実行中に一時 artifact を作る。
+最終化時に未終了 Step があれば `unfinished-steps`、終了結果が Unknown/Interrupted の
+Step は `uncertain-step-outcome` を品質に残し、主結果が Passed でも保存する。
+未終了数は保持窓外の Step も含む有限サイズのカウンターで管理する。
+これらは主結果や Step の終了結果を変更せず、未観測の終了 Event も補わない。
 Dispose は結果未確定なら Interrupted で閉じる。強制終了時の Recent のメモリ、
 未flushデータ、I/Oが応答しない場合の保存は保証しない。
 
@@ -127,7 +134,7 @@ unconfirmed として扱い、completion が返した epoch でのみ確定相�
 
 | 子 Issue | この変更 | 残る受け入れ条件 |
 | --- | --- | --- |
-| #123 T-01 | schema、writer/reader、有限上限、4 保存組合せ、部分末尾、redaction | 全容量/中断条件の追加ストレス検証 |
+| #123 T-01 | schema、writer/reader、有限上限、4 保存組合せ、部分末尾、redaction、容量/中断の故障 fixture | 強制終了時の未flush/メモリのみの保存は保証対象外 |
 | #124 T-02 | 要求キー/Step 相関、completion helper、自動 queue 非干渉 | #107 の selector/phase 接続、raw context/native と Semantic/Raw Input の自動 lifecycle、遅い結果の自動取得 |
 | #125 T-03 | Snapshot/観測の分離、Change 記録口、位置差分 | #119/#120 の購読連続性/欠損契約と実接続（OPEN-03/04） |
 | #126 T-04 | 外部 Runner API、共通 Value、注釈/添付、評価/主結果分離、サンプル | 上記 native/Observe 統合後の横断受け入れ |
