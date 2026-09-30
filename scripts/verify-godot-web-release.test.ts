@@ -8,6 +8,7 @@ async function withCdpServer(
   run: (client: ReturnType<typeof createCdpClient>) => Promise<void>,
 ) {
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  let serverDisconnected = false;
   const server = Bun.serve({
     port: 0,
     fetch(request, server) { return server.upgrade(request) ? undefined : new Response("WebSocket required", { status: 400 }); },
@@ -17,13 +18,22 @@ async function withCdpServer(
         respond(request, (payload) => {
           const timer = setTimeout(() => { timers.delete(timer); socket.send(JSON.stringify({ id: request.id, ...payload as object })); }, 0);
           timers.add(timer);
-        }, () => socket.terminate());
+        }, () => { serverDisconnected = true; socket.terminate(); });
       },
     },
   });
   const client = createCdpClient(`ws://127.0.0.1:${server.port}`);
   try { await client.open(); await run(client); }
-  finally { client.close(); for (const timer of timers) clearTimeout(timer); await server.stop(true); }
+  finally {
+    client.close();
+    for (const timer of timers) clearTimeout(timer);
+    // Bun 1.3.14 leaves the drain promise pending after a server-initiated
+    // disconnect. Force-stop the listener, then verify it no longer serves.
+    const url = server.url;
+    const stopped = server.stop(true);
+    if (!serverDisconnected) await stopped;
+    await expect(fetch(url, { signal: AbortSignal.timeout(500) })).rejects.toThrow();
+  }
 }
 
 test("readiness survives a renderer blocked beyond the 1s probe inside its 10s deadline", async () => {
