@@ -69,7 +69,10 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
     code: prefix + 'var node = await locator.ResolveAsync();\nawait GuaAssertions.WaitForStateAsync(context, node.Id,\n    snapshot => snapshot.HasValue && snapshot.Value is null,\n    description: "have an observed null value");',
   });
   if (!sensitive && (typeof value === "string" || typeof value === "boolean")) add("value", `WaitForValueAsync(${csharpString(String(value))})`);
-  if (!sensitive && typeof value === "number" && Number.isFinite(value)) states.push({
+  // JSON parsing has already lost the raw token for unsafe integers. Do not
+  // assert a rounded value that could also match a different adjacent integer.
+  if (!sensitive && typeof value === "number" && Number.isFinite(value) &&
+    (!Number.isInteger(value) || Number.isSafeInteger(value))) states.push({
     id: "value", label: "value",
     code: prefix + `var node = await locator.ResolveAsync();\nawait GuaAssertions.WaitForStateAsync(context, node.Id, snapshot =>\n    double.TryParse(snapshot.Value, System.Globalization.NumberStyles.Float,\n        System.Globalization.CultureInfo.InvariantCulture, out var value) && value == ${String(value)}d,\n    description: "have the observed numeric value");`,
   });

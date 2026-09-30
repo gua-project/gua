@@ -60,6 +60,15 @@ describe("Inspector C# generation", () => {
     expect(generateNodeCode(omitted).states.map((choice) => choice.id)).not.toContain("value");
     expect(generateNodeCode({ ...node, value: null }, "id", true).states.map((choice) => choice.id)).not.toContain("value");
   });
+  test("omits unsafe numeric integers instead of asserting a rounded value", () => {
+    for (const token of ["9007199254740992", "9007199254740993", "-9007199254740992", "-9007199254740993", "1e100"]) {
+      const { value } = JSON.parse(`{"value":${token}}`) as { value: number };
+      expect(generateNodeCode({ ...node, value }).states.map((choice) => choice.id)).not.toContain("value");
+    }
+    for (const value of [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER, 0, 1.5, 1.5e-20]) {
+      expect(generateNodeCode({ ...node, value }).states.map((choice) => choice.id)).toContain("value");
+    }
+  });
   test("clipboard success and rejection retain the source for manual copying", async () => {
     let written = "";
     const code = generateNodeCode(node).locators[0]!.code;
