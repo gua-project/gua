@@ -48,3 +48,37 @@ NuGet の初回 restore と Vite/esbuild は sandbox 外の既存設定・親デ
 
 生成物は `artifacts/trace-viewer`、sample の出力先、`artifacts/packages` に置く。
 ソースには生成 JS/HTML、バイナリ、依存フォルダをコミットしない。
+
+## #123 T-01 の追加検証（2026-09-30）
+
+Windows x64、.NET SDK 10.0.401、Bun 1.4.0。下記はこの変更のローカル検証であり、
+上記 2026-09-29 の native/配布/ブラウザ検証を再実行したという意味ではない。
+
+| 対象 | 結果 |
+| --- | --- |
+| `dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj --no-restore --filter "FullyQualifiedName~TraceStorageTests\|FullyQualifiedName~TraceTests"` | 60/60 成功、skip 0 |
+| `dotnet build bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --no-restore --framework netstandard2.1` | 成功、警告 0 |
+| `bun test packages/inspector/test` | 28/28 成功（Trace 13 件） |
+| `bun run --filter @gua/inspector check` | 成功 |
+| `bun run --filter @gua/inspector build:trace` | 成功 |
+
+受け入れ条件との対応:
+
+- AT-TRACE-003: 既存の host/収集時計分離、時刻逆行拒否、遅延結果と主結果の分離を再検証。
+- AT-TRACE-007: 105 Step について capture 2 × save 2 × 主結果 4 の 16 組合せを実行。
+  正常 eviction、添付保持、成功時破棄、非成功/中断/Unknown 時の保存を検証。
+  未終了・Unknown/Interrupted Step がある Passed 主結果も保存し、保持窓外の未終了数を失わない。
+- AT-TRACE-008: イベント、Snapshot、添付の単体上限とメモリ/キュー byte・item 上限を独立に発火。
+  キューの fixture は session lock で background writer を止め、機械の速度に依存せず飽和させる。
+  flush gate を占有して timeout を発火し、後続の最終化でも主結果と timeout 品質を保持する。
+  既存の artifact 全体上限、保存先エラー、未 finalize、不完全末尾も再検証。
+  完全な途中レコードを削除して `sequence-gap` を確認。reader 件数/行 byte 上限も別 fixture。
+- AT-TRACE-009: Recent の保持データと Streaming の待機 batch を直接検査し、秘密 marker が
+  Event・Blob の保存用 bytes・hash に入らないことと、player profile の保存を検証。
+  既存の source path、例外、sensitive 引数、hash 改ざん、範囲外参照拒否も再検証。
+- 残存参照: Recent checkpoint 後に親を eviction し、共有添付は保持したまま
+  `step-outside-retention` を報告する。.NET と Inspector の欠損判定は一致する。
+
+fixture は正常な Step 終了を捏造しない。強制終了時のメモリのみ・未flush分の完全保存、
+応答しない filesystem、敵対的な同時ファイル置換の保証は引き続き対象外である。
+この対応で親 #109 や他の子 Issue の接続・Viewer受け入れ条件を完了扱いにしない。

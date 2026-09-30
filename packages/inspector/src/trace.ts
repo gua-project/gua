@@ -44,6 +44,7 @@ export function parseTrace(manifestText: string, eventLines: string, blobs: Reco
           Number(e.sequence) <= previous || typeof e.eventId !== "string" || e.eventId.length === 0 || !/^[a-f0-9]{32}$/.test(text(e.stepId, "")) ||
           typeof e.type !== "string" || e.type.length < 1 || e.type.length > 64 || !Object.hasOwn(e, "data") || typeof e.collectedMilliseconds !== "number" ||
           !Number.isFinite(e.collectedMilliseconds) || e.collectedMilliseconds < previousCollected) throw new Error("invalid-record");
+      if ((manifest.captureMode === "streaming" || manifest.quality.evictedSteps === 0) && Number(e.sequence) !== previous + 1) issues.push("sequence-gap");
       previous = Number(e.sequence); previousCollected = e.collectedMilliseconds; events.push(e as unknown as TraceEvent);
     } catch { issues.push("invalid-record"); break; }
   }
@@ -51,7 +52,10 @@ export function parseTrace(manifestText: string, eventLines: string, blobs: Reco
   if (manifest.finalized && previous !== manifest.lastSequence) issues.push("sequence-incomplete");
   const safeBlobs: Record<string, unknown> = Object.create(null);
   const observations = new Set(events.filter(e => e.type === "observation").map(e => object(e.data).observationId));
+  const steps = new Set(events.filter(e => e.type === "step.begin").map(e => e.stepId));
   for (const e of events) {
+    const parent = object(e.data).parentStepId;
+    if (e.type === "step.begin" && parent != null && (typeof parent !== "string" || !steps.has(parent))) issues.push("step-outside-retention");
     const refs = object(e.data).observations;
     if (e.type === "assertion.evaluation" && Array.isArray(refs) && refs.some(r => typeof r !== "string" || !observations.has(r))) issues.push("observation-outside-retention");
     if (e.type !== "observation" && e.type !== "attachment") continue;

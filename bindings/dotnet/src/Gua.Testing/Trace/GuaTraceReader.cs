@@ -72,6 +72,8 @@ public static class GuaTraceReader
                         record.CollectedMilliseconds < previousCollected || double.IsInfinity(record.CollectedMilliseconds) ||
                         double.IsNaN(record.CollectedMilliseconds))
                         throw new JsonException();
+                    if ((manifest.CaptureMode == "streaming" || manifest.Quality.EvictedSteps == 0) &&
+                        record.Sequence != previous + 1) issues.Add("sequence-gap");
                     events.Add(record); previous = record.Sequence; previousCollected = record.CollectedMilliseconds;
                 }
                 catch (Exception error) when (error is JsonException or DecoderFallbackException) { issues.Add("invalid-record"); break; }
@@ -82,8 +84,13 @@ public static class GuaTraceReader
         if (manifest.Finalized && previous != manifest.LastSequence) issues.Add("sequence-incomplete");
         var observations = new HashSet<string>(events.Where(e => e.Type == "observation" && e.Data.ValueKind == JsonValueKind.Object)
             .Select(e => e.Data.TryGetProperty("observationId", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString()! : ""), StringComparer.Ordinal);
+        var steps = new HashSet<string>(events.Where(e => e.Type == "step.begin").Select(e => e.StepId), StringComparer.Ordinal);
         foreach (var e in events)
         {
+            if (e.Type == "step.begin" && e.Data.ValueKind == JsonValueKind.Object &&
+                e.Data.TryGetProperty("parentStepId", out var parent) && parent.ValueKind != JsonValueKind.Null &&
+                (parent.ValueKind != JsonValueKind.String || !steps.Contains(parent.GetString()!)))
+                issues.Add("step-outside-retention");
             if (e.Type == "assertion.evaluation" && e.Data.ValueKind == JsonValueKind.Object &&
                 e.Data.TryGetProperty("observations", out var refs) && refs.ValueKind == JsonValueKind.Array &&
                 refs.EnumerateArray().Any(r => r.ValueKind != JsonValueKind.String || !observations.Contains(r.GetString()!)))
