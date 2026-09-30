@@ -82,6 +82,17 @@ public static class GuaTraceCapture
         {
             using var parsed = JsonDocument.Parse(getter());
             var root = parsed.RootElement;
+            var (version, name, items) = channel switch {
+                "ui" => (2, "screen", "nodes"),
+                "world" => (1, "scene", "objects"),
+                _ => throw new JsonException(),
+            };
+            if (root.GetProperty("schemaVersion").GetInt32() != version ||
+                root.GetProperty("sessionEpoch").GetUInt64() == 0 ||
+                string.IsNullOrEmpty(root.GetProperty(name).GetString()) ||
+                root.GetProperty(items).ValueKind != JsonValueKind.Array ||
+                root.GetProperty(items).EnumerateArray().Any(item => item.ValueKind != JsonValueKind.Object))
+                throw new JsonException();
             string Number(string key) => root.GetProperty(key).GetUInt64().ToString(System.Globalization.CultureInfo.InvariantCulture);
             var host = new GuaTraceHost(sourceId, Number("sessionEpoch"), Number("frameSequence"), Number("revision"));
             if (expectedSessionEpoch is not null && expectedSessionEpoch != host.SessionEpoch)

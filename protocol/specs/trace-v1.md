@@ -104,6 +104,9 @@ hostの認可は既存経路の責務であり、Traceのprofileで昇格しな�
 内容を分離する。`Tree`の公開getter overloadは呼出側が認可済みprofileを使う。
 UI/World/ObserveのsourceIdは取得元ごとに明記し、同時取得とは称さない。
 位置・bounds・公開fieldをbaseline用に除外しない。失敗はfailed、指定epochとの不一致はstale。
+TreeはUIのversion 2・screen・nodes、Worldのversion 1・scene・objectsというenvelopeを
+確認してからavailableにする。metadataだけの応答や配列でない結果はfailedでblobを作らず、
+正しいenvelopeの空配列は正常な空Treeとして保存する。
 getter例外本文は保存しない。検索partial/truncatedは汎用`Observe(..., "partial", ...)`で
 結果そのものとともに明記し、正常不在のabsentと混同しない。
 
@@ -112,6 +115,8 @@ PollとSnapshotを呼ぶ。主結果決定時とcleanup後は別Observation Reco
 schemaVersion 1の追加event dataとして旧readerも汎用JSON表示できる。
 `observation.change`の`change`と`received.kind`は一致が必須であり、`catalogs`は
 Observe transportと共通のbefore/after/value別single-enum catalog契約で検証する。
+受信ChangeのsessionEpoch・ownerId・registrationIdは正の十進文字列で、
+sequence・revision・UI/World frame等のカウンターは0を許す。
 既存Observe APIの引数・binary signatureは保持する。Reader/Viewerはgap/stale/failed/partial/outsideRetentionを
 記録品質として示し、Viewerの前後比較は同一channel/source/epochの読取に限る。
 

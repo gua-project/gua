@@ -73,3 +73,18 @@ test("Trace catalogs follow the Observe transport single-enum contract", () => {
     { after: { ...catalog, extra: true } },
   ]) expect(validate(withCatalogs(catalogs))).toBe(false);
 });
+test("Observe identities stay positive while publication counters may be zero", () => {
+  for (const key of ["sessionEpoch", "ownerId", "registrationId"]) {
+    for (const invalid of ["0", "00", "00000000000000000000", "-1"]) {
+      const data = transition(fixture.transitions[1]!); data.received[key] = invalid;
+      expect(validate(event("observation.change", data))).toBe(false);
+    }
+    for (const positive of ["1", "18446744073709551615"]) {
+      const data = transition(fixture.transitions[1]!); data.received[key] = positive;
+      expect(validate(event("observation.change", data))).toBe(true);
+    }
+  }
+  const data = transition(fixture.transitions[1]!);
+  for (const key of ["sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision"]) data.received[key] = "0";
+  expect(validate(event("observation.change", data))).toBe(true);
+});

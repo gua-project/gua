@@ -14,6 +14,53 @@ public sealed class TraceTests
     private GuaTraceOptions Options(GuaTraceCaptureMode mode = GuaTraceCaptureMode.Recent,
         GuaTraceSavePolicy policy = GuaTraceSavePolicy.Always) => new() { OutputDirectory = _root, CaptureMode = mode, SavePolicy = policy };
 
+    [TestCase("ui")]
+    [TestCase("world")]
+    public async Task MetadataOnlyTreeIsFailedWithoutCreatingAnEmptySnapshot(string channel)
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root });
+        var step = trace.BeginStep(GuaTraceStepKind.Action, "capture tree");
+        GuaTraceCapture.Tree(trace, step, channel, "runtime", "main-result",
+            () => "{\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0}");
+        trace.EndStep(step, GuaTraceOutcome.Passed);
+        await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        Assert.That(Directory.Exists(trace.ArtifactPath), Is.True);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        var observation = read.Events.Single(e => e.Type == "observation");
+        Assert.That(observation.Data.GetProperty("availability").GetString(), Is.EqualTo("failed"));
+        Assert.That(observation.Data.TryGetProperty("blob", out _), Is.False);
+        Assert.That(read.Blobs, Is.Empty);
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("tree-failed"));
+    }
+
+    [TestCase("ui", 2, "screen", "nodes")]
+    [TestCase("world", 1, "scene", "objects")]
+    public async Task TreeEnvelopeRejectsInvalidStructureAndPreservesGenuinelyEmptyTrees(string channel,
+        int version, string label, string items)
+    {
+        await using var trace = new GuaTraceSession(Options());
+        var step = trace.BeginStep(GuaTraceStepKind.Action, "tree envelope");
+        object Metadata() => new { sessionEpoch = 1, frameSequence = 0, revision = 0 };
+        string Tree(int schemaVersion, object? name, object? collection) {
+            var data = JsonSerializer.SerializeToElement(Metadata()).EnumerateObject().ToDictionary(p => p.Name, p => (object)p.Value);
+            data["schemaVersion"] = schemaVersion; data[label] = name!; data[items] = collection!;
+            return JsonSerializer.Serialize(data);
+        }
+        foreach (var invalid in new[] { Tree(version + 1, "test", Array.Empty<object>()), Tree(version, null, Array.Empty<object>()),
+            Tree(version, "", Array.Empty<object>()), Tree(version, "test", null), Tree(version, "test", new { }),
+            Tree(version, "test", new object?[] { null }), Tree(version, "test", new[] { 1 }) })
+            GuaTraceCapture.Tree(trace, step, channel, "runtime", "invalid", () => invalid);
+        GuaTraceCapture.Tree(trace, step, channel, "runtime", "empty", () => Tree(version, "test", Array.Empty<object>()));
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Where(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "invalid")
+            .Select(e => e.Data.GetProperty("availability").GetString()), Is.All.EqualTo("failed"));
+        var empty = read.Events.Single(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "empty");
+        Assert.That(empty.Data.GetProperty("availability").GetString(), Is.EqualTo("available"));
+        Assert.That(read.Blobs[empty.Data.GetProperty("blob").GetString()!].GetProperty(items).GetArrayLength(), Is.Zero);
+        Assert.That(empty.Data.GetProperty("host").GetProperty("frame").GetString(), Is.EqualTo("0"));
+    }
+
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.OnFailure)]
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.Always)]
     [TestCase(GuaTraceCaptureMode.Streaming, GuaTraceSavePolicy.OnFailure)]

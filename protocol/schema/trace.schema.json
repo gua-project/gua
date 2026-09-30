@@ -6,6 +6,7 @@
   "$defs": {
     "id": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
     "uint64": { "type": "string", "pattern": "^[0-9]{1,20}$" },
+    "positiveUint64": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
     "outcome": { "enum": ["unknown", "passed", "failed", "interrupted"] },
     "blob": { "type": "string", "pattern": "^(snapshots|attachments)/[a-f0-9]{64}\\.json$" },
     "observeChange": {
@@ -21,11 +22,11 @@
           "properties": {
             "schemaVersion": { "const": 1 }, "sourceId": { "type": "string", "minLength": 1 },
             "profile": { "enum": ["debug", "player"] },
-            "sessionEpoch": { "$ref": "#/$defs/uint64" }, "sequence": { "$ref": "#/$defs/uint64" },
+            "sessionEpoch": { "$ref": "#/$defs/positiveUint64" }, "sequence": { "$ref": "#/$defs/uint64" },
             "revision": { "$ref": "#/$defs/uint64" }, "uiFrame": { "$ref": "#/$defs/uint64" },
             "uiRevision": { "$ref": "#/$defs/uint64" }, "worldFrame": { "$ref": "#/$defs/uint64" },
-            "worldRevision": { "$ref": "#/$defs/uint64" }, "ownerId": { "$ref": "#/$defs/uint64" },
-            "registrationId": { "$ref": "#/$defs/uint64" }, "source": { "enum": ["ui", "object", "world"] },
+            "worldRevision": { "$ref": "#/$defs/uint64" }, "ownerId": { "$ref": "#/$defs/positiveUint64" },
+            "registrationId": { "$ref": "#/$defs/positiveUint64" }, "source": { "enum": ["ui", "object", "world"] },
             "runtimeId": { "type": "string" }, "name": { "type": "string", "minLength": 1 },
             "kind": { "enum": ["added", "changed", "removed", "unavailable", "recovered"] },
             "boundary": { "enum": ["frame", "explicit", "lifecycle"] },
