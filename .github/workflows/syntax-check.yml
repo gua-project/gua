@@ -390,6 +390,7 @@ jobs:
           dotnet restore bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj
           dotnet restore bindings/dotnet/tests/Gua.Unity.Integration.Tests/Gua.Unity.Integration.Tests.csproj
           dotnet restore bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj
+          dotnet restore bindings/dotnet/tests/Gua.Snapshots.Tests/Gua.Snapshots.Tests.csproj
           dotnet restore examples/unity-smoke/Gua.UnitySmoke.csproj
 
       - name: Build Gua.Core and Gua.Testing target frameworks
@@ -412,15 +413,23 @@ jobs:
       - name: Build Visual and Recording target frameworks
         run: |
           dotnet build bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release --framework net10.0 --no-restore
+          dotnet build bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release --framework net10.0 --no-restore
           dotnet build bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release --framework netstandard2.1 --no-restore
+          dotnet build bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release --framework netstandard2.1 --no-restore
           dotnet build bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release --framework net10.0 --no-restore
           dotnet build bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release --framework netstandard2.1 --no-restore
+
+      - name: Pack semantic snapshot package
+        run: dotnet pack bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release --no-build
 
       - name: Build existing consumers and Unity smoke host
         run: |
           dotnet build bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release --no-restore
           dotnet build bindings/dotnet/tests/Gua.Unity.Integration.Tests/Gua.Unity.Integration.Tests.csproj --configuration Release --no-restore
           dotnet build examples/unity-smoke/Gua.UnitySmoke.csproj --configuration Release --no-restore
+
+      - name: Test semantic snapshot package
+        run: dotnet test bindings/dotnet/tests/Gua.Snapshots.Tests/Gua.Snapshots.Tests.csproj --configuration Release --no-restore
 
       - name: Test Visual and Recording packages
         run: dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj --configuration Release --no-restore
