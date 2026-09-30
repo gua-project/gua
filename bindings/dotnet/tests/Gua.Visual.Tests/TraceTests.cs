@@ -61,6 +61,70 @@ public sealed class TraceTests
         Assert.That(empty.Data.GetProperty("host").GetProperty("frame").GetString(), Is.EqualTo("0"));
     }
 
+    [TestCase("ui")]
+    [TestCase("world")]
+    public async Task TreeItemsFollowTheFullChannelSchema(string channel)
+    {
+        var itemJson = channel == "ui"
+            ? "{\"id\":\"n\",\"role\":\"button\",\"visible\":true,\"enabled\":true,\"bounds\":{},\"actions\":[\"click\"]}"
+            : "{\"id\":\"o\",\"kind\":\"actor\",\"space\":\"world2d\",\"position\":{\"x\":1},\"visibleToPlayer\":true,\"active\":true,\"agentExposure\":\"auto\",\"state\":{}}";
+        var valid = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject();
+        var invalid = new List<System.Text.Json.Nodes.JsonNode> { new System.Text.Json.Nodes.JsonObject() };
+        foreach (var field in valid.Select(p => p.Key)) {
+            var missing = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject(); missing.Remove(field); invalid.Add(missing);
+            var wrongType = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject(); wrongType[field] = null; invalid.Add(wrongType);
+        }
+        var nested = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject();
+        nested[channel == "ui" ? "bounds" : "position"] = System.Text.Json.Nodes.JsonNode.Parse(channel == "ui" ? "{\"w\":-1}" : "{\"z\":1}"); invalid.Add(nested);
+        await using var trace = new GuaTraceSession(Options()); var step = trace.BeginStep(GuaTraceStepKind.Assertion, "items");
+        string Tree(System.Text.Json.Nodes.JsonNode item) => channel == "ui"
+            ? $"{{\"schemaVersion\":2,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"screen\":\"s\",\"nodes\":[{item.ToJsonString()}]}}"
+            : $"{{\"schemaVersion\":1,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"scene\":\"s\",\"objects\":[{item.ToJsonString()}]}}";
+        foreach (var item in invalid) GuaTraceCapture.Tree(trace, step, channel, "game", "invalid", () => Tree(item));
+        GuaTraceCapture.Tree(trace, step, channel, "game", "valid", () => Tree(valid));
+        await trace.CompleteAsync(GuaTraceOutcome.Passed); var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Where(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "invalid")
+            .Select(e => e.Data.GetProperty("availability").GetString()), Is.All.EqualTo("failed"));
+        Assert.That(read.Events.Single(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "valid")
+            .Data.GetProperty("availability").GetString(), Is.EqualTo("available"));
+        Assert.That(read.Blobs.Count, Is.EqualTo(1));
+    }
+
+    [TestCase("player")]
+    [TestCase("debug")]
+    public async Task RemoteWorldCaptureRequiresAnAuthorizedGetter(string profile)
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, Profile = profile });
+        using var remote = new GuaWebSocketContext("ws://127.0.0.1:1", TimeSpan.FromMilliseconds(50));
+        var step = trace.BeginStep(GuaTraceStepKind.Assertion, "remote");
+        GuaTraceCapture.World(trace, step, remote, "remote", "capture");
+        await trace.CompleteAsync(GuaTraceOutcome.Passed); var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Single(e => e.Type == "observation").Data.GetProperty("availability").GetString(), Is.EqualTo("failed"));
+        Assert.That(read.Blobs, Is.Empty);
+    }
+
+    private sealed class FixedProfileWorld : IGuaWorldContext
+    {
+        public int Reads;
+        public string GetWorldObjectTreeJson(GuaObservationProfile profile = GuaObservationProfile.Debug)
+        { Reads++; return "{\"schemaVersion\":1,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"scene\":\"debug\",\"objects\":[]}"; }
+        public GuaWorldTree GetWorldObjectTree(GuaObservationProfile profile = GuaObservationProfile.Debug) => throw new NotSupportedException();
+        public GuaWorldQueryResult QueryWorldObjects(GuaWorldSelector selector, GuaObservationProfile profile = GuaObservationProfile.Debug) => throw new NotSupportedException();
+        public Task<GuaWorldObject> WaitForWorldObjectAsync(GuaWorldSelector selector, TimeSpan? timeout = null,
+            GuaObservationProfile profile = GuaObservationProfile.Debug, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    [Test]
+    public async Task FixedProfileWorldIsRejectedBeforeReadingEvenAValidTree()
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, Profile = "player" });
+        var context = new FixedProfileWorld(); var step = trace.BeginStep(GuaTraceStepKind.Assertion, "profile");
+        GuaTraceCapture.World(trace, step, context, "remote", "capture");
+        Assert.That(context.Reads, Is.Zero);
+        await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        Assert.That(GuaTraceReader.Read(trace.ArtifactPath).Blobs, Is.Empty);
+    }
+
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.OnFailure)]
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.Always)]
     [TestCase(GuaTraceCaptureMode.Streaming, GuaTraceSavePolicy.OnFailure)]

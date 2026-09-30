@@ -11,6 +11,27 @@ import fixture from "../../../protocol/fixtures/trace-observations.json";
 const ajv = new Ajv({ strict: false });
 ajv.addSchema(value); ajv.addSchema(observeSchema); ajv.addSchema(enumSchema); ajv.addSchema(transportSchema);
 const validate = ajv.compile(trace);
+test("decimal uint64 limits match native range including every boundary prefix", () => {
+  const check = ajv.compile({ $ref: `${trace.$id}#/$defs/uint64` });
+  const maximum = 18446744073709551615n;
+  for (let i = 0; i <= 20; i++) {
+    const value = maximum - (10n ** BigInt(i));
+    if (value >= 0n) expect(check(String(value))).toBe(true);
+  }
+  for (const valid of ["0", "00000000000000000000", String(maximum), "10000000000000000000"]) expect(check(valid)).toBe(true);
+  for (const invalid of [String(maximum + 1n), "99999999999999999999", "184467440737095516150", "-1", "1.0"]) expect(check(invalid)).toBe(false);
+});
+
+test("Observe host references require typed source and bounded decimal metadata", () => {
+  for (const [key, values] of Object.entries({ sourceId: [null, {}, ""], sessionEpoch: [{}, "0", "18446744073709551616"], revision: [[], 1, "99999999999999999999"], frame: [null, "-1"] })) {
+    for (const value of values) {
+      const data = { ...transition(fixture.transitions[1]!), host: { ...fixture.host, [key]: value } };
+      expect(validate(event("observation.change", data))).toBe(false);
+    }
+  }
+  expect(validate(event("observation.change", { ...transition(fixture.transitions[1]!),
+    host: { sourceId: "game", sessionEpoch: "18446744073709551615", revision: "0", frame: "0" } }))).toBe(true);
+});
 const event = (type: string, data: unknown) => ({ schemaVersion: 1, traceId: fixture.traceId, stepId: fixture.stepId,
   sequence: 1, eventId: "e1", collectedMilliseconds: 1, type, data });
 const uint64 = new Set(["sessionEpoch", "sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision", "ownerId", "registrationId"]);
@@ -75,7 +96,7 @@ test("Trace catalogs follow the Observe transport single-enum contract", () => {
 });
 test("Observe identities stay positive while publication counters may be zero", () => {
   for (const key of ["sessionEpoch", "ownerId", "registrationId"]) {
-    for (const invalid of ["0", "00", "00000000000000000000", "-1"]) {
+    for (const invalid of ["0", "00", "00000000000000000000", "-1", "18446744073709551616", "99999999999999999999"]) {
       const data = transition(fixture.transitions[1]!); data.received[key] = invalid;
       expect(validate(event("observation.change", data))).toBe(false);
     }

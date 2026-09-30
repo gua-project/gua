@@ -103,9 +103,12 @@ hostの認可は既存経路の責務であり、Traceのprofileで昇格しな�
 `GuaTraceCapture.Ui/World`は標準treeをprofileに従って別々に取得し、各epoch/frame/revisionと
 内容を分離する。`Tree`の公開getter overloadは呼出側が認可済みprofileを使う。
 UI/World/ObserveのsourceIdは取得元ごとに明記し、同時取得とは称さない。
+`World`のcontext overloadはprofileを選択できるローカル`GuaContext`のみ取得する。
+remote/custom contextはfailedとし、hostの認可済みprofileを確認した呼出側が
+`Tree`のgetter overloadを使う。Traceのprofile名だけでremote profileを保証しない。
 位置・bounds・公開fieldをbaseline用に除外しない。失敗はfailed、指定epochとの不一致はstale。
-TreeはUIのversion 2・screen・nodes、Worldのversion 1・scene・objectsというenvelopeを
-確認してからavailableにする。metadataだけの応答や配列でない結果はfailedでblobを作らず、
+TreeはUI Tree v2／World Object Tree v1のschemaで子要素を含めて
+検証してからavailableにする。metadataだけの応答や不正な要素はfailedでblobを作らず、
 正しいenvelopeの空配列は正常な空Treeとして保存する。
 getter例外本文は保存しない。検索partial/truncatedは汎用`Observe(..., "partial", ...)`で
 結果そのものとともに明記し、正常不在のabsentと混同しない。
@@ -117,6 +120,9 @@ schemaVersion 1の追加event dataとして旧readerも汎用JSON表示できる
 Observe transportと共通のbefore/after/value別single-enum catalog契約で検証する。
 受信ChangeのsessionEpoch・ownerId・registrationIdは正の十進文字列で、
 sequence・revision・UI/World frame等のカウンターは0を許す。
+十進uint64はUInt64.MaxValue以下に限り、外側hostもsourceId・epoch・revisionの型を検証する。
+NuGetの`trace/`にはTraceと参照先Observe transport・Observe・enum catalog・Value schemaを
+同梱する。offline validatorでは同梱schemaをそれぞれの`$id`で登録して使う。
 既存Observe APIの引数・binary signatureは保持する。Reader/Viewerはgap/stale/failed/partial/outsideRetentionを
 記録品質として示し、Viewerの前後比較は同一channel/source/epochの読取に限る。
 

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Json.Schema;
 using Gua.Core;
 
 namespace Gua.Testing;
@@ -63,6 +64,15 @@ internal sealed class GuaTraceAction
 
 public static class GuaTraceCapture
 {
+    private static readonly Lazy<JsonSchema> UiSchema = new(() => LoadSchema("UiTree"));
+    private static readonly Lazy<JsonSchema> WorldSchema = new(() => LoadSchema("WorldTree"));
+    private static JsonSchema LoadSchema(string name)
+    {
+        using var stream = typeof(GuaTraceCapture).Assembly.GetManifestResourceStream($"Gua.Trace.{name}.schema.json")!;
+        using var reader = new StreamReader(stream);
+        return JsonSchema.FromText(reader.ReadToEnd());
+    }
+
     public static string Ui(GuaTraceSession trace, string stepId, GuaContext context,
         string sourceId, string reason, string? expectedSessionEpoch = null) =>
         Tree(trace, stepId, "ui", sourceId, reason,
@@ -71,7 +81,9 @@ public static class GuaTraceCapture
     public static string World(GuaTraceSession trace, string stepId, IGuaWorldContext context,
         string sourceId, string reason, string? expectedSessionEpoch = null) =>
         Tree(trace, stepId, "world", sourceId, reason,
-            () => context.GetWorldObjectTreeJson(GuaTraceObservations.Profile(trace)), expectedSessionEpoch);
+            () => context is GuaContext local
+                ? local.GetWorldObjectTreeJson(GuaTraceObservations.Profile(trace))
+                : throw new InvalidOperationException("Use an authorized Tree getter for remote World capture."), expectedSessionEpoch);
 
     /// <summary>The getter must use the host-authorized profile. UI and World are separate
     /// reads, with independent host references. A failed read never becomes an empty tree.</summary>
@@ -82,16 +94,12 @@ public static class GuaTraceCapture
         {
             using var parsed = JsonDocument.Parse(getter());
             var root = parsed.RootElement;
-            var (version, name, items) = channel switch {
-                "ui" => (2, "screen", "nodes"),
-                "world" => (1, "scene", "objects"),
+            var schema = channel switch {
+                "ui" => UiSchema.Value,
+                "world" => WorldSchema.Value,
                 _ => throw new JsonException(),
             };
-            if (root.GetProperty("schemaVersion").GetInt32() != version ||
-                root.GetProperty("sessionEpoch").GetUInt64() == 0 ||
-                string.IsNullOrEmpty(root.GetProperty(name).GetString()) ||
-                root.GetProperty(items).ValueKind != JsonValueKind.Array ||
-                root.GetProperty(items).EnumerateArray().Any(item => item.ValueKind != JsonValueKind.Object))
+            if (!schema.Evaluate(root).IsValid || root.GetProperty("sessionEpoch").GetUInt64() == 0)
                 throw new JsonException();
             string Number(string key) => root.GetProperty(key).GetUInt64().ToString(System.Globalization.CultureInfo.InvariantCulture);
             var host = new GuaTraceHost(sourceId, Number("sessionEpoch"), Number("frameSequence"), Number("revision"));
