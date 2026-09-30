@@ -163,7 +163,11 @@ void result(const json& j) {
             if(initial=="indeterminate") require(o=="indeterminate",GUA_SPATIAL_SEMANTICS);
             if(o=="initialOverlap") require(initial=="detected",GUA_SPATIAL_SEMANTICS);
             if(o=="clear") require(initial=="notDetected"&&text(j.at("coverage"),"state")=="complete",GUA_SPATIAL_SEMANTICS);
-            if(has(j,"motion")) motion(j.at("motion"));
+            if(has(j,"motion")) {
+                motion(j.at("motion"));
+                if(o=="clear"&&text(j.at("motion"),"type")=="nativeBracket")
+                    require(num(j.at("motion").at("safeFraction"))==1&&num(j.at("motion").at("unsafeFraction"))==1,GUA_SPATIAL_SEMANTICS);
+            }
         }
     }
     if(o=="noHit"||o=="notDetected"||o=="clear") require(hits.items.empty()&&!truncated,GUA_SPATIAL_SEMANTICS);
@@ -243,6 +247,12 @@ int gua_spatial_check_result(const gua_spatial_document_t* r,const gua_spatial_d
         auto limit=has(a,"maxHits")?sequence(a.at("maxHits")):32;
         require(b.at("hits").items.size()<=static_cast<size_t>(limit),GUA_SPATIAL_SEMANTICS);
         if(has(b.at("sample"),"worldSnapshot")) require(sequence(b.at("sample").at("worldSnapshot").at("sessionEpoch"))==sequence(a.at("sessionEpoch")),GUA_SPATIAL_CONTEXT);
+        if(text(a,"kind")=="raycast") {
+            const auto& segment=a.at("segment"); auto from=vector(segment.at("from")),to=vector(segment.at("to"));
+            const double distance=length({to[0]-from[0],to[1]-from[1],to[2]-from[2]});
+            for(const auto& h:b.at("hits").items) if(has(h,"distance")) require(num(h.at("distance"))<=distance,GUA_SPATIAL_SEMANTICS);
+            return;
+        }
         if(text(a,"kind")!="sweep") return;
         const double distance=length(vector(a.at("delta")));
         if(distance==0) {

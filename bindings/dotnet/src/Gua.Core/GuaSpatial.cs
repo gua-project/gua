@@ -26,7 +26,9 @@ internal sealed class SpatialReferences : IDisposable
         bool added = false;
         try { handle.DangerousAddRef(ref added); }
         catch { if (added) handle.DangerousRelease(); throw; }
-        _handles.Add(handle); return handle.DangerousGetHandle();
+        try { _handles.Add(handle); }
+        catch { handle.DangerousRelease(); throw; }
+        return handle.DangerousGetHandle();
     }
     public void Dispose() { foreach (var handle in _handles) handle.DangerousRelease(); }
 }
@@ -34,7 +36,24 @@ internal sealed class SpatialReferences : IDisposable
 public sealed class GuaSpatialDocument : IDisposable
 {
     private readonly SpatialHandle _handle;
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+    // Used only AFTER native exact safe-integer validation. STJ's default long
+    // reader rejects integral JSON decimal/exponent notation (1.0 / 1e0).
+    private sealed class SafeLongConverter : JsonConverter<long>
+    {
+        public override long Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options) => checked((long)reader.GetDouble());
+        public override void Write(Utf8JsonWriter writer, long value, JsonSerializerOptions options) => writer.WriteNumberValue(value);
+    }
+    private sealed class SafeIntConverter : JsonConverter<int>
+    {
+        public override int Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options) => checked((int)reader.GetDouble());
+        public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options) => writer.WriteNumberValue(value);
+    }
+    private static readonly JsonSerializerOptions JsonOptions = Options();
+    private static JsonSerializerOptions Options()
+    {
+        var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+        options.Converters.Add(new SafeLongConverter()); options.Converters.Add(new SafeIntConverter()); return options;
+    }
     private GuaSpatialDocument(nint p) { _handle = new(p); }
     private static void Check(int status, Native.SpatialError error) { if (status != 0) throw new GuaSpatialException(error); }
     public static GuaSpatialDocument FromJson(GuaSpatialDocumentType type, string json)

@@ -110,6 +110,9 @@ otherwise fractions. Never convert an estimate to a rigorous safe bound, or
 require motion evidence to decide clear versus non-clear. Matched estimate
 distance cannot exceed delta length. Distance/fraction relations are native
 evidence, not recomputed. zeroLength is the separate overlap-only tag.
+clear with a nativeBracket requires both fractions to be 1; a native unsafe
+boundary partway through the delta contradicts clear. A ray hit distance is
+measured from the segment origin and cannot exceed its finite segment length.
 
 ## SP-06: version, ABI and .NET
 
@@ -137,6 +140,9 @@ Errors contain safe protocol paths, never submitted values/unknown keys.
 and native-validates an immutable document. Read methods return independent
 typed copies. net10.0 and netstandard2.1 delegate via P/Invoke, with gua or
 __Internal under GUA_STATIC_LINK. No second semantic implementation is added.
+Native-validated integral decimal/exponent metadata (1.0 / 1e0) is decoded into
+managed integers without precision loss. Typed authoring copies normalize
+number spelling while native JSON copy preserves original decimal lexemes.
 Status codes 1..7 map to Invalid/Version/Geometry/Context/Unsupported/Semantics/
 Internal. Validator Unsupported is distinct from an executed unsupported result.
 Nonfinite authoring doubles are rejected by System.Text.Json before native parse.

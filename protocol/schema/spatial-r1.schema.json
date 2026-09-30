@@ -1112,6 +1112,39 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "required": [
+              "motion"
+            ],
+            "properties": {
+              "outcome": {
+                "const": "clear"
+              },
+              "motion": {
+                "properties": {
+                  "type": {
+                    "const": "nativeBracket"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "motion": {
+                "properties": {
+                  "safeFraction": {
+                    "const": 1
+                  },
+                  "unsafeFraction": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },

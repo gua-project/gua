@@ -22,7 +22,21 @@ public sealed class SpatialTests
             GuaSpatialDocumentType.Request => GuaSpatialDocument.FromRequest(doc.ReadRequest()),
             GuaSpatialDocumentType.Result => GuaSpatialDocument.FromResult(doc.ReadResult()),
             _ => GuaSpatialDocument.FromProvider(doc.ReadProvider()) };
-        Assert.That(typed.ToJson(), Is.EqualTo(doc.ToJson()));
+        using var original = JsonDocument.Parse(doc.ToJson()); using var copied = JsonDocument.Parse(typed.ToJson());
+        SameFacts(original.RootElement, copied.RootElement);
+    }
+    private static void SameFacts(JsonElement left, JsonElement right)
+    {
+        Assert.That(right.ValueKind, Is.EqualTo(left.ValueKind));
+        if (left.ValueKind == JsonValueKind.Number) Assert.That(right.GetDouble(), Is.EqualTo(left.GetDouble()));
+        else if (left.ValueKind == JsonValueKind.Object) {
+            Assert.That(right.EnumerateObject().Count(), Is.EqualTo(left.EnumerateObject().Count()));
+            foreach (var field in left.EnumerateObject()) SameFacts(field.Value, right.GetProperty(field.Name));
+        } else if (left.ValueKind == JsonValueKind.Array) {
+            Assert.That(right.GetArrayLength(), Is.EqualTo(left.GetArrayLength()));
+            for (int i = 0; i < left.GetArrayLength(); ++i) SameFacts(left[i], right[i]);
+        } else if (left.ValueKind == JsonValueKind.String) Assert.That(right.GetString(), Is.EqualTo(left.GetString()));
+        else Assert.That(right.GetRawText(), Is.EqualTo(left.GetRawText()));
     }
     [TestCaseSource(nameof(Invalid))]
     public void Reject(JsonElement c)
