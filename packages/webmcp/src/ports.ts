@@ -65,13 +65,14 @@ export function createGuaInPageBridge(port: GuaInPagePort, options: GuaInPageBri
   if (options.observe ?? port.capabilities?.includes("observe_v1")) {
     const subscriptions = new Map<number, { port: GuaInPagePort; remoteId: number }>(); let generation = 0, nextHandle = 1;
     const currentPort = () => portResolvers.get(port)?.() ?? port;
+    const isCurrentPort = (owner: GuaInPagePort) => { try { return owner === currentPort(); } catch { return false; } };
     bridge.getObserveSnapshot = async options => parseObserveTransport(await invoke(port, { type: "get_observe_snapshot" }, options), "snapshot");
     bridge.subscribeObservations = async options => {
       const started = generation;
       const ownerPort = currentPort();
       const result = await invoke(ownerPort, { type: "subscribe_observations" }, options) as ObserveSubscription;
       const remoteId = observeSubscriptionId(result.subscriptionId);
-      if (started !== generation || options?.signal?.aborted || ownerPort !== currentPort()) {
+      if (started !== generation || options?.signal?.aborted || !isCurrentPort(ownerPort)) {
         await invoke(ownerPort, { type: "unsubscribe_observations", subscriptionId: remoteId });
         throw new GuaWebError("aborted", "Observation registration ended.");
       }
@@ -81,7 +82,7 @@ export function createGuaInPageBridge(port: GuaInPagePort, options: GuaInPageBri
     };
     bridge.pollObservations = async (subscriptionId, options) => {
       const owner = subscriptions.get(observeSubscriptionId(subscriptionId));
-      if (!owner || owner.port !== currentPort()) throw new GuaWebError("invalid_request", "Observe subscription belongs to an inactive connection.");
+      if (!owner || !isCurrentPort(owner.port)) throw new GuaWebError("invalid_request", "Observe subscription belongs to an inactive connection.");
       return parseObserveTransport(await invoke(owner.port, { type: "poll_observations", subscriptionId: owner.remoteId }, options), "changes");
     };
     bridge.unsubscribeObservations = async (subscriptionId, options) => {

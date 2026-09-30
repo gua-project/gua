@@ -2,6 +2,21 @@ import { expect, test } from "bun:test";
 import { createGodotWebBridge, createUnityWebGlBridge, createGuaInPageBridge, registerGuaWebMcp, type GuaInPagePort } from "../src/index";
 const snapshot = { document: {schemaVersion: 1, sourceId: "page", sessionEpoch: 1, profile: "player", sequence: 0, revision: 0, uiFrame: 0, uiRevision: 0, worldFrame: 0, worldRevision: 0, kind: "snapshot", entries: []}, catalogs: [] };
 for (const create of [createGodotWebBridge, createUnityWebGlBridge]) {
+  test(`${create.name} releases a late subscription when its global port disappears`, async () => {
+    const name="__guaObserveLateDetachTest", released:number[]=[];
+    let finish!:(value:unknown)=>void;
+    const port:GuaInPagePort={capabilities:["observe_v1"],invoke:async command=> {
+      if(command.type==="subscribe_observations") return await new Promise(resolve=>{finish=resolve;});
+      if(command.type==="unsubscribe_observations") released.push(command.subscriptionId);
+      return null;
+    }};
+    const globals=globalThis as Record<string,unknown>; globals[name]=port;
+    const bridge=create(name,{observe:true});
+    try {
+      const pending=bridge.subscribeObservations!();delete globals[name];finish({subscriptionId:7,snapshot});
+      await expect(pending).rejects.toThrow();expect(released).toEqual([7]);
+    } finally {await bridge.disposeObservations!();delete globals[name];}
+  });
   test(`${create.name} keeps reused subscription IDs bound to their original engine port`, async () => {
     const name="__guaObserveReplacementTest", calls:number[]=[];
     const port=(generation:number):GuaInPagePort=>({capabilities:["observe_v1"],invoke:async command=> {
