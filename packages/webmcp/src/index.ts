@@ -241,6 +241,7 @@ export async function registerGuaWebMcp(
     }
   } catch (error) {
     controller.abort();
+    try { await bridge.disposeObservations?.(); } catch { /* Preserve the registration error. */ }
     const message = error instanceof Error ? error.message : "The browser rejected WebMCP tool registration.";
     return {
       supported: false,

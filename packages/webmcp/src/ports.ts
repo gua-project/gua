@@ -83,7 +83,20 @@ export function createGuaInPageBridge(port: GuaInPagePort, options: GuaInPageBri
     bridge.pollObservations = async (subscriptionId, options) => {
       const owner = subscriptions.get(observeSubscriptionId(subscriptionId));
       if (!owner || !isCurrentPort(owner.port)) throw new GuaWebError("invalid_request", "Observe subscription belongs to an inactive connection.");
-      return parseObserveTransport(await invoke(owner.port, { type: "poll_observations", subscriptionId: owner.remoteId }, options), "changes");
+      let invalidated = false;
+      const invalidate = () => {
+        if (invalidated) return;
+        invalidated = true; subscriptions.delete(subscriptionId);
+        void invoke(owner.port, { type: "unsubscribe_observations", subscriptionId: owner.remoteId }).catch(() => undefined);
+      };
+      options?.signal?.addEventListener("abort", invalidate, {once: true});
+      try {
+        if (options?.signal?.aborted) { invalidate(); throw new GuaWebError("aborted", "Observation poll ended."); }
+        const result = await invoke(owner.port, { type: "poll_observations", subscriptionId: owner.remoteId }, options);
+        if (invalidated) throw new GuaWebError("aborted", "Observation poll ended.");
+        return parseObserveTransport(result, "changes");
+      } catch (error) { invalidate(); throw error; }
+      finally { options?.signal?.removeEventListener("abort", invalidate); }
     };
     bridge.unsubscribeObservations = async (subscriptionId, options) => {
       const owner = subscriptions.get(observeSubscriptionId(subscriptionId));

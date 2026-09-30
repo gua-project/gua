@@ -2,6 +2,37 @@ import { expect, test } from "bun:test";
 import { WebSocketInspectorClient } from "../../inspector/src/core";
 import { GuaBridgeClient } from "../../mcp/src/index";
 const envelope = {document:{schemaVersion:1,sourceId:"wire",sessionEpoch:1,profile:"debug",sequence:0,revision:0,uiFrame:0,uiRevision:0,worldFrame:0,worldRevision:0,kind:"snapshot",entries:[{ownerId:1,registrationId:1,source:"object",runtimeId:"enemy",name:"phase",status:"available",value:{type:"integer",value:1}}]},catalogs:[{}]};
+for (const mode of ["inspector-timeout","mcp-timeout","mcp-cancel","inspector-malformed","mcp-malformed"] as const) {
+  test(`${mode} invalidates the owning cursor after an unacknowledged poll`, async () => {
+    const peers=new Set<any>();let consumed=0;
+    let accepted!:(value:unknown)=>void;const polled=new Promise(resolve=>{accepted=resolve;});
+    const server=Bun.serve({port:0,fetch(request,server){return server.upgrade(request)?undefined:new Response(null,{status:400});},websocket:{
+      open(ws){peers.add(ws);},close(ws){peers.delete(ws);},
+      message(ws,data){
+        const command=JSON.parse(String(data));
+        if(command.type==="poll_observations") {
+          consumed++;accepted(null);
+          if(mode.endsWith("malformed")) ws.send(JSON.stringify({id:command.id,ok:true,result:{document:{...envelope.document,kind:"changes",entries:undefined,events:[],status:"ok"},catalogs:[],unknown:1}}));
+          return;
+        }
+        ws.send(JSON.stringify({id:command.id,ok:true,result:command.type==="get_version"?{capabilities:["observe_v1"]}:{subscriptionId:1,snapshot:envelope}}));
+      }
+    }});
+    const url=`ws://127.0.0.1:${server.port}`, inspector=new WebSocketInspectorClient(url,40),mcp=new GuaBridgeClient(url,mode==="mcp-cancel"?1000:40);
+    const isInspector=mode.startsWith("inspector");
+    try {
+      const sub=await (isInspector?inspector.subscribeObservations():mcp.observeCommand("subscribe_observations")) as {subscriptionId:number};
+      const controller=new AbortController();
+      const pending=isInspector?inspector.pollObservations(sub.subscriptionId):mcp.observeCommand("poll_observations",sub.subscriptionId,controller.signal);
+      if(mode==="mcp-cancel"){await polled;controller.abort();}
+      await expect(pending).rejects.toThrow();
+      for(let i=0;i<100&&peers.size;i++) await Bun.sleep(5);
+      expect(consumed).toBe(1);expect(peers.size).toBe(0);
+      await expect(isInspector?inspector.pollObservations(sub.subscriptionId):mcp.observeCommand("poll_observations",sub.subscriptionId)).rejects.toThrow("inactive connection");
+      expect(consumed).toBe(1);
+    }finally{inspector.close();mcp.close();for(const ws of peers)ws.close();server.stop(true);}
+  });
+}
 test("Inspector ignores delayed close/error events from a timed-out Observe socket", async () => {
   const original=globalThis.WebSocket, sockets:ControlledSocket[]=[];
   class ControlledSocket extends EventTarget {

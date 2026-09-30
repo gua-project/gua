@@ -1,6 +1,50 @@
 import { expect, test } from "bun:test";
 import { createGodotWebBridge, createUnityWebGlBridge, createGuaInPageBridge, registerGuaWebMcp, type GuaInPagePort } from "../src/index";
 const snapshot = { document: {schemaVersion: 1, sourceId: "page", sessionEpoch: 1, profile: "player", sequence: 0, revision: 0, uiFrame: 0, uiRevision: 0, worldFrame: 0, worldRevision: 0, kind: "snapshot", entries: []}, catalogs: [] };
+for (const mode of ["timeout","cancel"] as const) {
+  test(`same-page poll ${mode} invalidates the consumed cursor immediately`, async () => {
+    const {entries,...metadata}=snapshot.document;
+    const changes={document:{...metadata,kind:"changes",status:"ok",events:[]},catalogs:[]};
+    let polls=0, released=0, finish!:(value:unknown)=>void, accepted!:()=>void;
+    const polled=new Promise<void>(resolve=>{accepted=resolve;});
+    const port:GuaInPagePort={capabilities:["observe_v1"],invoke:async command=> {
+      if(command.type==="subscribe_observations") return {subscriptionId:1,snapshot};
+      if(command.type==="unsubscribe_observations") {released++;return null;}
+      if(command.type==="poll_observations" && ++polls===1) {accepted();return await new Promise(resolve=>{finish=resolve;});}
+      return changes;
+    }};
+    const bridge=createGuaInPageBridge(port), tools=new Map<string,any>();
+    const document={modelContext:{registerTool:(tool:any)=>tools.set(tool.name,tool)}} as unknown as Document;
+    const registration=await registerGuaWebMcp(bridge,{document,defaultTimeoutMs:mode==="timeout"?10:1000});
+    try {
+      const sub=await bridge.subscribeObservations!();const controller=new AbortController();
+      const pending=tools.get("poll_observations").execute({subscriptionId:sub.subscriptionId},{signal:controller.signal});
+      if(mode==="cancel"){await polled;controller.abort();}
+      expect((await pending).isError).toBe(true);
+      await expect(bridge.pollObservations!(sub.subscriptionId)).rejects.toThrow("inactive connection");
+      expect(polls).toBe(1);expect(released).toBe(1);
+      finish(changes);await Bun.sleep(0);expect(released).toBe(1);
+    } finally {finish?.(changes);registration.unregister();await bridge.disposeObservations!();}
+  });
+}
+test("partial tool registration failure releases observations before returning", async () => {
+  const cursors=new Set<number>();
+  const port:GuaInPagePort={capabilities:["observe_v1"],invoke:async command=> {
+    if(command.type==="subscribe_observations") {cursors.add(1);return {subscriptionId:1,snapshot};}
+    if(command.type==="unsubscribe_observations") cursors.delete(command.subscriptionId);
+    return null;
+  }};
+  const document={modelContext:{registerTool:async(tool:any)=> {
+    if(tool.name==="subscribe_observations") await tool.execute({});
+    if(tool.name==="poll_observations") throw new Error("registration rejected");
+  }}} as unknown as Document;
+  const bridge=createGuaInPageBridge(port);
+  try {
+    const registration=await registerGuaWebMcp(bridge,{document});
+    expect(registration.supported).toBe(false);expect(registration.error?.message).toBe("registration rejected");
+    expect(cursors.size).toBe(0);
+  } finally {await bridge.disposeObservations!();}
+});
 for (const create of [createGodotWebBridge, createUnityWebGlBridge]) {
   test(`${create.name} releases a late subscription when its global port disappears`, async () => {
     const name="__guaObserveLateDetachTest", released:number[]=[];

@@ -25,8 +25,19 @@ public sealed partial class GuaWebSocketContext
             throw;
         }
     }
-    internal string PollObservations(ulong subscription, long generation) =>
-        Raw(new { type = "poll_observations", subscriptionId = subscription }, observeGeneration: generation);
+    internal string PollObservations(ulong subscription, long generation)
+    {
+        try { return Raw(new { type = "poll_observations", subscriptionId = subscription }, observeGeneration: generation); }
+        catch (RemoteCommandRejectedException) { throw; }
+        catch {
+            // Poll may have advanced the cursor. Never retry an unknown result.
+            requestGate.Wait();
+            try {
+                if (connectionGeneration == generation) { socket?.Dispose(); socket = null; bufferedActionEvents.Clear(); }
+            } finally { requestGate.Release(); }
+            throw;
+        }
+    }
     internal void UnsubscribeObservations(ulong subscription, long generation) =>
         Raw(new { type = "unsubscribe_observations", subscriptionId = subscription }, observeGeneration: generation, ignoreStaleObserve: true);
 }

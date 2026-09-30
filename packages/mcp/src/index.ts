@@ -1216,7 +1216,7 @@ export class GuaBridgeClient {
         this.pending.delete(id);
         signal?.removeEventListener("abort", aborted);
         reject(new Error(`Timed out waiting for Gua bridge command: ${command.type}`));
-        if (command.type === "subscribe_observations") socket.close();
+        if (command.type === "subscribe_observations" || command.type === "poll_observations") socket.close();
       }, remainingTimeoutMs);
 
       const aborted = () => {
@@ -1226,7 +1226,7 @@ export class GuaBridgeClient {
         this.pending.delete(id);
         signal?.removeEventListener("abort", aborted);
         reject(new RpcFailure(-32800, "MCP request was cancelled."));
-        if (command.type === "subscribe_observations") socket.close();
+        if (command.type === "subscribe_observations" || command.type === "poll_observations") socket.close();
       };
 
       this.pending.set(id, {
@@ -1383,7 +1383,7 @@ export class GuaBridgeClient {
       try { pending.resolve(decodeObserveWireResponse(data, response.id, pending.observeOperation)); }
       catch (error) {
         pending.reject(error instanceof ObserveWireRejectionError ? error : new Error("Invalid Observe transport response."));
-        if (pending.observeOperation === "subscribe_observations" && !(error instanceof ObserveWireRejectionError)) ownerSocket.close();
+        if ((pending.observeOperation === "subscribe_observations" || pending.observeOperation === "poll_observations") && !(error instanceof ObserveWireRejectionError)) ownerSocket.close();
       }
     } else if (response.ok) {
       pending.resolve(response.result);

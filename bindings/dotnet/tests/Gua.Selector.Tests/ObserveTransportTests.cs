@@ -181,6 +181,42 @@ public sealed class ObserveTransportTests
         await host;
     }
     [Test]
+    public async Task CorruptPollReplyInvalidatesItsOwnerAndDoesNotSilentlySkipConsumedEvents()
+    {
+        using var runtime = new GuaRuntime(); using var owner = runtime.CreateObserveOwner(GuaObserveSource.World);
+        int value = 0; using var item = owner.Property("phase", () => GuaValue.Integer(value)); item.Notify();
+        int port = Port(); using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        var host = Task.Run(async () => {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var connection = await listener.GetContextAsync(); using var socket = (await connection.AcceptWebSocketAsync(null)).WebSocket;
+            using var client = runtime.CreateObserveClient(); int polls = 0;
+            try {
+                while (true) {
+                    byte[] bytes = new byte[65536]; var frame = await socket.ReceiveAsync(bytes.AsMemory(), timeout.Token);
+                    if (frame.MessageType == WebSocketMessageType.Close) return;
+                    var request = Parse(Encoding.UTF8.GetString(bytes, 0, frame.Count));
+                    string result;
+                    if (request.GetProperty("type").GetString() == "get_version") result = runtime.GetVersionJson();
+                    else if (request.GetProperty("type").GetString() == "subscribe_observations") result = client.CommandJson(2);
+                    else {
+                        polls++; if (polls == 1) { value = 1; item.Notify(); }
+                        result = client.CommandJson(3, request.GetProperty("subscriptionId").GetUInt64());
+                        Assert.That(Document(result).GetProperty("events").GetArrayLength(), Is.EqualTo(polls == 1 ? 1 : 0));
+                    }
+                    string reply = polls == 1 ? $"{{\"id\":{request.GetProperty("id")},\"ok\":true,\"result\":" : $"{{\"id\":{request.GetProperty("id")},\"ok\":true,\"result\":{result}}}";
+                    await socket.SendAsync(Encoding.UTF8.GetBytes(reply).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+                }
+            } catch (WebSocketException) { /* Owner socket was disposed without a close handshake. */ }
+        });
+        using var remote = new GuaWebSocketContext($"ws://127.0.0.1:{port}/", TimeSpan.FromSeconds(1));
+        using var subscription = remote.SubscribeObservations();
+        try {
+            Assert.Catch<JsonException>(() => subscription.PollJson());
+            Assert.Throws<InvalidOperationException>(() => subscription.PollJson());
+            Assert.DoesNotThrow(subscription.Dispose);
+        } finally { remote.Dispose(); await host; }
+    }
+    [Test]
     public void TransportClientsCannotExceedCurrentHostProfile()
     {
         using var runtime = new GuaRuntime();

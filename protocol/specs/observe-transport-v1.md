@@ -22,6 +22,9 @@ transport clientの作成時もhostの上限を適用する。hostがDebugから
 既存Debug clientの全commandを失効として拒否し、その購読を解放する。
 購読上限は一接続64。未知・他接続のsubscriptionIdは安全な固定エラーとする。
 subscribeの応答喪失・不正な成功応答・timeout・cancelでIDが不明な場合は、所有接続を閉じて購読を回収する。
+pollの応答喪失・不正応答・timeout・cancelでも、cursorが進んだか確認できないため所有接続を閉じる。
+同じ購読の再試行で空の成功として扱わず、新しいSnapshotと購読から再開する。
+same-page portでは失効したhandleを即座に拒否し、所有portでその購読を解除する。
 再接続は可能だが既存tokenは復元しない。明示的なサーバー拒否では既存購読を維持する。
 古い接続のtokenはpollを拒否し、Disposeは新しい接続へunsubscribeを送らない。
 Inspector/MCP/WebMCPが返すsubscriptionIdはclient内の再利用しないhandleである。
