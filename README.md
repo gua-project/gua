@@ -155,6 +155,7 @@ for installation and verification details.
 - **Gua.Testing.Visual:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Visual)](https://www.nuget.org/packages/Gua.Testing.Visual) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Visual)<br>
   Adds opt-in PNG baseline comparison for rendering regressions that semantic assertions cannot detect, such as clipping, misplaced controls, incorrect assets, and unexpected overlays. Failures retain expected, actual, diff, and machine-readable comparison artifacts.
   `gua-tester` can combine those artifacts with its prebuilt Astro viewer for workflow artifacts and GitHub Pages.
+- **[Gua.Testing.Snapshots](bindings/dotnet/src/Gua.Testing.Snapshots/README.md):** Opt-in deterministic UI and optional World JSON baselines with semantic differences, explicit approval and caller-configured masking.
 - **Gua.Testing.Recording:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Recording)](https://www.nuget.org/packages/Gua.Testing.Recording) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Recording)<br>
   Records repeatable user journeys as semantic operations and replays every step with correlated host completion. Use it for regression flows, bug reproduction, and sharing a scenario without storing fragile coordinates or plaintext secrets.
 
@@ -503,6 +504,7 @@ dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration R
 dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release
+dotnet pack bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release
 ```
 

@@ -188,6 +188,7 @@ Gua v1.0.4以降には、Linux／macOS platformで必要なcross-platform UPM na
   エンジンアダプター開発者向けの共有マネージドラッパーと、同じ4つのdesktop RID用ネイティブランタイムです。P/Invokeを重複実装せず、Semantic frameの公開、actionの処理、スクリーンショット要求の完了、Inspectorブリッジのホストに利用できます。通常のゲームテストでは各エンジン向けパッケージを使用します。
 - **Gua.Testing.Visual:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Visual)](https://www.nuget.org/packages/Gua.Testing.Visual) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Visual)<br>
   Semantic assertionでは検出できないclipping、Controlの位置ずれ、asset間違い、予期しないoverlayなどの描画regressionをPNG baseline比較で検出します。失敗時はexpected、actual、diff、機械可読な比較結果を保存します。
+- **[Gua.Testing.Snapshots](bindings/dotnet/src/Gua.Testing.Snapshots/README.md):** UI と任意の World の deterministic JSON baseline を比較。意味構造の差分、明示更新、利用者が指定する mask/ignore に対応します。
 - **Gua.Testing.Recording:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Recording)](https://www.nuget.org/packages/Gua.Testing.Recording) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Recording)<br>
   再現可能なユーザーフローをSemantic操作として記録し、各stepをホスト側の完了と相関確認しながら再生します。壊れやすい座標や秘密値の平文を保存せず、regression flow、bug再現、scenario共有に利用できます。
 
@@ -363,6 +364,7 @@ dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration R
 dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release
+dotnet pack bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release
 ```
 
