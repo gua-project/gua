@@ -86,6 +86,7 @@ public sealed partial class GuaWebSocketContext : IGuaContext, IGuaClockContext,
     private static Dictionary<string, object> ClockCommand(string type, string valueName, double value, TimeSpan? step)
     { var command = new Dictionary<string, object> { ["type"] = type, [valueName] = value }; if (step.HasValue) command["stepMs"] = step.Value.TotalMilliseconds; return command; }
     public string GetDiagnosticsJson() => Raw(new { type = "get_diagnostics" });
+    public GuaSemanticLintReport AnalyzeSemanticLint(bool includeWorld = true) => GuaSemanticLintReport.Parse(Raw(new { type = "semantic_lint", includeWorld }));
     public GuaVersion GetVersion() => GuaVersion.Parse(Raw(new { type = "get_version" }));
     public string GetScreenshotJson() => Raw(new { type = "get_screenshot" });
     public GuaCapturedScreenshot CaptureScreenshot(TimeSpan timeout, ulong? afterFrameSequence = null)

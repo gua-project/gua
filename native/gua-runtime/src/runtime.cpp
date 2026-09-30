@@ -1,4 +1,5 @@
 #include "gua/runtime.h"
+#include "gua/semantic_lint.h"
 
 #if GUA_RUNTIME_WITH_WS
 #include "gua/ws_bridge.hpp"
@@ -1654,6 +1655,18 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
         },
         .get_diagnostics_json = [runtime] {
             return copy_diagnostics_json(runtime);
+        },
+        .semantic_lint = [runtime](bool include_world) {
+            const std::lock_guard lock(runtime->context_mutex);
+            const gua_semantic_lint_options_v1_t options {sizeof(options), runtime->observation_profile, include_world ? 1 : 0};
+            gua_semantic_lint_report_t* raw = nullptr;
+            if (gua_semantic_lint_analyze(runtime->context, &options, &raw)) return gua::ws::CommandResult {false, {}, "semantic_lint_failed"};
+            const std::unique_ptr<gua_semantic_lint_report_t, decltype(&gua_semantic_lint_report_destroy)> report(raw, gua_semantic_lint_report_destroy);
+            const int size = gua_semantic_lint_report_copy_json(raw, nullptr, 0);
+            if (size <= 0) return gua::ws::CommandResult {false, {}, "semantic_lint_failed"};
+            std::string json(static_cast<size_t>(size), '\0');
+            gua_semantic_lint_report_copy_json(raw, json.data(), size); json.pop_back();
+            return gua::ws::CommandResult {true, std::move(json), {}};
         },
         .get_version_json = [runtime] {
             return copy_version_json(runtime);

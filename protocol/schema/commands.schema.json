@@ -3,6 +3,7 @@
   "$id": "https://gua.dev/schema/commands.schema.json",
   "title": "Gua Command",
   "oneOf": [
+    { "$ref": "#/$defs/semanticLint" },
     { "$ref": "#/$defs/getUiTree" },
     { "$ref": "#/$defs/getWorldObjectTree" },
     { "$ref": "#/$defs/queryWorldObjects" },
@@ -26,6 +27,10 @@
     { "$ref": "#/$defs/simpleCommand" }
   ],
   "$defs": {
+    "semanticLint": {
+      "type": "object", "required": ["type"], "additionalProperties": false,
+      "properties": { "type": { "const": "semantic_lint" }, "includeWorld": { "type": "boolean" } }
+    },
     "getUiTree": {
       "type": "object",
       "required": ["type"],

@@ -837,7 +837,7 @@ Command parse_command(std::string_view json)
     // Observe validates the full request and its safe-width ID in handle_command.
     // Do not first narrow it through the legacy std::stoi parser.
     if (command.type == "get_observe_snapshot" || command.type == "subscribe_observations" ||
-        command.type == "poll_observations" || command.type == "unsubscribe_observations") return command;
+        command.type == "poll_observations" || command.type == "unsubscribe_observations" || command.type == "semantic_lint") return command;
     command.id = json_int_field(json, "id").value_or(0);
     command.node_id = json_string_field(json, "nodeId").value_or("");
     command.key = json_string_field(json, "key").value_or("");
@@ -1317,6 +1317,29 @@ private:
                 if(!handlers_.observe_command || !observe_client_id) return error_response(response_id,"unsupported");
                 auto result=handlers_.observe_command(observe_client_id,operation,subscription);
                 return result.ok ? ok_response(response_id,result.json) : error_response(response_id,result.error);
+            }
+            if (command.type == "semantic_lint") {
+                using namespace gua_value_detail;
+                int response_id = 0;
+                bool include_world = true;
+                try {
+                    const auto request = parser(message).parse();
+                    if (request.type != json::object) return error_response(0, "invalid_request");
+                    const auto& id = request.at("id");
+                    if (id.type != json::number) return error_response(0, "invalid_request");
+                    const auto number = integer(id.text, "$.id");
+                    if (number <= 0 || number > std::numeric_limits<int>::max()) return error_response(0, "invalid_request");
+                    response_id = static_cast<int>(number);
+                    for (const auto& [key, value] : request.fields) {
+                        if (key == "id") continue;
+                        if (key == "type" && value.type == json::string && value.text == "semantic_lint") continue;
+                        if (key == "includeWorld" && value.type == json::boolean) { include_world = value.text == "true"; continue; }
+                        return error_response(response_id, "invalid_request");
+                    }
+                } catch (...) { return error_response(response_id, "invalid_request"); }
+                if (!handlers_.semantic_lint) return error_response(response_id, "semantic_lint is not supported by this bridge");
+                const auto result = handlers_.semantic_lint(include_world);
+                return result.ok ? ok_response(response_id, result.json) : error_response(response_id, result.error);
             }
             if (command.type == "get_ui_tree") {
                 return ok_response(command.id, handlers_.get_ui_tree_json());

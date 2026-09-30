@@ -1,6 +1,7 @@
 add_library(gua-core
     src/gua.cpp
     src/value.cpp
+    src/semantic_lint.cpp
 )
 
 add_library(gua::core ALIAS gua-core)
@@ -8,6 +9,7 @@ add_library(gua::core ALIAS gua-core)
 add_library(gua SHARED
     src/gua.cpp
     src/value.cpp
+    src/semantic_lint.cpp
 )
 
 add_library(gua::shared ALIAS gua)
@@ -73,6 +75,15 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(gua-semantic-lint-tests tests/semantic_lint_tests.cpp)
+    target_link_libraries(gua-semantic-lint-tests PRIVATE gua-core)
+    target_compile_definitions(gua-semantic-lint-tests PRIVATE GUA_LINT_FIXTURE="${PROJECT_SOURCE_DIR}/protocol/fixtures/semantic-lint-v1.json")
+    target_compile_options(gua-semantic-lint-tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+    add_test(NAME gua-semantic-lint-tests COMMAND gua-semantic-lint-tests)
+    add_executable(gua-semantic-lint-c-tests tests/semantic_lint_c_tests.c)
+    target_link_libraries(gua-semantic-lint-c-tests PRIVATE gua)
+    target_compile_options(gua-semantic-lint-c-tests PRIVATE $<$<C_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<C_COMPILER_ID:MSVC>>:-UNDEBUG>)
+    add_test(NAME gua-semantic-lint-c-tests COMMAND gua-semantic-lint-c-tests)
     add_executable(gua-value-c-tests tests/value_c_tests.c)
     target_link_libraries(gua-value-c-tests PRIVATE gua)
     target_compile_options(gua-value-c-tests PRIVATE $<$<C_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<C_COMPILER_ID:MSVC>>:-UNDEBUG>)
