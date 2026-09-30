@@ -5,6 +5,14 @@ namespace Gua.Selector.Tests;
 public class SemanticLintTests
 {
     [Test]
+    public void SelectionOrderKeepsFullInt64Precision() {
+        using var context = new GuaContext();
+        context.BeginFrame("fixture");
+        context.RegisterNode(new("input", "textbox", "Input", new(0,0,1,1), SelectionStart:9007199254740993, SelectionEnd:9007199254740992));
+        context.EndFrame();
+        Assert.That(GuaSemanticLinter.Analyze(context).Findings.Select(f => f.RuleId), Does.Contain("selection-order"));
+    }
+    [Test]
     public void SharedFixturesUseNativeRulesAndTypedReports() {
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(TestContext.CurrentContext.TestDirectory, "semantic-lint-v1.json")));
         foreach (var fixture in document.RootElement.GetProperty("cases").EnumerateArray()) {

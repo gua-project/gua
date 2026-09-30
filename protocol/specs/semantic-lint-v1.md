@@ -13,8 +13,11 @@ valid, including before the first frame. Reports are immutable and caller-owned.
 `gua_semantic_lint_analyze_snapshots` supports stored published snapshots and
 fixtures from external publishers. It never publishes, projects, or accepts host
 descriptors. The caller must supply the already projected source snapshots and
-their actual profile. Paired snapshots must share a sessionEpoch. Native World
-publication already rejects duplicate IDs, dangling parents and cycles; those
+their actual profile. Paired snapshots must share a sessionEpoch.
+Metadata uses the native unsigned 64-bit range. Integral decimal and exponent
+representations are accepted and normalized without rounding; selection indices
+are also compared exactly rather than converted to double.
+Native World publication already rejects duplicate IDs, dangling parents and cycles; those
 rules also cover stored observations without weakening publication validation.
 
 The WebSocket command is `{ "id": 1, "type": "semantic_lint",

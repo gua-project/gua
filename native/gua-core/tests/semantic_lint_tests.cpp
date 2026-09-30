@@ -42,6 +42,12 @@ int main() {
         }
     }
     gua::Context context; auto* ctx = context.native_handle();
+    const auto exact = gua::SemanticLinter::analyze_snapshots(R"({"schemaVersion":2.0,"sessionEpoch":1e0,"frameSequence":7e0,"revision":4.0,"screen":"fixture","nodes":[{"id":"exact","role":"textbox","label":"Input","actions":[],"state":{"selectionStart":9007199254740993,"selectionEnd":9007199254740992}}]})");
+    assert(exact.json().find("selection-order") != std::string::npos);
+    assert(exact.json().find("\"sessionEpoch\":1,") != std::string::npos);
+    assert(gua::SemanticLinter::analyze_snapshots(R"({"schemaVersion":2,"sessionEpoch":1,"frameSequence":0,"revision":0,"screen":"fixture","nodes":[{"id":"fraction","role":"list","label":"List","actions":[],"state":{"selectedIndex":0.99999999999999999}}]})").json().find("selection-index") != std::string::npos);
+    assert(gua::SemanticLinter::analyze_snapshots(R"({"schemaVersion":2,"sessionEpoch":1.0,"frameSequence":0,"revision":0,"screen":"fixture","nodes":[]})",
+        R"({"schemaVersion":1,"sessionEpoch":1e0,"frameSequence":0,"revision":0,"scene":"fixture","objects":[]})").json().find("\"total\":0") != std::string::npos);
     assert(parser(analyze(ctx, 0)).parse().at("findings").items.empty());
     gua_begin_frame(ctx, "published");
     gua_register_node(ctx, "safe", "button", "Safe", {0,0,1,1}, 1, 1);
