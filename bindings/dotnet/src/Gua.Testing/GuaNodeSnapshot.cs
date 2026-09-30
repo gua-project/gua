@@ -45,4 +45,8 @@ public sealed record GuaNodeSnapshot(
     double? RangeMax = null,
     long? SelectedIndex = null,
     GuaBoundsKnownState KnownBounds = GuaBoundsKnownState.All,
-    bool HasLabel = true);
+    bool HasLabel = true)
+{
+    /// <summary>Whether the tree published value, including an explicit null.</summary>
+    public bool HasValue { get; init; } = Value is not null;
+}

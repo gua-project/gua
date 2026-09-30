@@ -227,20 +227,30 @@ public static partial class GuaAssertions
         long? StateInt64(string name) => hasState && state.TryGetProperty(name, out var value) ? value.GetInt64() : null;
         double? StateDouble(string name) => hasState && state.TryGetProperty(name, out var value) ? value.GetDouble() : null;
         string? NodeString(string name) => node.TryGetProperty(name, out var value) ? value.GetString() : null;
+        string? NodeValue() => node.TryGetProperty("value", out var value) ? value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.GetRawText(),
+            JsonValueKind.Null => null,
+            _ => throw new JsonException("Gua node property 'value' must be a scalar value."),
+        } : null;
         return new GuaNodeSnapshot(
             node.GetProperty("id").GetString() ?? string.Empty,
             node.GetProperty("role").GetString() ?? string.Empty,
             NodeString("label") ?? string.Empty,
             new GuaBounds(boundsX ?? 0, boundsY ?? 0, boundsWidth ?? 0, boundsHeight ?? 0),
             node.GetProperty("visible").GetBoolean(), node.GetProperty("enabled").GetBoolean(), actions,
-            NodeString("parentId"), NodeString("text"), NodeString("value"), StateBoolean("focused"), StateBoolean("hovered"),
+            NodeString("parentId"), NodeString("text"), NodeValue(), StateBoolean("focused"), StateBoolean("hovered"),
             StateBoolean("pressed"), StateBoolean("checked"), StateBoolean("selected"),
             root.TryGetProperty("schemaVersion", out var schemaVersion) ? schemaVersion.GetInt32() : null,
             RootUInt64(root, "sessionEpoch"), RootUInt64(root, "frameSequence"), RootUInt64(root, "revision"),
             StateInt64("caretPosition"), StateInt64("selectionStart"), StateInt64("selectionEnd"),
             StateDouble("scrollX"), StateDouble("scrollY"), StateDouble("scrollMaxX"), StateDouble("scrollMaxY"),
             StateDouble("rangeValue"), StateDouble("rangeMin"), StateDouble("rangeMax"), StateInt64("selectedIndex"),
-            knownBounds, node.TryGetProperty("label", out _));
+            knownBounds, node.TryGetProperty("label", out _))
+        {
+            HasValue = node.TryGetProperty("value", out _),
+        };
     }
 
     private static ulong? RootUInt64(JsonElement root, string name) => root.TryGetProperty(name, out var value) ? value.GetUInt64() : null;
