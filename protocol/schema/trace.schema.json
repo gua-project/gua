@@ -8,6 +8,61 @@
     "uint64": { "type": "string", "pattern": "^[0-9]{1,20}$" },
     "outcome": { "enum": ["unknown", "passed", "failed", "interrupted"] },
     "blob": { "type": "string", "pattern": "^(snapshots|attachments)/[a-f0-9]{64}\\.json$" },
+    "observeChange": {
+      "type": "object", "required": ["channel", "reason", "intervalId", "continuity", "change", "host", "received", "catalogs"],
+      "properties": {
+        "channel": { "const": "observe" }, "reason": { "type": "string" }, "intervalId": { "$ref": "#/$defs/id" },
+        "continuity": { "const": "continuous" },
+        "change": { "enum": ["added", "changed", "removed", "unavailable", "recovered"] },
+        "host": { "type": "object", "required": ["sourceId", "sessionEpoch", "revision"] },
+        "catalogs": { "type": "object" },
+        "received": {
+          "type": "object", "required": ["schemaVersion", "sourceId", "sessionEpoch", "profile", "sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision", "ownerId", "registrationId", "source", "runtimeId", "name", "kind", "boundary"],
+          "properties": {
+            "schemaVersion": { "const": 1 }, "sourceId": { "type": "string", "minLength": 1 },
+            "profile": { "enum": ["debug", "player"] },
+            "sessionEpoch": { "$ref": "#/$defs/uint64" }, "sequence": { "$ref": "#/$defs/uint64" },
+            "revision": { "$ref": "#/$defs/uint64" }, "uiFrame": { "$ref": "#/$defs/uint64" },
+            "uiRevision": { "$ref": "#/$defs/uint64" }, "worldFrame": { "$ref": "#/$defs/uint64" },
+            "worldRevision": { "$ref": "#/$defs/uint64" }, "ownerId": { "$ref": "#/$defs/uint64" },
+            "registrationId": { "$ref": "#/$defs/uint64" }, "source": { "enum": ["ui", "object", "world"] },
+            "runtimeId": { "type": "string" }, "name": { "type": "string", "minLength": 1 },
+            "kind": { "enum": ["added", "changed", "removed", "unavailable", "recovered"] },
+            "boundary": { "enum": ["frame", "explicit", "lifecycle"] },
+            "beforeStatus": { "enum": ["available", "unavailable"] }, "afterStatus": { "enum": ["available", "unavailable"] },
+            "before": { "$ref": "https://gua.dev/schema/value-v1.schema.json" },
+            "after": { "$ref": "https://gua.dev/schema/value-v1.schema.json" },
+            "beforeError": { "enum": [1,2,3,4,5,6,7,8,9,10,11,100,101,102] },
+            "afterError": { "enum": [1,2,3,4,5,6,7,8,9,10,11,100,101,102] }
+          },
+          "allOf": [
+            {
+              "if": { "required": ["beforeStatus"] },
+              "then": {
+                "if": { "properties": { "beforeStatus": { "const": "available" } } },
+                "then": { "required": ["before"], "not": { "required": ["beforeError"] } },
+                "else": { "required": ["beforeError"], "not": { "required": ["before"] } }
+              },
+              "else": { "not": { "anyOf": [{ "required": ["before"] }, { "required": ["beforeError"] }] } }
+            },
+            {
+              "if": { "required": ["afterStatus"] },
+              "then": {
+                "if": { "properties": { "afterStatus": { "const": "available" } } },
+                "then": { "required": ["after"], "not": { "required": ["afterError"] } },
+                "else": { "required": ["afterError"], "not": { "required": ["after"] } }
+              },
+              "else": { "not": { "anyOf": [{ "required": ["after"] }, { "required": ["afterError"] }] } }
+            },
+            { "if": { "properties": { "kind": { "const": "added" } } }, "then": { "required": ["after"], "not": { "required": ["before"] } } },
+            { "if": { "properties": { "kind": { "const": "changed" } } }, "then": { "required": ["before", "after"] } },
+            { "if": { "properties": { "kind": { "const": "removed" } } }, "then": { "required": ["beforeStatus"], "not": { "anyOf": [{ "required": ["after"] }, { "required": ["afterStatus"] }] } } },
+            { "if": { "properties": { "kind": { "const": "unavailable" } } }, "then": { "required": ["afterError"], "not": { "required": ["after"] } } },
+            { "if": { "properties": { "kind": { "const": "recovered" } } }, "then": { "required": ["beforeError", "after"] } }
+          ]
+        }
+      }
+    },
     "request": {
       "type": "object", "required": ["sourceId", "sessionEpoch", "requestId"],
       "properties": { "sourceId": { "type": "string", "minLength": 1, "maxLength": 128 }, "sessionEpoch": { "$ref": "#/$defs/uint64" }, "requestId": { "$ref": "#/$defs/uint64" } }
@@ -33,7 +88,11 @@
         "sequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "eventId": { "type": "string", "minLength": 1 },
         "stepId": { "$ref": "#/$defs/id" }, "type": { "type": "string", "minLength": 1, "maxLength": 64 },
         "collectedMilliseconds": { "type": "number", "minimum": 0 }, "data": {}
-      }
+      },
+      "allOf": [{
+        "if": { "properties": { "type": { "const": "observation.change" }, "data": { "type": "object", "required": ["channel"], "properties": { "channel": { "const": "observe" } } } } },
+        "then": { "properties": { "data": { "$ref": "#/$defs/observeChange" } } }
+      }]
     }
   }
 }

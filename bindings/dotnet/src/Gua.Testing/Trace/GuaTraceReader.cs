@@ -87,6 +87,10 @@ public static class GuaTraceReader
         var steps = new HashSet<string>(events.Where(e => e.Type == "step.begin").Select(e => e.StepId), StringComparer.Ordinal);
         foreach (var e in events)
         {
+            if (e.Type == "observation" && e.Data.ValueKind == JsonValueKind.Object &&
+                e.Data.TryGetProperty("availability", out var availability) && availability.ValueKind == JsonValueKind.String &&
+                availability.GetString() is "gap" or "stale" or "failed" or "partial" or "outsideRetention")
+                issues.Add("observation-" + availability.GetString());
             if (e.Type == "step.begin" && e.Data.ValueKind == JsonValueKind.Object &&
                 e.Data.TryGetProperty("parentStepId", out var parent) && parent.ValueKind != JsonValueKind.Null &&
                 (parent.ValueKind != JsonValueKind.String || !steps.Contains(parent.GetString()!)))

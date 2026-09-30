@@ -32,8 +32,14 @@ export function GuaTraceViewer({ trace }: { trace: TraceDocument }) {
         {step?.events.map(e => <Event key={e.eventId} event={e} trace={trace} />)}
         {observations.length > 1 && <details><summary>Observation interval differences</summary>
           <p>Differences are associated with this interval, not proof of causality. At most 1000 differences per pair are shown. Intermediate continuity is only as recorded.</p>
-          {observations.slice(1).map((after, i) => {
-            const before = observations[i]!, a = text(object(before.data).blob, ""), b = text(object(after.data).blob, "");
+          {observations.map((after, i) => {
+            const target = object(after.data), host = object(target.host);
+            const before = observations.slice(0, i).reverse().find(e => {
+              const candidate = object(e.data), candidateHost = object(candidate.host);
+              return candidate.channel === target.channel && candidateHost.sourceId === host.sourceId && candidateHost.sessionEpoch === host.sessionEpoch;
+            });
+            if (!before) return null;
+            const a = text(object(before.data).blob, ""), b = text(target.blob, "");
             return <div key={after.eventId}><h4>{text(object(before.data).reason)} → {text(object(after.data).reason)}</h4>
               {Object.hasOwn(trace.blobs, a) && Object.hasOwn(trace.blobs, b)
                 ? <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{pretty(snapshotDiff(trace.blobs[a], trace.blobs[b]))}</pre>

@@ -54,6 +54,9 @@ export function parseTrace(manifestText: string, eventLines: string, blobs: Reco
   const observations = new Set(events.filter(e => e.type === "observation").map(e => object(e.data).observationId));
   const steps = new Set(events.filter(e => e.type === "step.begin").map(e => e.stepId));
   for (const e of events) {
+    const availability = object(e.data).availability;
+    if (e.type === "observation" && typeof availability === "string" && ["gap", "stale", "failed", "partial", "outsideRetention"].includes(availability))
+      issues.push(`observation-${availability}`);
     const parent = object(e.data).parentStepId;
     if (e.type === "step.begin" && parent != null && (typeof parent !== "string" || !steps.has(parent))) issues.push("step-outside-retention");
     const refs = object(e.data).observations;

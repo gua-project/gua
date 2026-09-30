@@ -1,5 +1,44 @@
 # #109 Trace 基盤の検証記録
 
+## #125 T-03 の追加検証（2026-09-30）
+
+Windows x64、MSVC 19.51 / Ninja、.NET SDK 10.0.401、Bun 1.4.0。
+このcheckoutのnative core/runtimeをビルドし、実登録→実購読→Trace writer→readerを検証した。
+WebSocketテストもFakeではなく実GuaRuntime/bridgeを使う。
+
+| 対象 | 結果 |
+| --- | --- |
+| CTest `build/trace` | 8/8 成功 |
+| `Gua.Selector.Tests`（Observe transportを含む） | 207/207 成功、skip 0 |
+| 追加 `TraceObserveTests` | 10/10 成功（local/remoteパラメータを含む） |
+| `Gua.Visual.Tests`（既存Trace/配布Viewerを含む） | 73/73 成功、skip 0 |
+| Trace schema/fixture + Reader/ViewerのBunテスト | 18/18 成功 |
+| `bun run check` | 全workspace成功 |
+| `Gua.Testing` net10.0 / netstandard2.1 | 成功、警告0 |
+| `bun run --filter @gua/inspector build:trace` | 成功 |
+
+AT-TRACE-004: 同一内容を異なるworldFrameで3回取得し、1 Blobと3 Observation Recordを確認。
+秘密値のValue/Enum Catalog、getter例外marker、profile不一致のデータが保存されないことを確認。
+AT-TRACE-005: 位置だけが1→2に変わるWorldの内容と別々のhost frameが保存されることを確認。
+AT-TRACE-006: First→Second→Thirdの実公開・受信Changeとカタログをlocal/remote経由で保存。
+主結果決定時のThirdがcleanup後のFirstで上書きされないことを確認。
+履歴容量1でgapを発火させ、最新Snapshotと再購読後にも古い欠損が残ることを確認。
+reset後はstale、getter失敗はunavailable/error=100、再登録の初期値はnot_sampled=101。
+removed-beforeの取得不能をダミーnullへ変換せず、新registrationIdを区別する。
+実WorldからObjectを削除し、同Runtime IDを再生成しても古い値と新しいOwnerを混同しない。
+並列Snapshot、Trace byte容量超過、参照整合性を確認。partial/failed/stale/outsideRetentionと
+正常不在をfixtureで分け、Viewerが異なるchannel/source/epochの前後比較を作らないことを確認。
+
+VS presetの自動検出は失敗したため、VsDevCmdでMSVC環境を初期化してNinjaで構成。
+Visualテストの初回1件は未生成の同梱Viewerが原因で失敗し、Viewer生成後に全件成功。
+remote CI、他OS、Godot/Unityのゲームを使うE2Eは今回未実行。
+各Runnerの自動取得タイミング、未公開の内部代入、失われた中間状態の復元は保証していない。
+
+読み取り専用監査のstale/failed後の再Pollがgapへ変わる指摘を、親側の回帰試験で再現した。
+理由を購読状態に保持する修正後、repeated-stale/repeated-failedと全TraceObserve回帰に成功。
+Trace schemaのstatus欠落受理も失敗fixtureで再現し、Observe v1と同じ
+before/after status・Value・error整合条件へ修正。status欠落・正常Valueとerrorの併記を拒否する。
+
 2026-09-29、Windows x64、MSVC 19.51.36260.0、.NET SDK 10.0.401、Bun 1.4.0。
 これはローカルの実行証拠であり、公開 NuGet やリモート CI の完了証拠ではない。
 親 Issue 全体の残りは [trace-v1.md](trace-v1.md) の対応表に記載する。

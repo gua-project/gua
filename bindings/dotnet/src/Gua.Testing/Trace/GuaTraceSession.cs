@@ -180,7 +180,12 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
 
     /// <summary>Snapshot content is deduplicated after masking, independently of the observation ID.</summary>
     public string Observe(string stepId, string channel, string reason, string availability,
-        GuaTraceHost host, JsonElement? snapshot = null, string continuity = "unverified", bool sensitive = false)
+        GuaTraceHost host, JsonElement? snapshot = null, string continuity = "unverified", bool sensitive = false) =>
+        ObserveWithMetadata(stepId, channel, reason, availability, host, snapshot, continuity, sensitive);
+
+    internal string ObserveWithMetadata(string stepId, string channel, string reason, string availability,
+        GuaTraceHost host, JsonElement? snapshot = null, string continuity = "unverified", bool sensitive = false,
+        JsonElement? metadata = null)
     {
         lock (_gate)
         {
@@ -195,9 +200,11 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
                 blob = "snapshots/" + Hash(bytes) + ".json"; blobs.Add(blob, bytes);
             }
             return AppendUnsafe(step, "observation", GuaTraceJson.Element(new { observationId, channel, reason,
-                availability, host, continuity, blob }), blobs: blobs) ? observationId : "";
+                availability, host, continuity, blob, metadata }), blobs: blobs) ? observationId : "";
         }
     }
+    internal string ObservationProfile => _options.Profile;
+    internal void ObservationIssue(string issue) { lock (_gate) { if (!_closed && _issues.Count < 64) _issues.Add(issue); } }
     /// <summary>JSON-only attachment boundary; screenshots require a separate caller-side pixel policy.</summary>
     public bool Attach(string stepId, string schema, JsonElement content, bool sensitive = false)
     {
