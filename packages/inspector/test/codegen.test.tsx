@@ -46,6 +46,13 @@ describe("Inspector C# generation", () => {
     expect(output.states.map((choice) => choice.id)).not.toContain("text");
     expect(output.actions.find((choice) => choice.id === "set_value")!.code).toContain("secretValue, sensitive: true");
   });
+  test("explicit null is observable and differs from omitted value", () => {
+    const output = generateNodeCode({ ...node, value: null });
+    expect(output.states.find((choice) => choice.id === "value")!.code).toContain("snapshot.HasValue && snapshot.Value is null");
+    const omitted = { ...node }; delete omitted.value;
+    expect(generateNodeCode(omitted).states.map((choice) => choice.id)).not.toContain("value");
+    expect(generateNodeCode({ ...node, value: null }, "id", true).states.map((choice) => choice.id)).not.toContain("value");
+  });
   test("clipboard success and rejection retain the source for manual copying", async () => {
     let written = "";
     const code = generateNodeCode(node).locators[0]!.code;
@@ -63,7 +70,7 @@ describe("Inspector C# generation", () => {
     const directory = mkdtempSync(join(tmpdir(), "gua-inspector-codegen-"));
     const project = resolve(import.meta.dir, "../../..", "bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj");
     const snippets: string[] = [];
-    for (const sample of [node, { ...node, value: 1.5e-20 }, { ...node, value: false }, { ...node, visible: false, enabled: true, state: { checked: true, selected: true, focused: true } }]) {
+    for (const sample of [node, { ...node, value: null }, { ...node, value: 1.5e-20 }, { ...node, value: false }, { ...node, visible: false, enabled: true, state: { checked: true, selected: true, focused: true } }]) {
       for (const locatorId of ["id", "role", "scope"]) {
         for (const sensitive of [false, true]) {
           const generated = generateNodeCode(sample, locatorId, sensitive);
@@ -75,7 +82,7 @@ describe("Inspector C# generation", () => {
     const methods = snippets.map((code, i) => `static async Task Case${i}(IGuaContext context, string secretValue) { ${code}\n }`).join("\n");
     const runtimeMethods: string[] = [];
     const runtimeCalls: string[] = [];
-    for (const value of ["expected", false, true, 1.5e-20, 1, 0]) {
+    for (const value of ["expected", false, true, 1.5e-20, 1, 0, null]) {
       const sample = { ...node, id: "n", parentId: undefined, label: "", text: "expected", value };
       const tree = JSON.stringify({ schemaVersion: 2, sessionEpoch: 1, frameSequence: 1, revision: 1, screen: "test", nodes: [sample] });
       const before = JSON.stringify({ schemaVersion: 2, sessionEpoch: 1, frameSequence: 0, revision: 0, screen: "test", nodes: [{ ...sample, text: "before", value: "before" }] });
@@ -96,8 +103,19 @@ describe("Inspector C# generation", () => {
     runtimeMethods.push(`static async Task Hidden(IGuaContext context) { ${hiddenCode}\n }`);
     runtimeCalls.push(`await Hidden(new Fixture(${csharpString(hiddenTree)}));`, `await Hidden(new Fixture(${csharpString(removedTree)}));`,
       `await Hidden(new Fixture(${csharpString(visibleTree)}) { NextJson = ${csharpString(removedTree)} });`);
+    const unknown = { ...hidden, text: "known text" }; delete unknown.value;
+    const unknownTree = JSON.stringify({ schemaVersion: 2, frameSequence: 1, revision: 1, screen: "test", nodes: [unknown] });
+    runtimeMethods.push(`static async Task UnknownValue() {
+      var context = new Fixture(${csharpString(unknownTree)});
+      var node = await GuaAssertions.Query(context).ById("n").ResolveAsync();
+      if (node.Snapshot.HasValue) throw new Exception("Missing value incorrectly observed");
+      try { await GuaAssertions.WaitForStateAsync(context, "n", snapshot => snapshot.HasValue && snapshot.Value is null, timeout: TimeSpan.Zero); }
+      catch (GuaAssertionException) { return; }
+      throw new Exception("Unknown value must not satisfy observed null");
+    }`);
+    runtimeCalls.push("await UnknownValue();");
     try {
-      writeFileSync(join(directory, "Generated.csproj"), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><NoWarn>CS1998</NoWarn></PropertyGroup><ItemGroup><ProjectReference Include="${project.replaceAll("&", "&amp;")}" /></ItemGroup></Project>`);
+      writeFileSync(join(directory, "Generated.csproj"), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><NoWarn>CS1998</NoWarn></PropertyGroup><ItemGroup><ProjectReference Include="${project.replaceAll("&", "&amp;")}" /></ItemGroup></Project>`);
       // Compare code units directly; Encoding replaces isolated surrogates.
       const directChecks = literals.map((value) => `if (!System.Linq.Enumerable.SequenceEqual(${csharpString(value)}, new char[] { ${Array.from({ length: value.length }, (_, i) => `(char)${value.charCodeAt(i)}`).join(",")} })) throw new Exception("Literal mismatch");`).join("\n");
       const fixture = `sealed class Fixture(string json) : IGuaContext {

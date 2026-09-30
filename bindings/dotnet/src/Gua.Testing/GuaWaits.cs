@@ -247,7 +247,10 @@ public static partial class GuaAssertions
             StateInt64("caretPosition"), StateInt64("selectionStart"), StateInt64("selectionEnd"),
             StateDouble("scrollX"), StateDouble("scrollY"), StateDouble("scrollMaxX"), StateDouble("scrollMaxY"),
             StateDouble("rangeValue"), StateDouble("rangeMin"), StateDouble("rangeMax"), StateInt64("selectedIndex"),
-            knownBounds, node.TryGetProperty("label", out _));
+            knownBounds, node.TryGetProperty("label", out _))
+        {
+            HasValue = node.TryGetProperty("value", out _),
+        };
     }
 
     private static ulong? RootUInt64(JsonElement root, string name) => root.TryGetProperty(name, out var value) ? value.GetUInt64() : null;

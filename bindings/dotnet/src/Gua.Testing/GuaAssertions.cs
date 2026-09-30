@@ -187,7 +187,10 @@ public static partial class GuaAssertions
                 CaretPosition: OptionalStateInt64("caretPosition"), SelectionStart: OptionalStateInt64("selectionStart"), SelectionEnd: OptionalStateInt64("selectionEnd"),
                 ScrollX: OptionalStateDouble("scrollX"), ScrollY: OptionalStateDouble("scrollY"), ScrollMaxX: OptionalStateDouble("scrollMaxX"), ScrollMaxY: OptionalStateDouble("scrollMaxY"),
                 RangeValue: OptionalStateDouble("rangeValue"), RangeMin: OptionalStateDouble("rangeMin"), RangeMax: OptionalStateDouble("rangeMax"), SelectedIndex: OptionalStateInt64("selectedIndex"),
-                KnownBounds: knownBounds, HasLabel: node.TryGetProperty("label", out _));
+                KnownBounds: knownBounds, HasLabel: node.TryGetProperty("label", out _))
+            {
+                HasValue = node.TryGetProperty("value", out _),
+            };
         }
 
         return null;

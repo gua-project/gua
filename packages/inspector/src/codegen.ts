@@ -59,6 +59,10 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
   // Gua.Testing reads top-level value, not legacy state.value. Numeric JSON spelling
   // can differ (1, 1.0, 1e0), so compare numeric meaning using invariant culture.
   const value = node.value;
+  if (!sensitive && value === null) states.push({
+    id: "value", label: "value",
+    code: prefix + 'var node = await locator.ResolveAsync();\nawait GuaAssertions.WaitForStateAsync(context, node.Id,\n    snapshot => snapshot.HasValue && snapshot.Value is null,\n    description: "have an observed null value");',
+  });
   if (!sensitive && (typeof value === "string" || typeof value === "boolean")) add("value", `WaitForValueAsync(${csharpString(String(value))})`, `ToHaveValue(${csharpString(String(value))})`);
   if (!sensitive && typeof value === "number" && Number.isFinite(value)) states.push({
     id: "value", label: "value",
