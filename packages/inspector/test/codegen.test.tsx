@@ -27,7 +27,7 @@ describe("Inspector C# generation", () => {
     expect(output.actions[0]!.code).toContain("await locator.ClickAsync()");
     expect(output.actions[0]!.code).not.toContain(".Get()");
     expect(output.states.map((choice) => choice.id)).toEqual(["visible", "enabled", "text", "value", "checked", "selected", "focused"]);
-    expect(output.states.find((choice) => choice.id === "checked")!.code).toContain("ToBeChecked(false)");
+    expect(output.states.find((choice) => choice.id === "checked")!.code).toContain("WaitUntilCheckedAsync(false)");
   });
   test("does not invent optional state, label, scope or actions", () => {
     const minimal: GuaNode = { id: "id", role: "button", visible: false, enabled: true, bounds: {}, actions: ["unknown"] };
@@ -36,9 +36,16 @@ describe("Inspector C# generation", () => {
     expect(output.states.map((choice) => choice.id)).toEqual(["visible", "enabled"]);
     expect(output.locators).toHaveLength(2);
     expect(output.locators[1]!.code).toContain('.ByRole("button")');
-    expect(output.states[0]!.code).toContain("WhereVisible().WaitForCountAsync(0)");
+    expect(output.states[0]!.code).toContain("matches.Count > 1");
+    expect(output.states[0]!.code).toContain("WaitForHiddenAsync(context, matches[0].Id)");
     expect(output.states[0]!.code).not.toContain("ResolveAsync()");
     expect(generateNodeCode({ ...minimal, value: "", text: "", state: { value: false } }).states).toHaveLength(4);
+  });
+  test("empty labels omit native name locators instead of broadening them", () => {
+    const output = generateNodeCode({ ...node, label: "" }, "scope");
+    expect(output.locators.map((choice) => choice.id)).toEqual(["id"]);
+    expect(output.actions[0]!.code).toContain(".ById(");
+    expect(output.actions[0]!.code).not.toContain(".ByRole(");
   });
   test("sensitive mode omits text/value and uses a secret variable", () => {
     const output = generateNodeCode(node, "id", true);
@@ -88,14 +95,15 @@ describe("Inspector C# generation", () => {
       const before = JSON.stringify({ schemaVersion: 2, sessionEpoch: 1, frameSequence: 0, revision: 0, screen: "test", nodes: [{ ...sample, text: "before", value: "before" }] });
       for (const state of generateNodeCode(sample).states) {
         const method = `Runtime${runtimeMethods.length}`;
-        // Simulate a host transition after ResolveAsync. The assertion must use
-        // the expectation returned by the wait, rather than the resolved snapshot.
-        const code = state.code.replace("var node = await locator.ResolveAsync();", `var node = await locator.ResolveAsync();\n((Fixture)context).Json = ${csharpString(tree)};`);
+        // The host publishes the expected state for the wait, then immediately
+        // reverts it. Successful waits must not reread and reject that frame.
+        const reverted = JSON.stringify({ schemaVersion: 2, frameSequence: 2, revision: 2, screen: "test", nodes: [{ ...sample, visible: false, enabled: true, text: "after", value: "after", state: { checked: true, selected: true, focused: true } }] });
+        const code = state.code.replace("var node = await locator.ResolveAsync();", `var node = await locator.ResolveAsync();\n((Fixture)context).Json = ${csharpString(tree)};\n((Fixture)context).NextJson = ${csharpString(reverted)};\n((Fixture)context).ReadsUntilNextJson = 2;`);
         runtimeMethods.push(`static async Task ${method}(IGuaContext context) { ${code}\n }`);
         runtimeCalls.push(`await ${method}(new Fixture(${csharpString(before)}));`);
       }
     }
-    const hidden = { ...node, id: "n", parentId: undefined, label: "", visible: false };
+    const hidden = { ...node, id: "n", parentId: "p", label: "target", text: "known text", value: "known value", visible: false };
     const hiddenTree = JSON.stringify({ schemaVersion: 2, frameSequence: 1, revision: 1, screen: "test", nodes: [hidden] });
     const visibleTree = JSON.stringify({ schemaVersion: 2, frameSequence: 1, revision: 1, screen: "test", nodes: [{ ...hidden, visible: true }] });
     const removedTree = JSON.stringify({ schemaVersion: 2, frameSequence: 2, revision: 2, screen: "test", nodes: [] });
@@ -103,6 +111,16 @@ describe("Inspector C# generation", () => {
     runtimeMethods.push(`static async Task Hidden(IGuaContext context) { ${hiddenCode}\n }`);
     runtimeCalls.push(`await Hidden(new Fixture(${csharpString(hiddenTree)}));`, `await Hidden(new Fixture(${csharpString(removedTree)}));`,
       `await Hidden(new Fixture(${csharpString(visibleTree)}) { NextJson = ${csharpString(removedTree)} });`);
+    for (const locatorId of ["role", "scope"]) {
+      const code = generateNodeCode(hidden, locatorId).states.find((state) => state.id === "visible")!.code;
+      const method = `Hidden${locatorId}`;
+      runtimeMethods.push(`static async Task ${method}(IGuaContext context) { ${code}\n }`);
+      runtimeCalls.push(`await ${method}(new Fixture(${csharpString(hiddenTree)}));`, `await ${method}(new Fixture(${csharpString(removedTree)}));`);
+      for (const visible of [false, true]) {
+        const duplicates = JSON.stringify({ schemaVersion: 2, screen: "test", nodes: [hidden, { ...hidden, id: "n2", visible }] });
+        runtimeCalls.push(`try { await ${method}(new Fixture(${csharpString(duplicates)})); throw new Exception("Ambiguous hidden locator passed"); } catch (GuaAssertionException) { }`);
+      }
+    }
     const unknown = { ...hidden, text: "known text" }; delete unknown.value;
     const unknownTree = JSON.stringify({ schemaVersion: 2, frameSequence: 1, revision: 1, screen: "test", nodes: [unknown] });
     runtimeMethods.push(`static async Task UnknownValue() {
@@ -121,7 +139,12 @@ describe("Inspector C# generation", () => {
       const fixture = `sealed class Fixture(string json) : IGuaContext {
         public string Json = json;
         public string? NextJson;
-        public string GetUiTreeJson() => Json;
+        public int ReadsUntilNextJson;
+        public string GetUiTreeJson() {
+          var result = Json;
+          if (ReadsUntilNextJson > 0 && --ReadsUntilNextJson == 0 && NextJson != null) { Json = NextJson; NextJson = null; }
+          return result;
+        }
         public GuaNodeState GetNodeState(string id) => new(true, false);
         public string FindNodeById(string id) => id;
         public string FindNodeByRole(string role, string? name = null) => "n";
@@ -130,10 +153,12 @@ describe("Inspector C# generation", () => {
           using var document = System.Text.Json.JsonDocument.Parse(Json);
           var matches = new System.Collections.Generic.List<GuaNodeQueryMatch>();
           foreach (var node in document.RootElement.GetProperty("nodes").EnumerateArray()) {
+            bool Matches(string? expected, string field) => string.IsNullOrEmpty(expected) || (node.TryGetProperty(field, out var actual) && actual.GetString() == expected);
+            if (!Matches(selector.Id, "id") || !Matches(selector.Role, "role") || !Matches(selector.Name, "label") || !Matches(selector.ParentId, "parentId")) continue;
             if (selector.Visible == GuaStateFilter.True && !node.GetProperty("visible").GetBoolean()) continue;
-            matches.Add(new GuaNodeQueryMatch("n", "textbox", "", null));
+            matches.Add(new GuaNodeQueryMatch(node.GetProperty("id").GetString()!, node.GetProperty("role").GetString()!, node.GetProperty("label").GetString(), node.TryGetProperty("parentId", out var parent) ? parent.GetString() : null));
           }
-          if (NextJson != null) { Json = NextJson; NextJson = null; }
+          if (ReadsUntilNextJson == 0 && NextJson != null) { Json = NextJson; NextJson = null; }
           return new(true, matches);
         }
         public bool EnqueueClick(string id) => throw new Exception("Code generation must not enqueue actions");

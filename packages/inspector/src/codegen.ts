@@ -26,9 +26,12 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
   const role = `${root}.ByRole(${csharpString(node.role)}${node.label === undefined ? "" : `, ${csharpString(node.label)}`})`;
   const locators: CodeChoice[] = [
     { id: "id", label: "Exact ID (verify its lifetime in your game)", code: `${root}.ById(${csharpString(node.id)})` },
-    { id: "role", label: "Role / name (must match exactly one node)", code: role },
   ];
-  if (node.parentId !== undefined) locators.push({ id: "scope", label: "Role / name within parent", code: `${role}.Within(${csharpString(node.parentId)}, directChild: true)` });
+  // The native selector treats an empty name as no criterion, not an exact label.
+  if (node.label !== "") {
+    locators.push({ id: "role", label: "Role / name (must match exactly one node)", code: role });
+    if (node.parentId !== undefined) locators.push({ id: "scope", label: "Role / name within parent", code: `${role}.Within(${csharpString(node.parentId)}, directChild: true)` });
+  }
   const locator = locators.find((choice) => choice.id === locatorId)?.code ?? locators[0]!.code;
   const prefix = `// using Gua.Testing; context is an IGuaContext.\nvar locator = ${locator};\n`;
   const calls: Record<string, string> = {
@@ -47,15 +50,17 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
       `await locator.${calls[action]};`,
   }));
   const states: CodeChoice[] = [];
-  const add = (id: string, wait: string, assertion: string) => states.push({
-    id, label: id, code: prefix + `var node = await locator.ResolveAsync();\nnode = await node.${wait};\nnode.${assertion};`,
+  const add = (id: string, wait: string) => states.push({
+    // The wait itself verifies the condition. A trailing assertion rereads the
+    // host and can reject a transient state that the wait already observed.
+    id, label: id, code: prefix + `var node = await locator.ResolveAsync();\nawait node.${wait};`,
   });
-  if (node.visible) add("visible", "WaitUntilVisibleAsync()", "ToBeVisible()");
+  if (node.visible) add("visible", "WaitUntilVisibleAsync()");
   else states.push({ id: "visible", label: "visible",
-    code: prefix + "// Hidden or removed: no visible matches remain, including when already absent.\nawait locator.WhereVisible().WaitForCountAsync(0);",
+    code: prefix + '// Hidden or removed; reject ambiguous matches before waiting on the ID.\nvar matches = locator.QueryAll();\nif (matches.Count > 1)\n    throw new GuaAssertionException("Hidden locator must match at most one node.");\nif (matches.Count == 1)\n    await GuaAssertions.WaitForHiddenAsync(context, matches[0].Id);',
   });
-  add("enabled", node.enabled ? "WaitUntilEnabledAsync()" : "WaitUntilDisabledAsync()", node.enabled ? "ToBeEnabled()" : "ToBeDisabled()");
-  if (!sensitive && typeof node.text === "string") add("text", `WaitForTextAsync(${csharpString(node.text)})`, `ToHaveText(${csharpString(node.text)})`);
+  add("enabled", node.enabled ? "WaitUntilEnabledAsync()" : "WaitUntilDisabledAsync()");
+  if (!sensitive && typeof node.text === "string") add("text", `WaitForTextAsync(${csharpString(node.text)})`);
   // Gua.Testing reads top-level value, not legacy state.value. Numeric JSON spelling
   // can differ (1, 1.0, 1e0), so compare numeric meaning using invariant culture.
   const value = node.value;
@@ -63,7 +68,7 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
     id: "value", label: "value",
     code: prefix + 'var node = await locator.ResolveAsync();\nawait GuaAssertions.WaitForStateAsync(context, node.Id,\n    snapshot => snapshot.HasValue && snapshot.Value is null,\n    description: "have an observed null value");',
   });
-  if (!sensitive && (typeof value === "string" || typeof value === "boolean")) add("value", `WaitForValueAsync(${csharpString(String(value))})`, `ToHaveValue(${csharpString(String(value))})`);
+  if (!sensitive && (typeof value === "string" || typeof value === "boolean")) add("value", `WaitForValueAsync(${csharpString(String(value))})`);
   if (!sensitive && typeof value === "number" && Number.isFinite(value)) states.push({
     id: "value", label: "value",
     code: prefix + `var node = await locator.ResolveAsync();\nawait GuaAssertions.WaitForStateAsync(context, node.Id, snapshot =>\n    double.TryParse(snapshot.Value, System.Globalization.NumberStyles.Float,\n        System.Globalization.CultureInfo.InvariantCulture, out var value) && value == ${String(value)}d,\n    description: "have the observed numeric value");`,
@@ -72,7 +77,7 @@ export function generateNodeCode(node: GuaNode, locatorId = "id", sensitive = fa
     const observed = node.state?.[state];
     if (typeof observed !== "boolean") continue;
     const name = state[0]!.toUpperCase() + state.slice(1);
-    add(state, `WaitUntil${name}Async(${observed})`, `ToBe${name}(${observed})`);
+    add(state, `WaitUntil${name}Async(${observed})`);
   }
   return { locators: locators.map((choice) => ({ ...choice, code: `// using Gua.Testing; context is an IGuaContext.\nvar locator = ${choice.code};` })), actions, states };
 }
