@@ -17,7 +17,7 @@ async function withCdpServer(
         respond(request, (payload) => {
           const timer = setTimeout(() => { timers.delete(timer); socket.send(JSON.stringify({ id: request.id, ...payload as object })); }, 0);
           timers.add(timer);
-        }, () => socket.close());
+        }, () => socket.terminate());
       },
     },
   });
