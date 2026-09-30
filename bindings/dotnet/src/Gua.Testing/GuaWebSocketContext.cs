@@ -214,10 +214,11 @@ public sealed partial class GuaWebSocketContext : IGuaContext, IGuaClockContext,
         try
         {
             EnsureConnected(); var id = nextId++; Send(Envelope(id, command));
-            while (true) { using var document = JsonDocument.Parse(Receive(responseTimeout)); var root = document.RootElement; if (!root.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id) continue; if (!root.GetProperty("ok").GetBoolean()) throw new InvalidOperationException(root.GetProperty("error").GetString()); return root.GetProperty("result").GetRawText(); }
+            while (true) { using var document = JsonDocument.Parse(Receive(responseTimeout)); var root = document.RootElement; if (!root.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id) continue; if (!root.GetProperty("ok").GetBoolean()) throw new RemoteCommandRejectedException(root.GetProperty("error").GetString()); return root.GetProperty("result").GetRawText(); }
         }
         finally { requestGate.Release(); }
     }
+    private sealed class RemoteCommandRejectedException(string? message) : InvalidOperationException(message);
     private static byte[] Envelope(int id, object command)
     {
         using var source = JsonDocument.Parse(JsonSerializer.Serialize(command, command.GetType())); using var stream = new MemoryStream();

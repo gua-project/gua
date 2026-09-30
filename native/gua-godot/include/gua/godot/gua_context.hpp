@@ -37,6 +37,16 @@ public:
     String get_player_world_object_tree_json() const;
     String query_player_world_objects_json(const Dictionary& selector) const;
     void enable_world_object_tree_adapter();
+    uint64_t create_observe_owner(int source, const String& runtime_id);
+    int destroy_observe_owner(uint64_t owner);
+    uint64_t register_observe(uint64_t owner, const String& name, bool allow_player, bool sensitive);
+    int unregister_observe(uint64_t registration);
+    int observe_registration_alive(uint64_t registration) const;
+    int register_value_enum(const String& enum_type, const Array& members);
+    int publish_observe_json(uint64_t registration, const String& json, bool stage);
+    uint64_t create_observe_client(int profile);
+    void release_observe_client(uint64_t client);
+    Dictionary observe_command(uint64_t client, int command, uint64_t subscription);
 
     String get_ui_tree_json() const;
     String get_player_ui_tree_json() const;
@@ -94,6 +104,7 @@ protected:
 private:
     String query_world_objects_json_with_projection(const Dictionary& selector, bool player_projection) const;
     gua_runtime_t* runtime_ = nullptr;
+    gua_enum_catalog_t* observe_catalog_ = nullptr;
 };
 
 } // namespace godot

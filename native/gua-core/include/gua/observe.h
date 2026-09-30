@@ -39,6 +39,8 @@ int gua_observe_subscribe(gua_context_t*, int profile, uint64_t* subscription, g
 int gua_observe_poll(gua_context_t*, uint64_t subscription, gua_observe_result_t**);
 int gua_observe_unsubscribe(gua_context_t*, uint64_t subscription);
 int gua_observe_result_copy_json(const gua_observe_result_t*, char*, int capacity);
+/* Additive transport envelope {document, catalogs}; legacy JSON stays unchanged. */
+int gua_observe_result_copy_transport_json(const gua_observe_result_t*, char*, int capacity);
 void gua_observe_result_destroy(gua_observe_result_t*);
 #ifdef __cplusplus
 }

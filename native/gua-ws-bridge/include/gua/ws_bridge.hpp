@@ -89,6 +89,9 @@ struct CommandResult {
 };
 
 struct BridgeHandlers {
+    std::function<unsigned long long()> create_observe_client;
+    std::function<void(unsigned long long)> release_observe_client;
+    std::function<CommandResult(unsigned long long, int, unsigned long long)> observe_command;
     std::function<std::string()> get_ui_tree_json;
     std::function<std::string()> get_world_object_tree_json;
     std::function<std::string()> get_logs_json;

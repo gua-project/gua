@@ -5,6 +5,8 @@ namespace Gua.Core;
 public sealed partial class GuaContext : IGuaContext, IGuaClockContext, IDisposable
 {
     private nint _handle;
+    private readonly bool _ownsHandle = true;
+    internal GuaContext(nint borrowedHandle) { if (borrowedHandle == 0) throw new ArgumentException("Invalid context handle."); _handle = borrowedHandle; _ownsHandle = false; }
     private GuaClock? _clock;
 
     public GuaContext()
@@ -613,7 +615,7 @@ public sealed partial class GuaContext : IGuaContext, IGuaClockContext, IDisposa
             return;
         }
 
-        Native.gua_destroy_context(_handle);
+        if (_ownsHandle) Native.gua_destroy_context(_handle);
         _handle = 0;
     }
 

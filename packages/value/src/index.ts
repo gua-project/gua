@@ -1,4 +1,5 @@
 import { exactInteger, NumericToken, parseJson } from "./json.js";
+export * from "./observe.js";
 import { unicode, ValueError } from "./validation.js";
 export { ValueError } from "./validation.js";
 export type { ValueErrorCode } from "./validation.js";

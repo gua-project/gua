@@ -59,6 +59,9 @@ int gua_value_get_element_type(const gua_value_t* value);
 /* Returns bytes required INCLUDING NUL; zero means invalid arguments/failure.
  * A short buffer is cleared, never filled with truncated JSON. NULL/0 sizes it. */
 int gua_value_copy_json(const gua_value_t* value, char* buffer, int capacity);
+/* Owned candidate definition captured at construction; only the used enumType.
+ * Non-enum Values return an empty catalog. Source catalog may already be freed. */
+int gua_value_copy_enum_catalog_json(const gua_value_t* value, char* buffer, int capacity);
 /* Returns status; unequal valid types are OK with *equal = 0. */
 int gua_value_equals(const gua_value_t* left, const gua_value_t* right, int* equal, gua_value_error_t* error);
 #ifdef __cplusplus

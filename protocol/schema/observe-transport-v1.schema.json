@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/observe-transport-v1.schema.json",
+  "title": "Observe transport v1",
+  "type": "object",
+  "properties": {
+    "document": {"$ref": "observe-v1.schema.json"},
+    "catalogs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "value": {"$ref": "enum-catalog-v1.schema.json"},
+          "before": {"$ref": "enum-catalog-v1.schema.json"},
+          "after": {"$ref": "enum-catalog-v1.schema.json"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["document", "catalogs"],
+  "additionalProperties": false
+}

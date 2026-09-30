@@ -4,6 +4,7 @@ import {
   type GuaGameInputActionSearchResult, type GuaGameInputActionSelector,
   type GuaGameInputState, type GuaScreenshot, type GuaUiTree, type GuaWebActionCompletion, type GuaWebActionRequest,
 } from "./index.js";
+import { parseObserveTransport, observeSubscriptionId, type ObserveSubscription } from "gua-value";
 import {
   parseWorldObjectTree,
   parseWorldQueryResult,
@@ -11,11 +12,14 @@ import {
 } from "gua-world-tools";
 
 export interface GuaInPagePort {
+  readonly capabilities?: readonly string[];
   /** A same-page engine call. No network transport or session routing is permitted here. */
   invoke(command: GuaInPageCommand, options?: GuaBridgeCallOptions): Promise<unknown>;
 }
 
 export type GuaInPageCommand =
+  | { type: "get_observe_snapshot" | "subscribe_observations" }
+  | { type: "poll_observations" | "unsubscribe_observations"; subscriptionId: number }
   | { type: "get_ui_tree" }
   | { type: "get_world_object_tree" }
   | ({ type: "query_world_objects" } & GuaWorldWireSelector)
@@ -27,7 +31,7 @@ export type GuaInPageCommand =
   | { type: "perform_game_input"; request: GuaGameInputRequest }
   | { type: "get_screenshot" };
 
-export interface GuaInPageBridgeOptions { screenshot?: boolean; world?: boolean; gameInput?: boolean }
+export interface GuaInPageBridgeOptions { screenshot?: boolean; world?: boolean; gameInput?: boolean; observe?: boolean }
 
 interface GuaWorldWireSelector {
   worldId?: string;
@@ -57,6 +61,27 @@ export function createGuaInPageBridge(port: GuaInPagePort, options: GuaInPageBri
     },
   };
   if (options.screenshot) bridge.getScreenshot = async () => parseScreenshot(await invoke(port, { type: "get_screenshot" }));
+  if (options.observe ?? port.capabilities?.includes("observe_v1")) {
+    const subscriptions = new Set<number>(); let generation = 0;
+    bridge.getObserveSnapshot = async options => parseObserveTransport(await invoke(port, { type: "get_observe_snapshot" }, options), "snapshot");
+    bridge.subscribeObservations = async options => {
+      const started = generation;
+      const result = await invoke(port, { type: "subscribe_observations" }, options) as ObserveSubscription;
+      const subscriptionId = observeSubscriptionId(result.subscriptionId);
+      if (started !== generation || options?.signal?.aborted) {
+        await invoke(port, { type: "unsubscribe_observations", subscriptionId });
+        throw new GuaWebError("aborted", "Observation registration ended.");
+      }
+      try { const snapshot = parseObserveTransport(result.snapshot, "snapshot"); subscriptions.add(subscriptionId); return { subscriptionId, snapshot }; }
+      catch (error) { await invoke(port, { type: "unsubscribe_observations", subscriptionId }); throw error; }
+    };
+    bridge.pollObservations = async (subscriptionId, options) => parseObserveTransport(await invoke(port, { type: "poll_observations", subscriptionId: observeSubscriptionId(subscriptionId) }, options), "changes");
+    bridge.unsubscribeObservations = async (subscriptionId, options) => {
+      await invoke(port, { type: "unsubscribe_observations", subscriptionId: observeSubscriptionId(subscriptionId) }, options); subscriptions.delete(subscriptionId);
+    };
+    bridge.disposeObservations = async () => { generation++; const ids = [...subscriptions]; subscriptions.clear();
+      await Promise.all(ids.map(subscriptionId => invoke(port, { type: "unsubscribe_observations", subscriptionId }).catch(() => undefined))); };
+  }
   if (options.world) {
     bridge.getWorldObjectTree = async (callOptions) => parseWorldObjectTree(await invoke(port, { type: "get_world_object_tree" }, callOptions));
     bridge.findWorldObjects = async (selector, callOptions) => parseWorldQueryResult(await invoke(port, worldQueryCommand(selector), callOptions), selector);
@@ -115,6 +140,7 @@ function compact<T extends Record<string, unknown>>(value: T): T {
 
 function globalPort(name: string, engine: string): GuaInPagePort {
   return {
+    get capabilities() { return ((globalThis as Record<string, unknown>)[name] as GuaInPagePort | undefined)?.capabilities; },
     async invoke(command, options) {
       const port = (globalThis as Record<string, unknown>)[name] as GuaInPagePort | undefined;
       if (!port || typeof port.invoke !== "function") {

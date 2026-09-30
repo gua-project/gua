@@ -19,6 +19,7 @@ struct ObserveJournal {
     uint64_t sequence = 0, revision = 0, generation = 0;
     size_t bytes = 0;
     std::deque<std::pair<uint64_t, std::string>> events;
+    std::map<uint64_t, std::string> catalogs;
 };
 struct ObserveSubscription { int profile; uint64_t epoch, cursor, generation; };
 struct ObserveState {
@@ -39,4 +40,4 @@ struct ObserveState {
         source_id = id.str();
     }
 };
-struct gua_observe_result_t { std::string json; };
+struct gua_observe_result_t { std::string json; std::string catalogs = "[]"; };

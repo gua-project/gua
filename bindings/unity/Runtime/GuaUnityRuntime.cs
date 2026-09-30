@@ -39,6 +39,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
     private readonly Dictionary<ulong, int> webCalls = new();
     private readonly Dictionary<ulong, int> webGameInputCalls = new();
     private GuaGameInputSession? webGameInputSession;
+    private GuaRuntimeObserveClient? webObserveClient;
     private const int DefaultWebCallTimeoutMs = 5000;
     private string webOwnerId = string.Empty;
     private bool webInstalled;
@@ -70,6 +71,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             runtime.EnableWorldObjectTreeAdapter();
             if (Application.platform == RuntimePlatform.WebGLPlayer)
             {
+                webObserveClient = runtime.CreateObserveClient(GuaObservationProfile.Player);
                 webOwnerId = Guid.NewGuid().ToString("N");
                 GuaUnityWebInstall(gameObject.name, webOwnerId, DefaultWebCallTimeoutMs);
                 webInstalled = true;
@@ -117,6 +119,10 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
     }
 
     public static void RunFrame() { if (activeRuntime != null && activeRuntime.enabled) activeRuntime.Tick(); }
+    /// <summary>Bind additional state to an already published UI/Object ID, or
+    /// the World. Retain and dispose the owner when replacing the host object.</summary>
+    public static GuaObserveOwner CreateObserveOwner(GuaObserveSource source, string runtimeId = "") =>
+        (activeRuntime?.runtime ?? throw new InvalidOperationException("The Gua Unity runtime has not started yet.")).CreateObserveOwner(source, runtimeId);
 
     /// <summary>
     /// Gets the clock that game logic must explicitly use to participate in
@@ -164,6 +170,24 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         }
         catch (Exception error) { Debug.LogError("Invalid Gua WebGL request: " + error.Message); return; }
         // Game input search uses a boolean `active` field, while the legacy world-query DTO below uses an integer
+        if (commandType == "get_observe_snapshot" || commandType == "subscribe_observations" || commandType == "poll_observations" || commandType == "unsubscribe_observations")
+        {
+            try {
+                using var document = JsonDocument.Parse(json);
+                var command = document.RootElement.GetProperty("command");
+                bool needsId = commandType == "poll_observations" || commandType == "unsubscribe_observations";
+                var seen = new HashSet<string>();
+                foreach (var field in command.EnumerateObject()) {
+                    if (!seen.Add(field.Name) || (field.Name != "type" && (field.Name != "subscriptionId" || !needsId))) throw new InvalidOperationException();
+                }
+                ulong id = 0;
+                if (needsId && (!command.GetProperty("subscriptionId").TryGetUInt64(out id) || id == 0 || id > 9007199254740991)) throw new InvalidOperationException();
+                if (webObserveClient == null) throw new InvalidOperationException();
+                int operation = commandType == "get_observe_snapshot" ? 1 : commandType == "subscribe_observations" ? 2 : commandType == "poll_observations" ? 3 : 4;
+                GuaUnityWebResolve(webOwnerId, callId, webObserveClient.CommandJson(operation, id), 0);
+            } catch { ResolveWebError(callId, "invalid_request", "Observe request rejected."); }
+            return;
+        }
         // tri-state field with the same name. Route search before JsonUtility attempts that incompatible conversion.
         if (commandType == "find_game_input_actions")
         {
@@ -599,6 +623,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
 
     private void OnDestroy()
     {
+        webObserveClient?.Dispose(); webObserveClient = null;
         UnsubscribeGameInputSceneEvents();
         if (activeRuntime == this) activeRuntime = null;
         if (webInstalled)

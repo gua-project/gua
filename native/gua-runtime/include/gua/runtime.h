@@ -1,12 +1,24 @@
 #pragma once
 
 #include "gua/gua.h"
+#include "gua/observe.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct gua_runtime_t gua_runtime_t;
+/* Host-only borrowed context for existing Observe C/C++ bindings. Never destroy
+ * it. Synchronize host calls/getters with runtime destruction, as for all APIs. */
+gua_context_t* gua_runtime_borrow_context(gua_runtime_t* runtime);
+enum { GUA_OBSERVE_SNAPSHOT = 1, GUA_OBSERVE_SUBSCRIBE = 2,
+    GUA_OBSERVE_POLL = 3, GUA_OBSERVE_UNSUBSCRIBE = 4 };
+/* A transport client owns its profile and subscriptions (limit 64). Requests
+ * cannot change profile or consume another client's cursor. Disconnect closes it. */
+uint64_t gua_runtime_create_observe_client(gua_runtime_t*, int profile);
+void gua_runtime_release_observe_client(gua_runtime_t*, uint64_t client);
+int gua_runtime_observe_command(gua_runtime_t*, uint64_t client, int command,
+    uint64_t subscription, uint64_t* out_subscription, gua_observe_result_t** result);
 
 enum {
     GUA_SCREENSHOT_AVAILABLE = 1,

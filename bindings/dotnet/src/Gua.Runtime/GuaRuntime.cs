@@ -21,11 +21,17 @@ public sealed partial class GuaRuntime : IDisposable
 
     public GuaRuntime()
     {
-        try { _handle = Native.gua_runtime_create(); }
-        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
-        { throw new InvalidOperationException("Failed to load the native Gua runtime. Ensure gua.dll and gua_runtime.dll match the current platform and architecture.", error); }
-        if (_handle == 0) throw new InvalidOperationException("Failed to create a Gua runtime.");
-        Clock = new GuaRuntimeClock(this);
+        try {
+            _handle = Native.gua_runtime_create();
+            if (_handle == 0) throw new InvalidOperationException("Failed to create a Gua runtime.");
+            _observations = new GuaContext(Native.gua_runtime_borrow_context(_handle));
+            Clock = new GuaRuntimeClock(this);
+        } catch (Exception error) {
+            if (_handle != 0) { Native.gua_runtime_destroy(_handle); _handle = 0; }
+            if (error is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+                throw new InvalidOperationException("Failed to load the native Gua runtime. Ensure gua.dll and gua_runtime.dll match the current platform and architecture.", error);
+            throw;
+        }
     }
 
     public GuaRuntimeClock Clock { get; }
@@ -72,7 +78,10 @@ public sealed partial class GuaRuntime : IDisposable
     }
 
     public void BeginFrame(string screen) { ThrowIfDisposed(); Native.gua_runtime_begin_frame(_handle, screen ?? string.Empty); }
-    public void EndFrame() { ThrowIfDisposed(); Native.gua_runtime_end_frame(_handle); }
+    public void EndFrame() {
+        var observations = Observations;
+        lock (observations.ObserveGate) { ThrowIfDisposed(); observations.SampleObservations(true); if (_handle != 0) Native.gua_runtime_end_frame(_handle); }
+    }
 
     public void RegisterNode(GuaNodeDescriptor descriptor)
     {
@@ -250,10 +259,17 @@ public sealed partial class GuaRuntime : IDisposable
 
     public void Dispose()
     {
+        // Observation tokens and getters synchronize against runtime destruction.
+        if (_observations is { } observations) { lock (observations.ObserveGate) DisposeCore(); }
+        else DisposeCore();
+    }
+    private void DisposeCore()
+    {
         if (_handle == 0) return;
         try { ShutdownGameInputHost(); }
         finally
         {
+            _observations?.Dispose();
             Native.gua_runtime_destroy(_handle);
             _handle = 0;
         }

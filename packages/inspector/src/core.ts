@@ -1,3 +1,6 @@
+import { ObserveWireRejectionError, decodeObserveWireResponse, parseObserveTransport, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value";
+export type { ObserveTransport, ObserveSubscription } from "gua-value";
+
 export interface GuaBounds {
   x?: number;
   y?: number;
@@ -100,6 +103,10 @@ export interface InspectorState extends InspectorSnapshot {
 }
 
 export interface GuaInspectorClient {
+  getObserveSnapshot?(): Promise<ObserveTransport>;
+  subscribeObservations?(): Promise<ObserveSubscription>;
+  pollObservations?(subscriptionId: number): Promise<ObserveTransport>;
+  unsubscribeObservations?(subscriptionId: number): Promise<void>;
   getUiTree(): Promise<GuaUiTree>;
   getWorldObjectTree(): Promise<GuaWorldObjectTree>;
   getLogs(): Promise<GuaLogEntry[]>;
@@ -143,6 +150,9 @@ export type GuaInspectorCommand =
   | { id: number; type: "poll_game_input"; requestId: number };
 
 type GuaInspectorCommandInput =
+  | { type: "get_version" }
+  | { type: "get_observe_snapshot" | "subscribe_observations" }
+  | { type: "poll_observations" | "unsubscribe_observations"; subscriptionId: number }
   | { type: "get_ui_tree" }
   | { type: "get_world_object_tree" }
   | { type: "get_logs" }
@@ -476,6 +486,7 @@ function requiredNodeId(action: SemanticActionInput): string {
 }
 
 interface PendingRequest {
+  observeOperation?: string;
   resolve(value: unknown): void;
   reject(reason: Error): void;
   timeoutId: ReturnType<typeof setTimeout>;
@@ -541,6 +552,18 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
     return this.request<GuaUiTree>({ type: "get_ui_tree" });
   }
   async getWorldObjectTree(): Promise<GuaWorldObjectTree> { return this.request({ type: "get_world_object_tree" }); }
+  private async requireObserve(): Promise<void> {
+    const version = await this.request<{ capabilities?: string[] }>({ type: "get_version" });
+    if (!version.capabilities?.includes("observe_v1")) throw new Error("The runtime does not support observe_v1.");
+  }
+  async getObserveSnapshot(): Promise<ObserveTransport> { await this.requireObserve(); return parseObserveTransport(await this.request({ type: "get_observe_snapshot" })); }
+  async subscribeObservations(): Promise<ObserveSubscription> {
+    await this.requireObserve();
+    const result = await this.request<ObserveSubscription>({ type: "subscribe_observations" });
+    return { subscriptionId: observeSubscriptionId(result.subscriptionId), snapshot: parseObserveTransport(result.snapshot) };
+  }
+  async pollObservations(subscriptionId: number): Promise<ObserveTransport> { return parseObserveTransport(await this.request({ type: "poll_observations", subscriptionId: observeSubscriptionId(subscriptionId) })); }
+  async unsubscribeObservations(subscriptionId: number): Promise<void> { await this.request({ type: "unsubscribe_observations", subscriptionId: observeSubscriptionId(subscriptionId) }); }
 
   async getLogs(): Promise<GuaLogEntry[]> {
     return this.request<GuaLogEntry[]>({ type: "get_logs" });
@@ -649,9 +672,11 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
       const timeoutId = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Timed out waiting for ${command.type}.`));
+        if (command.type === "subscribe_observations") socket.close();
       }, timeoutMs);
 
       this.pending.set(id, {
+        observeOperation: ["get_observe_snapshot", "subscribe_observations", "poll_observations", "unsubscribe_observations"].includes(command.type) ? command.type : undefined,
         resolve: (value) => resolve(value as T),
         reject,
         timeoutId,
@@ -680,7 +705,7 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
       });
 
       socket.addEventListener("message", (event) => {
-        this.handleMessage(event.data);
+        this.handleMessage(event.data, socket);
       });
 
       socket.addEventListener("close", () => {
@@ -700,7 +725,7 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
     return this.connectPromise;
   }
 
-  private handleMessage(data: unknown): void {
+  private handleMessage(data: unknown, ownerSocket: WebSocket): void {
     if (typeof data !== "string") {
       return;
     }
@@ -728,7 +753,13 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
     clearTimeout(pending.timeoutId);
     this.pending.delete(response.id);
 
-    if (response.ok) {
+    if (pending.observeOperation) {
+      try { pending.resolve(decodeObserveWireResponse(data, response.id, pending.observeOperation)); }
+      catch (error) {
+        pending.reject(error instanceof ObserveWireRejectionError ? error : new Error("Invalid Observe transport response."));
+        if (pending.observeOperation === "subscribe_observations" && !(error instanceof ObserveWireRejectionError)) ownerSocket.close();
+      }
+    } else if (response.ok) {
       pending.resolve(response.result);
     } else {
       pending.reject(new Error(response.error));

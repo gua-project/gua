@@ -1,5 +1,6 @@
 #include "gua/ws_bridge.hpp"
 #include "socket_platform.hpp"
+#include "../../gua-core/src/value_json.hpp"
 
 #include <algorithm>
 #include <array>
@@ -82,6 +83,7 @@ struct ClientConnection {
     SocketHandle socket = invalid_socket;
     std::shared_ptr<std::mutex> send_mutex;
     unsigned long long game_input_owner_id = 0;
+    unsigned long long observe_client_id = 0;
 };
 
 std::string escape_json(std::string_view value)
@@ -1231,8 +1233,13 @@ private:
             client,
             std::make_shared<std::mutex>(),
             handlers_.create_game_input_owner ? handlers_.create_game_input_owner() : 0,
+            handlers_.create_observe_client ? handlers_.create_observe_client() : 0,
         };
         const auto release_owner = [&]() noexcept {
+            if (connection.observe_client_id && handlers_.release_observe_client) {
+                try { handlers_.release_observe_client(connection.observe_client_id); } catch (...) {}
+                connection.observe_client_id = 0;
+            }
             if (connection.game_input_owner_id == 0 || !handlers_.release_game_input_owner) return;
             try {
                 handlers_.release_game_input_owner(connection.game_input_owner_id);
@@ -1255,7 +1262,7 @@ private:
                     break;
                 }
 
-                const std::string response = handle_command(*message, connection.game_input_owner_id);
+                const std::string response = handle_command(*message, connection.game_input_owner_id, connection.observe_client_id);
                 send_text_frame(connection, response);
             }
         } catch (...) {
@@ -1281,10 +1288,30 @@ private:
         ::send_text_frame(client.socket, text);
     }
 
-    [[nodiscard]] std::string handle_command(std::string_view message, unsigned long long game_input_owner_id)
+    [[nodiscard]] std::string handle_command(std::string_view message, unsigned long long game_input_owner_id, unsigned long long observe_client_id)
     {
         const Command command = parse_command(message);
         try {
+            if(command.type=="get_observe_snapshot" || command.type=="subscribe_observations" ||
+                command.type=="poll_observations" || command.type=="unsubscribe_observations") {
+                int operation=command.type=="get_observe_snapshot" ? 1 : command.type=="subscribe_observations" ? 2 : command.type=="poll_observations" ? 3 : 4;
+                uint64_t subscription=0;
+                try {
+                    using namespace gua_value_detail;
+                    const auto request=parser(message).parse();
+                    if(request.type!=json::object || request.fields.size()!=static_cast<size_t>(operation>=3 ? 3 : 2)) return error_response(command.id,"invalid_request");
+                    if(request.at("type").type!=json::string || request.at("id").type!=json::number) return error_response(command.id,"invalid_request");
+                    (void)integer(request.at("id").text,"$.id");
+                    if(operation>=3) {
+                        const auto& value=request.at("subscriptionId");
+                        if(value.type!=json::number) return error_response(command.id,"invalid_request");
+                        auto id=integer(value.text,"$.subscriptionId"); if(id<=0) return error_response(command.id,"invalid_request"); subscription=static_cast<uint64_t>(id);
+                    }
+                } catch(...) { return error_response(command.id,"invalid_request"); }
+                if(!handlers_.observe_command || !observe_client_id) return error_response(command.id,"unsupported");
+                auto result=handlers_.observe_command(observe_client_id,operation,subscription);
+                return result.ok ? ok_response(command.id,result.json) : error_response(command.id,result.error);
+            }
             if (command.type == "get_ui_tree") {
                 return ok_response(command.id, handlers_.get_ui_tree_json());
             }

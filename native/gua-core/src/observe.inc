@@ -29,9 +29,23 @@ bool observe_exists(const gua_context_t& ctx, const ObserveOwner& o) {
     if (o.source == GUA_OBSERVE_UI) return std::any_of(ctx.nodes.begin(), ctx.nodes.end(), [&](const auto& n){return n.id == o.runtime_id;});
     return std::any_of(ctx.world_objects.begin(), ctx.world_objects.end(), [&](const auto& n){return n.id == o.runtime_id;});
 }
+std::string observe_catalogs(const ObserveSample* value, const ObserveSample* before = nullptr, const ObserveSample* after = nullptr) {
+    std::string json="{"; bool comma=false;
+    const ObserveSample* samples[]={value,before,after}; const char* keys[]={"value","before","after"};
+    for(int i=0;i<3;++i) {
+        const auto* s=samples[i];
+        if(!s || s->error || (gua_value_get_type(s->value.get())!=GUA_VALUE_ENUM && gua_value_get_element_type(s->value.get())!=GUA_VALUE_ENUM)) continue;
+        int n=gua_value_copy_enum_catalog_json(s->value.get(),nullptr,0); if(n<=0) throw std::bad_alloc();
+        std::string catalog(static_cast<size_t>(n),'\0');
+        if(gua_value_copy_enum_catalog_json(s->value.get(),catalog.data(),n)!=n) throw std::bad_alloc();
+        catalog.pop_back(); if(comma) json+=","; comma=true; json+=observe_quote(keys[i])+":"+catalog;
+    }
+    return json+"}";
+}
 void observe_trim(ObserveState& s, ObserveJournal& j) {
     while (!j.events.empty() && (j.events.size() > s.max_events || j.bytes > s.max_bytes)) {
-        j.bytes -= j.events.front().second.size(); j.events.pop_front();
+        j.bytes -= j.events.front().second.size()+j.catalogs.at(j.events.front().first).size();
+        j.catalogs.erase(j.events.front().first); j.events.pop_front();
     }
 }
 // Changing the authorized owner set invalidates Player cursors before any old
@@ -50,7 +64,7 @@ void observe_authorize(gua_context_t& ctx) {
             (o.source == GUA_OBSERVE_OBJECT && std::any_of(world.begin(), world.end(), [&](const auto& n){return n.id == o.runtime_id;}))) allowed.insert(id);
     }
     if (allowed != s.player_owners) {
-        auto& j = s.journals[1]; j.events.clear(); j.bytes = 0; ++j.generation; ++j.revision;
+        auto& j = s.journals[1]; j.events.clear(); j.catalogs.clear(); j.bytes = 0; ++j.generation; ++j.revision;
         s.player_owners = std::move(allowed);
     }
 }
@@ -90,7 +104,9 @@ void observe_change(gua_context_t& ctx, const ObserveRegistration& r, const Obse
             if (!after->error) event += ",\"after\":" + observe_value(*after);
             else event += ",\"afterError\":" + std::to_string(after->error);
         }
-        event += "}"; j.bytes += event.size(); j.events.emplace_back(j.sequence,std::move(event)); observe_trim(s,j);
+        event += "}"; auto catalogs=observe_catalogs(nullptr,before,after);
+        j.bytes += event.size()+catalogs.size(); j.catalogs.emplace(j.sequence,std::move(catalogs));
+        j.events.emplace_back(j.sequence,std::move(event)); observe_trim(s,j);
     }
 }
 void observe_apply(gua_context_t& ctx, ObserveRegistration& r, ObserveSample sample, const char* boundary) {
@@ -102,7 +118,7 @@ void observe_erase_owner(gua_context_t& ctx, uint64_t id) {
     auto& s = ctx.observe;
     if (s.player_owners.erase(id)) {
         auto& player = s.journals[1];
-        player.events.clear(); player.bytes = 0; ++player.generation; ++player.revision;
+        player.events.clear(); player.catalogs.clear(); player.bytes = 0; ++player.generation; ++player.revision;
     }
     for (auto i = s.registrations.begin(); i != s.registrations.end();) {
         if (i->second.owner != id) { ++i; continue; }
@@ -145,6 +161,14 @@ std::string observe_snapshot_json(const gua_context_t& ctx, int p) {
         json += "}";
     }
     return json + "]}";
+}
+std::string observe_snapshot_catalogs(const gua_context_t& ctx, int p) {
+    std::string json="["; bool comma=false;
+    for(const auto& [id,r]:ctx.observe.registrations) {
+        if(!observe_visible(ctx.observe,r,p)) continue;
+        if(comma) json+=","; comma=true; json+=observe_catalogs(&r.current);
+    }
+    return json+"]";
 }
 }
 #define OBS_TRY try
@@ -208,12 +232,12 @@ extern "C" int gua_observe_set_limits(gua_context_t* c,uint32_t count,uint64_t b
 }
 extern "C" int gua_observe_snapshot(gua_context_t* c,int p,gua_observe_result_t** out) {
     if(out) *out=nullptr; if(!c || !out || p<0 || p>1) return GUA_OBSERVE_ARGUMENT;
-    OBS_TRY { std::lock_guard lock(c->mutex); *out=new gua_observe_result_t{observe_snapshot_json(*c,p)}; return 0; } OBS_CATCH
+    OBS_TRY { std::lock_guard lock(c->mutex); *out=new gua_observe_result_t{observe_snapshot_json(*c,p),observe_snapshot_catalogs(*c,p)}; return 0; } OBS_CATCH
 }
 extern "C" int gua_observe_subscribe(gua_context_t* c,int p,uint64_t* id,gua_observe_result_t** out) {
     if(out) *out=nullptr; if(id) *id=0; if(!c || !out || !id || p<0 || p>1) return GUA_OBSERVE_ARGUMENT;
     OBS_TRY { std::lock_guard lock(c->mutex); auto& s=c->observe; auto& j=s.journals[p];
-        auto result=std::make_unique<gua_observe_result_t>(gua_observe_result_t{observe_snapshot_json(*c,p)});
+        auto result=std::make_unique<gua_observe_result_t>(gua_observe_result_t{observe_snapshot_json(*c,p),observe_snapshot_catalogs(*c,p)});
         auto key=s.next_id++; s.subscriptions.emplace(key,ObserveSubscription{p,c->session_epoch,j.sequence,j.generation});
         *out=result.release(); *id=key; return 0; } OBS_CATCH
 }
@@ -226,9 +250,9 @@ extern "C" int gua_observe_poll(gua_context_t* c,uint64_t id,gua_observe_result_
         if(sub.epoch!=c->session_epoch) status="stale_session";
         else if(sub.generation!=j.generation || (sub.cursor<j.sequence && (j.events.empty() || sub.cursor+1<j.events.front().first))) status="gap";
         std::string json="{"+observe_metadata(*c,sub.profile)+",\"kind\":\"changes\",\"status\":"+observe_quote(status)+",\"events\":[";
-        bool comma=false;
-        if(std::strcmp(status,"ok")==0) for(const auto& [sequence,event]:j.events) if(sequence>sub.cursor) { if(comma) json+=","; comma=true; json+=event; }
-        json+="]}"; *out=new gua_observe_result_t{std::move(json)};
+        bool comma=false; std::string catalogs="[";
+        if(std::strcmp(status,"ok")==0) for(const auto& [sequence,event]:j.events) if(sequence>sub.cursor) { if(comma) { json+=","; catalogs+=","; } comma=true; json+=event; catalogs+=j.catalogs.at(sequence); }
+        json+="]}"; catalogs+="]"; *out=new gua_observe_result_t{std::move(json),std::move(catalogs)};
         if(std::strcmp(status,"ok")==0) sub.cursor=j.sequence; // gaps remain sticky; resubscribe explicitly
         return 0;
     } OBS_CATCH
@@ -246,6 +270,12 @@ extern "C" int gua_observe_result_copy_json(const gua_observe_result_t* r,char* 
     return n;
 }
 extern "C" void gua_observe_result_destroy(gua_observe_result_t* r) { delete r; }
+extern "C" int gua_observe_result_copy_transport_json(const gua_observe_result_t* r,char* out,int cap) {
+    if(!r) return 0;
+    try { gua_observe_result_t envelope{"{\"document\":"+r->json+",\"catalogs\":"+r->catalogs+"}"};
+        return gua_observe_result_copy_json(&envelope,out,cap);
+    } catch(...) { return 0; }
+}
 #undef OBS_TRY
 #undef OBS_CATCH
 // Registration liveness is checked before host getters, preventing callbacks

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GuaTraceFileViewer } from "./TraceViewer";
+import { ObservePanel } from "./ObservePanel";
 
 import {
   type GuaInspectorClient,
@@ -283,6 +284,7 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
           onSelect={(nodeId) => setState((current) => selectNode(current, nodeId))}
         />
         <WorldTreePanel objects={state.worldObjectTree.objects} scene={state.worldObjectTree.scene} />
+        <ObservePanel client={inspectorClient} />
         <NodeDetailPanel
           node={selectedNode}
           onClick={() => void clickSelected()}

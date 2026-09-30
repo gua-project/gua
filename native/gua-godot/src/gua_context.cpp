@@ -192,6 +192,7 @@ GuaContext::GuaContext()
 
 GuaContext::~GuaContext()
 {
+    gua_enum_catalog_destroy(observe_catalog_);
     gua_runtime_destroy(runtime_);
     runtime_ = nullptr;
 }
@@ -989,8 +990,59 @@ void GuaContext::publish_inspector_snapshot()
     gua_runtime_publish_inspector_snapshot(runtime_);
 }
 
+uint64_t GuaContext::create_observe_owner(int source,const String& runtime_id) {
+    auto text=runtime_id.utf8(); uint64_t id=0;
+    gua_observe_create_owner(gua_runtime_borrow_context(runtime_),source,{text.get_data(),static_cast<uint32_t>(text.length())},&id); return id;
+}
+int GuaContext::destroy_observe_owner(uint64_t id) { return gua_observe_destroy_owner(gua_runtime_borrow_context(runtime_),id); }
+uint64_t GuaContext::register_observe(uint64_t owner,const String& name,bool player,bool sensitive) {
+    auto text=name.utf8(); uint64_t id=0;
+    gua_observe_registration_v1_t d{sizeof(d),owner,{text.get_data(),static_cast<uint32_t>(text.length())},player ? 1 : 0,sensitive ? 1 : 0};
+    gua_observe_register_v1(gua_runtime_borrow_context(runtime_),&d,&id); return id;
+}
+int GuaContext::unregister_observe(uint64_t id) { return gua_observe_unregister(gua_runtime_borrow_context(runtime_),id); }
+int GuaContext::observe_registration_alive(uint64_t id) const { return gua_observe_registration_alive(gua_runtime_borrow_context(runtime_),id); }
+int GuaContext::register_value_enum(const String& type,const Array& members) {
+    if(!observe_catalog_) observe_catalog_=gua_enum_catalog_create();
+    std::vector<CharString> strings; std::vector<gua_value_text_t> texts; auto id=type.utf8();
+    for(int i=0;i<members.size();++i) { if(members[i].get_type()!=Variant::STRING) return GUA_VALUE_STRUCTURE; strings.push_back(String(members[i]).utf8()); }
+    for(const auto& s:strings) texts.push_back({s.get_data(),static_cast<uint32_t>(s.length())});
+    gua_value_error_t error{};
+    return gua_enum_catalog_register(observe_catalog_,{id.get_data(),static_cast<uint32_t>(id.length())},texts.data(),static_cast<uint32_t>(texts.size()),&error);
+}
+int GuaContext::publish_observe_json(uint64_t registration,const String& json,bool stage) {
+    auto* context=gua_runtime_borrow_context(runtime_);
+    int alive=gua_observe_registration_alive(context,registration); if(alive) return alive;
+    auto text=json.utf8(); gua_value_t* value=nullptr; gua_value_error_t error{};
+    int code=gua_value_from_json({text.get_data(),static_cast<uint32_t>(text.length())},observe_catalog_,&value,&error);
+    int result=gua_observe_publish(context,registration,value,code,stage ? 1 : 0); gua_value_destroy(value); return result;
+}
+uint64_t GuaContext::create_observe_client(int profile) { return gua_runtime_create_observe_client(runtime_,profile); }
+void GuaContext::release_observe_client(uint64_t client) { gua_runtime_release_observe_client(runtime_,client); }
+Dictionary GuaContext::observe_command(uint64_t client,int command,uint64_t subscription) {
+    Dictionary response; gua_observe_result_t* result=nullptr; uint64_t id=0;
+    int code=gua_runtime_observe_command(runtime_,client,command,subscription,&id,&result);
+    response["status"]=code; response["subscriptionId"]=id;
+    if(!code && result) {
+        int n=gua_observe_result_copy_transport_json(result,nullptr,0); std::vector<char> json(static_cast<size_t>(n));
+        if(n>0 && gua_observe_result_copy_transport_json(result,json.data(),n)==n) response["json"]=String::utf8(json.data());
+        else response["status"]=GUA_OBSERVE_INTERNAL;
+    }
+    gua_observe_result_destroy(result); return response;
+}
+
 void GuaContext::_bind_methods()
 {
+    ClassDB::bind_method(D_METHOD("create_observe_owner", "source", "runtime_id"), &GuaContext::create_observe_owner);
+    ClassDB::bind_method(D_METHOD("destroy_observe_owner", "owner"), &GuaContext::destroy_observe_owner);
+    ClassDB::bind_method(D_METHOD("register_observe", "owner", "name", "allow_player", "sensitive"), &GuaContext::register_observe);
+    ClassDB::bind_method(D_METHOD("unregister_observe", "registration"), &GuaContext::unregister_observe);
+    ClassDB::bind_method(D_METHOD("observe_registration_alive", "registration"), &GuaContext::observe_registration_alive);
+    ClassDB::bind_method(D_METHOD("register_value_enum", "enum_type", "members"), &GuaContext::register_value_enum);
+    ClassDB::bind_method(D_METHOD("publish_observe_json", "registration", "json", "stage"), &GuaContext::publish_observe_json);
+    ClassDB::bind_method(D_METHOD("create_observe_client", "profile"), &GuaContext::create_observe_client);
+    ClassDB::bind_method(D_METHOD("release_observe_client", "client"), &GuaContext::release_observe_client);
+    ClassDB::bind_method(D_METHOD("observe_command", "client", "command", "subscription"), &GuaContext::observe_command);
     ClassDB::bind_method(D_METHOD("begin_frame", "screen"), &GuaContext::begin_frame);
     ClassDB::bind_method(D_METHOD("end_frame"), &GuaContext::end_frame);
     ClassDB::bind_method(
