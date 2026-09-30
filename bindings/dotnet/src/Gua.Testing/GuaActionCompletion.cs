@@ -59,7 +59,8 @@ public static class GuaActionCompletion
 
     internal static async Task<GuaActionEvent> EnqueueWithBudgetAsync(
         IGuaContext context, GuaActionRequest request, TimeSpan timeout, TimeSpan pollInterval,
-        Stopwatch? budget, string? selector, string? lastState, CancellationToken cancellationToken)
+        Stopwatch? budget, string? selector, string? lastState, CancellationToken cancellationToken,
+        GuaTraceAction? trace = null)
     {
         Guard.NotNull(context, nameof(context));
         var limit = timeout;
@@ -75,7 +76,7 @@ public static class GuaActionCompletion
             throw Failure(GuaActionFailureKind.Cancelled, 0, GuaActionError.None, "Gua action cancelled before enqueue.");
         if (budget is not null && budget.Elapsed >= limit)
             throw Failure(GuaActionFailureKind.TimedOut, 0, GuaActionError.None, "Gua action timed out before enqueue.");
-        var trace = GuaTraceAction.Begin(context, request);
+        trace ??= GuaTraceAction.Begin(context, request, selector);
         // Trace recording can block; recheck at the actual send boundary.
         if (cancellationToken.IsCancellationRequested)
         {
@@ -89,6 +90,17 @@ public static class GuaActionCompletion
         }
         GuaActionError error;
         ulong requestId;
+        trace?.Sending(request, selector);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            trace?.End(GuaTraceOutcome.Interrupted, "cancelled-before-enqueue");
+            throw Failure(GuaActionFailureKind.Cancelled, 0, GuaActionError.None, "Gua action cancelled before enqueue.");
+        }
+        if (budget is not null && budget.Elapsed >= limit)
+        {
+            trace?.End(GuaTraceOutcome.Failed, "timeout-before-enqueue");
+            throw Failure(GuaActionFailureKind.TimedOut, 0, GuaActionError.None, "Gua action timed out before enqueue.");
+        }
         try { error = context.EnqueueAction(request, out requestId); }
         catch { trace?.End(GuaTraceOutcome.Unknown, "send-exception"); throw; }
         trace?.Accepted(requestId, error);

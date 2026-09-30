@@ -126,6 +126,9 @@ completion 後の UI/World postcondition は既存の状態 wait で明示する
 The opt-in [Gua Trace v1](trace-v1.md) recorder adds a bounded, versioned timeline
 and offline viewer without replacing diagnostics or Recording. It separates
 caller outcome, capture quality, observation times and host completion.
+Native Debug diagnostics also expose the bounded, non-destructive
+`traceLifecycle` journal described in [Trace v1](trace-v1.md). It records UI,
+game input and cleanup host phases without consuming completion queues.
 
 `diagnostics.schema.json` is the source of truth for a best-effort failure
 snapshot. The additive C ABI copy-JSON API and WebSocket `get_diagnostics`

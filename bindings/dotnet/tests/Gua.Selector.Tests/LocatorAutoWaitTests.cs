@@ -155,7 +155,8 @@ public sealed class LocatorAutoWaitTests
         using var trace = new GuaTraceSession(new() { OutputDirectory = Path.Combine(Path.GetTempPath(), "gua-107-trace-tests"), SavePolicy = GuaTraceSavePolicy.OnFailure });
         using var cancellation = new CancellationTokenSource();
         using var snapshotReady = new ManualResetEventSlim();
-        var context = new Fixture { OnSnapshot = n => { if (n == 4) snapshotReady.Set(); } };
+        using var continueToSend = new ManualResetEventSlim();
+        var context = new Fixture { OnSnapshot = n => { if (n == 4) { snapshotReady.Set(); continueToSend.Wait(Limit); } } };
         var gate = typeof(GuaTraceSession).GetField("_gate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(trace)!;
         GuaActionException? failure = null;
         var thread = new Thread(() =>
@@ -164,10 +165,12 @@ public sealed class LocatorAutoWaitTests
             try { GuaAssertions.Query(context).ByRole("button").Click(cancel ? Limit : TimeSpan.FromMilliseconds(100), Poll, cancellation.Token); }
             catch (GuaActionException error) { failure = error; }
         });
+        // Preparation now records before resolution. Contend specifically at the send boundary.
+        thread.Start();
+        Assert.That(snapshotReady.Wait(Limit), Is.True);
         lock (gate)
         {
-            thread.Start();
-            Assert.That(snapshotReady.Wait(Limit), Is.True);
+            continueToSend.Set();
             Assert.That(SpinWait.SpinUntil(() => (thread.ThreadState & System.Threading.ThreadState.WaitSleepJoin) != 0, Limit), Is.True);
             if (cancel) cancellation.Cancel();
             else Thread.Sleep(150);
@@ -178,6 +181,11 @@ public sealed class LocatorAutoWaitTests
         Assert.That(failure.RequestId, Is.Zero);
         Assert.That(context.Sent, Is.Empty);
         await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var recorded = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(recorded.Events.Single(e => e.Type == "caller.result").Data.GetProperty("outcome").GetString(),
+            Is.EqualTo(cancel ? "interrupted" : "failed"));
+        Assert.That(recorded.Events.Single(e => e.Type == "caller.failure").Data.GetProperty("kind").GetString(),
+            Is.EqualTo(cancel ? "cancelled" : "timedOut"));
     }
 
     [Test]

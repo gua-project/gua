@@ -8,7 +8,7 @@ using Gua.Core;
 namespace Gua.Testing;
 
 /// <summary>Framework-independent, bounded fact recorder. Never polls or operates a runtime.</summary>
-public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
+public sealed partial class GuaTraceSession : IDisposable, IAsyncDisposable
 {
     private sealed class Step
     {
@@ -18,6 +18,9 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
         internal readonly HashSet<GuaTraceRequest> Requests = new();
         internal long Bytes;
         internal bool Ended;
+        internal GuaTraceStepKind Kind;
+        internal GuaTraceOutcome Outcome;
+        internal bool ClientCompleted;
     }
     private sealed record Batch(GuaTraceEvent[] Events, Dictionary<string, byte[]> Blobs,
         GuaTraceManifest? Manifest, bool Replace, bool Discard, long Bytes,
@@ -82,7 +85,7 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
                 _steps.RemoveFirst(); _byId.Remove(old.Id); _memoryBytes -= old.Bytes; _evicted++;
                 foreach (var key in old.Requests) _requests.Remove(key);
             }
-            var step = new Step(); _steps.AddLast(step); _byId.Add(step.Id, step);
+            var step = new Step { Kind = kind }; _steps.AddLast(step); _byId.Add(step.Id, step);
             if (request is not null) { step.Requests.Add(request); _requests.Add(request, step.Id); }
             var location = sourceFile?.Replace('\\', '/').Split('/').Last();
             if (AppendUnsafe(step, "step.begin", GuaTraceJson.Element(new { kind, label, request, parentStepId,
@@ -123,7 +126,9 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
             if (_closed || !_byId.TryGetValue(stepId, out var step)) { _dropped++; _issues.Add("step-outside-retention"); return false; }
             if (string.IsNullOrEmpty(type) || type.Length > 64 || type.Any(c => !char.IsLetterOrDigit(c) && c != '.' && c != '-'))
             { _issues.Add("invalid-event-type"); return false; }
-            return AppendUnsafe(step, type, data, sensitive);
+            var recorded = AppendUnsafe(step, type, data, sensitive);
+            if (recorded && type == "request.completion") step.ClientCompleted = true;
+            return recorded;
         }
     }
     public void EndStep(string stepId, GuaTraceOutcome outcome)
@@ -134,7 +139,7 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
             if (!Enum.IsDefined(typeof(GuaTraceOutcome), outcome)) { _issues.Add("invalid-step-outcome"); return; }
             if (AppendUnsafe(step, "step.end", GuaTraceJson.Element(new { outcome })))
             {
-                step.Ended = true; _unfinishedSteps--;
+                step.Ended = true; step.Outcome = outcome; _unfinishedSteps--;
                 if (outcome is GuaTraceOutcome.Unknown or GuaTraceOutcome.Interrupted)
                     _issues.Add("uncertain-step-outcome");
             }
@@ -263,16 +268,21 @@ public sealed class GuaTraceSession : IDisposable, IAsyncDisposable
         }
     }
     public Task<bool> FlushAsync() => CheckpointAsync(false);
-    public Task<bool> CompleteAsync(GuaTraceOutcome outcome)
-    {
-        SetPrimaryOutcome(outcome); return CheckpointAsync(true);
-    }
-    private async Task<bool> CheckpointAsync(bool final)
+    public async Task<bool> CompleteAsync(GuaTraceOutcome outcome)
     {
         var elapsed = Stopwatch.StartNew();
-        if (!await _flushGate.WaitAsync(_options.FlushTimeout).ConfigureAwait(false))
+        SetPrimaryOutcome(outcome);
+        await StopLifecycleAsync().ConfigureAwait(false);
+        var remaining = _options.FlushTimeout > elapsed.Elapsed ? _options.FlushTimeout - elapsed.Elapsed : TimeSpan.Zero;
+        return await CheckpointAsync(true, remaining).ConfigureAwait(false);
+    }
+    private async Task<bool> CheckpointAsync(bool final, TimeSpan? timeout = null)
+    {
+        var limit = timeout ?? _options.FlushTimeout;
+        var elapsed = Stopwatch.StartNew();
+        if (!await _flushGate.WaitAsync(limit).ConfigureAwait(false))
         { lock (_gate) Stop("flush-timeout"); return false; }
-        TimeSpan Remaining() => _options.FlushTimeout > elapsed.Elapsed ? _options.FlushTimeout - elapsed.Elapsed : TimeSpan.Zero;
+        TimeSpan Remaining() => limit > elapsed.Elapsed ? limit - elapsed.Elapsed : TimeSpan.Zero;
         try
         {
             Batch batch;
