@@ -84,6 +84,14 @@ public sealed partial record GuaLocatorQuery
     private async Task<GuaNodeSnapshot> WaitForMatchAsync(GuaActionType? action, LocatorBudget budget, CancellationToken cancellationToken)
     {
         var phase = action.HasValue ? "actionability" : "resolve";
+        if (_value is not null && _valueMatch == GuaMatchMode.Regex)
+        {
+            try { _ = new Regex(_value, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(1)); }
+            catch (ArgumentException)
+            {
+                GuaAssertions.Fail(_context, $"Invalid Gua value regex: selector={Describe(true)}, phase={phase}. {budget.Metadata}");
+            }
+        }
         while (true)
         {
             CheckBudget(budget, action, phase, cancellationToken);
@@ -92,6 +100,9 @@ public sealed partial record GuaLocatorQuery
             try
             {
                 // Require strict query support. Never fall back to a legacy first-match lookup.
+                var before = _context.GetUiTreeJson();
+                budget.Metadata = DescribeMetadataJson(before);
+                CheckBudget(budget, action, phase, cancellationToken);
                 result = _context.Query(_selector);
                 CheckBudget(budget, action, phase, cancellationToken);
                 if (!result.Valid)
@@ -100,6 +111,14 @@ public sealed partial record GuaLocatorQuery
                 var tree = _context.GetUiTreeJson();
                 budget.Metadata = DescribeMetadataJson(tree);
                 CheckBudget(budget, action, phase, cancellationToken);
+                if (!SameSelectorSnapshot(before, tree))
+                {
+                    budget.LastState = "snapshot changed during selector query";
+                    var snapshotRemaining = budget.Limit - budget.Clock.Elapsed;
+                    await DelayAsync(snapshotRemaining < budget.Interval ? snapshotRemaining : budget.Interval,
+                        budget, action, phase, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
                 var snapshots = new List<GuaNodeSnapshot>();
                 foreach (var match in result.Matches)
                 {
@@ -164,6 +183,23 @@ public sealed partial record GuaLocatorQuery
                 0, action.Value, null, GuaActionError.None, message, snapshotMetadata: "");
         if (token.IsCancellationRequested) throw new OperationCanceledException(message, token);
         GuaAssertions.Fail(_context, message);
+    }
+
+    private static bool SameSelectorSnapshot(string before, string after)
+    {
+        using var first = JsonDocument.Parse(before);
+        using var second = JsonDocument.Parse(after);
+        var a = first.RootElement;
+        var b = second.RootElement;
+        // Revision includes every selector-relevant field; epoch prevents reset/ABA reuse.
+        // Compare nodes as well for legacy/custom contexts without revision metadata.
+        foreach (var field in new[] { "sessionEpoch", "revision", "nodes" })
+        {
+            var hasA = a.TryGetProperty(field, out var av);
+            var hasB = b.TryGetProperty(field, out var bv);
+            if (hasA != hasB || (hasA && av.GetRawText() != bv.GetRawText())) return false;
+        }
+        return true;
     }
 
     private static string DescribeMetadataJson(string tree)

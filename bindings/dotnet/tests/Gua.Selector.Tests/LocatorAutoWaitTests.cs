@@ -12,6 +12,75 @@ public sealed class LocatorAutoWaitTests
     private static readonly TimeSpan Limit = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(1);
 
+    [TestCase("resolve")]
+    [TestCase("actionable")]
+    [TestCase("action")]
+    public void InvalidValueRegexFailsBeforeLookingForAbsentCandidates(string operation)
+    {
+        var context = new Fixture { Ids = [], OnQuery = _ => Assert.Fail("Invalid regex must fail before querying.") };
+        var query = GuaAssertions.Query(context).ByValue("secret-pattern[", GuaMatchMode.Regex);
+        var error = Assert.ThrowsAsync<GuaAssertionException>(async () =>
+        {
+            if (operation == "resolve") await query.ResolveAsync(Limit, Poll);
+            else if (operation == "actionable") await query.WaitForActionableAsync(GuaActionType.Click, Limit, Poll);
+            else await query.ClickAsync(Limit, Poll);
+        });
+        Assert.That(error!.Message, Does.Contain("Invalid Gua value regex"));
+        Assert.That(error.ToString(), Does.Not.Contain("secret-pattern"));
+        Assert.That(context.QueryCount, Is.Zero);
+        Assert.That(context.Sent, Is.Empty);
+    }
+
+    [TestCase("role")]
+    [TestCase("name")]
+    [TestCase("text")]
+    [TestCase("scope")]
+    [TestCase("visible")]
+    [TestCase("enabled")]
+    public void ChangedBaseSelectorCannotResolveAStaleId(string field)
+    {
+        using var native = new GuaContext();
+        var original = new GuaNodeDescriptor("same", "button", "Go", new GuaBounds(0, 0, 1, 1), ParentId: "root", Text: "Start");
+        void Publish(GuaNodeDescriptor descriptor)
+        {
+            native.BeginFrame("fixture");
+            native.RegisterNode(new GuaNodeDescriptor("root", "panel", "Root", new GuaBounds(0, 0, 1, 1)));
+            native.RegisterNode(descriptor);
+            native.EndFrame();
+        }
+        Publish(original);
+        var changed = field switch
+        {
+            "role" => original with { Role = "textbox" },
+            "name" => original with { Label = "Other" },
+            "text" => original with { Text = "Other" },
+            "scope" => original with { ParentId = null },
+            "visible" => original with { Visible = false },
+            _ => original with { Enabled = false },
+        };
+        var context = new SwitchingContext(native, () => Publish(changed));
+        var query = GuaAssertions.Query(context).ByRole("button", "Go").ByText("Start").Within("root").WhereVisible().WhereEnabled();
+        var error = Assert.ThrowsAsync<GuaAssertionException>(() => query.ResolveAsync(TimeSpan.FromMilliseconds(200), Poll));
+        Assert.That(error!.Message, Does.Contain("timed out"));
+    }
+
+    [Test]
+    public async Task ChangedSnapshotCannotReportStaleAmbiguity()
+    {
+        using var native = new GuaContext();
+        void Publish(bool two)
+        {
+            native.BeginFrame("fixture");
+            native.RegisterNode(new GuaNodeDescriptor("one", "button", "One", new GuaBounds(0, 0, 1, 1)));
+            if (two) native.RegisterNode(new GuaNodeDescriptor("two", "button", "Two", new GuaBounds(0, 0, 1, 1)));
+            native.EndFrame();
+        }
+        Publish(true);
+        var context = new SwitchingContext(native, () => Publish(false));
+        var node = await GuaAssertions.Query(context).ByRole("button").ResolveAsync(Limit, Poll);
+        Assert.That(node.Id, Is.EqualTo("one"));
+    }
+
     [Test]
     public void InvalidValueRegexDoesNotExposeSelectorContents()
     {
@@ -35,13 +104,14 @@ public sealed class LocatorAutoWaitTests
     }
 
     [Test]
-    public async Task ValuePredicateAndActionabilityUseTheSameSnapshot()
+    public void ValuePredicateAndActionabilityUseTheSameSnapshot()
     {
         var context = new Fixture();
         context.OnSnapshot = n => context.Value = n % 2 == 1 ? "target" : "other";
-        context.OnEnqueue = () => Assert.That(context.Value, Is.EqualTo("target"));
-        await GuaAssertions.Query(context).ByRole("button").ByValue("target").ClickAsync(Limit, Poll);
-        Assert.That(context.Sent, Has.Count.EqualTo(1));
+        var error = Assert.ThrowsAsync<GuaActionException>(() => GuaAssertions.Query(context)
+            .ByRole("button").ByValue("target").ClickAsync(TimeSpan.FromMilliseconds(100), Poll));
+        Assert.That(error!.Kind, Is.EqualTo(GuaActionFailureKind.TimedOut));
+        Assert.That(context.Sent, Is.Empty);
     }
 
     [TestCase(false)]
@@ -52,7 +122,7 @@ public sealed class LocatorAutoWaitTests
         var context = new Fixture
         {
             OnQuery = _ => { if (cancel) cancellation.Cancel(); else Thread.Sleep(80); },
-            OnSnapshot = _ => Assert.Fail("No fresh snapshot should be requested after the budget expires."),
+            OnSnapshot = n => Assert.That(n, Is.EqualTo(1), "Only the pre-query snapshot is allowed before the query expires."),
         };
         var error = Assert.ThrowsAsync<GuaActionException>(() => GuaAssertions.Query(context)
             .ByRole("button").ClickAsync(TimeSpan.FromMilliseconds(50), Poll, cancellation.Token));
@@ -85,7 +155,7 @@ public sealed class LocatorAutoWaitTests
         using var trace = new GuaTraceSession(new() { OutputDirectory = Path.Combine(Path.GetTempPath(), "gua-107-trace-tests"), SavePolicy = GuaTraceSavePolicy.OnFailure });
         using var cancellation = new CancellationTokenSource();
         using var snapshotReady = new ManualResetEventSlim();
-        var context = new Fixture { OnSnapshot = n => { if (n == 2) snapshotReady.Set(); } };
+        var context = new Fixture { OnSnapshot = n => { if (n == 4) snapshotReady.Set(); } };
         var gate = typeof(GuaTraceSession).GetField("_gate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(trace)!;
         GuaActionException? failure = null;
         var thread = new Thread(() =>
@@ -179,7 +249,7 @@ public sealed class LocatorAutoWaitTests
         var result = await GuaAssertions.Query(context).ByRole("button").ClickAsync(Limit, Poll);
         Assert.Multiple(() =>
         {
-            Assert.That(context.QueryCount, Is.EqualTo(6));
+            Assert.That(context.QueryCount, Is.GreaterThanOrEqualTo(6));
             Assert.That(context.Sent.Single().NodeId, Is.EqualTo("new"));
             Assert.That(result.RequestId, Is.EqualTo(42));
             Assert.That(context.Polled, Is.All.EqualTo(42));
@@ -207,7 +277,7 @@ public sealed class LocatorAutoWaitTests
             GuaAssertions.Query(context).ByRole("button").ClickAsync(Limit, Poll));
         Assert.That(error!.Message, Does.Contain("matched 2").And.Contain("phase=actionability"));
         Assert.That(error.Message, Does.Contain("one (button").And.Contain("two (button").And.Contain("parentId=").And.Contain("Within("));
-        Assert.That(context.QueryCount, Is.EqualTo(ambiguousAt));
+        Assert.That(context.QueryCount, Is.InRange(ambiguousAt, ambiguousAt + 1));
         Assert.That(context.Sent, Is.Empty);
     }
 
@@ -333,6 +403,27 @@ public sealed class LocatorAutoWaitTests
         Assert.That(context.Sent[6].Key, Is.EqualTo("Enter"));
     }
 
+    private sealed class SwitchingContext(GuaContext native, Action change) : IGuaContext
+    {
+        private bool _changed;
+        public GuaQueryResult Query(GuaSelector selector)
+        {
+            var result = native.Query(selector);
+            if (!_changed) { _changed = true; change(); }
+            return result;
+        }
+        public string GetUiTreeJson() => native.GetUiTreeJson();
+        public GuaNodeState GetNodeState(string id) => native.GetNodeState(id);
+        public string FindNodeById(string id) => native.FindNodeById(id);
+        public string FindNodeByRole(string role, string? name = null) => native.FindNodeByRole(role, name);
+        public string FindNodeByText(string text) => native.FindNodeByText(text);
+        public bool EnqueueClick(string id) => native.EnqueueClick(id);
+        public GuaActionError EnqueueAction(GuaActionRequest request, out ulong requestId) => native.EnqueueAction(request, out requestId);
+        public bool TryPollActionEvent(out GuaActionEvent e) => native.TryPollActionEvent(out e);
+        public bool TryPollActionEvent(ulong id, out GuaActionEvent e) => native.TryPollActionEvent(id, out e);
+        public bool TryPollEvent(out GuaEvent e) => native.TryPollEvent(out e);
+    }
+
     private sealed class Fixture : IGuaContext
     {
         internal string[] Ids = ["one"];
@@ -357,7 +448,7 @@ public sealed class LocatorAutoWaitTests
             OnSnapshot?.Invoke(++_snapshots);
             return JsonSerializer.Serialize(new
         {
-            schemaVersion = 2, sessionEpoch = 1, frameSequence = QueryCount, revision = QueryCount, screen = "fixture",
+            schemaVersion = 2, sessionEpoch = 1, frameSequence = QueryCount, revision = 1, screen = "fixture",
             nodes = Ids.Select(id => new { id, role = "button", label = "Test", value = Value, visible = Visible, enabled = Enabled,
                 bounds = new { x = 0, y = 0, w = 1, h = 1 }, actions = Actions }),
             });

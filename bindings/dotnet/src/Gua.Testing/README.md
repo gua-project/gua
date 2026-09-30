@@ -24,6 +24,9 @@ await GuaAssertions.Query(context).ById("game-screen").ResolveAsync();
 wrapper であり、completion まで待つ。
 
 - 0 件・hidden・disabled・action 未公開は再検索する。複数一致は直ちに失敗する。
+- query 前後の snapshot の epoch/revision と node 内容を照合し、変更があれば
+  再検索する。全 selector 条件と actionability に同じ観測を使う。
+  value regex の構文は候補の有無に関係なく待機前に検証する。
 - resolve/actionability → enqueue → completion が一つの timeout 予算を共有する。
   既定値は `GuaActionCompletion.DefaultTimeout` / `DefaultPollInterval`。
   timeout は非負、poll interval は正である必要があり、ゼロ予算では操作しない。
