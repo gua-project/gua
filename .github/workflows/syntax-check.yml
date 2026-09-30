@@ -175,8 +175,8 @@ jobs:
       - name: Run Release Web in-page bridge smoke
         run: bun scripts/verify-godot-web-release.ts artifacts/godot-web-release
 
-      - name: Preserve failed Web Release export for diagnosis
-        if: failure()
+      - name: Preserve Web Release export for diagnosis
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: godot-web-release-diagnostics

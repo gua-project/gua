@@ -4,7 +4,7 @@ import { CdpTimeoutError, createCdpClient, waitForDefaultExecutionContext } from
 // Exercise the actual CDP transport: a busy renderer delays all queued replies,
 // including an already timed-out probe. Its late response must not complete the next probe.
 async function withCdpServer(
-  respond: (request: { id: number; method: string; params: Record<string, unknown> }, reply: (payload: unknown) => void) => void,
+  respond: (request: { id: number; method: string; params: Record<string, unknown> }, reply: (payload: unknown) => void, close: () => void) => void,
   run: (client: ReturnType<typeof createCdpClient>) => Promise<void>,
 ) {
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -17,7 +17,7 @@ async function withCdpServer(
         respond(request, (payload) => {
           const timer = setTimeout(() => { timers.delete(timer); socket.send(JSON.stringify({ id: request.id, ...payload as object })); }, 0);
           timers.add(timer);
-        });
+        }, () => socket.close());
       },
     },
   });
@@ -81,6 +81,17 @@ test("readiness does not swallow unrelated timeout or connection failures", asyn
   for (const error of [new CdpTimeoutError("Runtime.enable"), new Error("Chrome DevTools connection closed.")]) {
     await expect(waitForDefaultExecutionContext({ send: async () => { throw error; } }, 1_000)).rejects.toBe(error);
   }
+});
+
+test("a CDP socket closed between probes fails immediately as a disconnect", async () => {
+  await withCdpServer((_request, reply, close) => {
+    reply({ result: {} });
+    setTimeout(close, 10);
+  }, async client => {
+    await client.send("Runtime.enable");
+    await Bun.sleep(100);
+    await expect(waitForDefaultExecutionContext(client, 300)).rejects.toThrow("Chrome DevTools connection closed.");
+  });
 });
 
 test("a responsive loading document still observes the total readiness deadline", async () => {

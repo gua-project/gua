@@ -27,6 +27,7 @@ export class CdpTimeoutError extends Error {
 export function createCdpClient(url: string) {
   const socket = new WebSocket(url);
   let nextId = 1;
+  let terminalError: Error | undefined;
   const pending = new Map<number, {
     method: string;
     started: number;
@@ -45,15 +46,19 @@ export function createCdpClient(url: string) {
       if (message.error) call.reject(new Error(message.error.message));
       else call.resolve(message.result);
   });
-  socket.addEventListener("close", () => {
+  const failConnection = (error: Error) => {
+    terminalError ??= error;
     for (const call of pending.values()) {
       clearTimeout(call.timer);
-      call.reject(new Error("Chrome DevTools connection closed."));
+      call.reject(terminalError);
     }
     pending.clear();
-  });
+  };
+  socket.addEventListener("close", () => failConnection(new Error("Chrome DevTools connection closed.")));
+  socket.addEventListener("error", () => failConnection(new Error("Chrome DevTools connection failed.")));
   return {
     open(timeoutMs = 10_000): Promise<void> {
+      if (terminalError) return Promise.reject(terminalError);
       if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("Timed out connecting to Chrome DevTools.")), timeoutMs);
@@ -62,6 +67,8 @@ export function createCdpClient(url: string) {
       });
     },
     send(method: string, params: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<unknown> {
+      if (terminalError) return Promise.reject(terminalError);
+      if (socket.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Chrome DevTools connection is not open."));
       const id = nextId++;
       const started = performance.now();
       console.log(`Chrome DevTools request ${id}: ${method}, timeout=${timeoutMs}ms`);
