@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GuaTraceFileViewer } from "./TraceViewer";
 import { ObservePanel } from "./ObservePanel";
+import { NodeCodePanel } from "./NodeCodePanel";
 
 import {
   type GuaInspectorClient,
@@ -505,6 +506,7 @@ function NodeDetailPanel({ node, onClick, onFocus, onAction }: NodeDetailPanelPr
   return (
     <section className="gua-panel gua-detail-panel">
       <PanelHeader title="Node Detail" detail={node.id} />
+      <NodeCodePanel key={`${node.id}:${sensitive}`} node={node} sensitive={sensitive} />
       <div className="gua-command-row">
         <button type="button" onClick={onClick} disabled={!node.actions.includes("click")}>
           Click

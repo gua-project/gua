@@ -437,6 +437,11 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
 
+      - name: Set up .NET for Inspector generated-code compilation
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
