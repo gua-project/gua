@@ -152,7 +152,7 @@ jobs:
         run: dotnet build bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
 
       - name: Test semantic snapshot package
-        run: dotnet test bindings/dotnet/tests/Gua.Snapshots.Tests/Gua.Snapshots.Tests.csproj --configuration Release --no-restore
+        run: dotnet test bindings/dotnet/tests/Gua.Snapshots.Tests/Gua.Snapshots.Tests.csproj --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
 
       - name: Test Visual and Recording packages
         run: dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}

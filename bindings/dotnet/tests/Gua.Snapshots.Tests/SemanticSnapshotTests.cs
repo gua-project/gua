@@ -240,6 +240,16 @@ public class SemanticSnapshotTests
         Assert.That(Directory.Exists(_root), Is.False);
     }
 
+    [TestCase("/world/objects/*/state/secret~field")]
+    [TestCase("/world/objects/*/state/secret~")]
+    public void InvalidPointerEscapesFailBeforeSensitiveArtifacts(string path)
+    {
+        var world = World("a"); world["objects"]![0]!["state"]!["secret~field"] = "LEAK";
+        Assert.Throws<ArgumentException>(() => Compare(Ui(), Options(true,
+            rules: [new(path, SemanticSnapshotRuleAction.Mask)], world: () => world.ToJsonString())));
+        Assert.That(Directory.Exists(_root), Is.False);
+    }
+
     private sealed class FakeContext(string json) : IGuaContext
     {
         public string GetUiTreeJson() => json;

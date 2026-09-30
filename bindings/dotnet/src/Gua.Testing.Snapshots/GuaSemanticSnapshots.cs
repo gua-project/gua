@@ -245,6 +245,12 @@ public static class GuaSemanticSnapshots
     private static bool HasIds(JsonArray items) => items.All(n => n is JsonObject o && o["id"] is JsonValue v && v.TryGetValue<string>(out _)) &&
         items.Select(n => n!["id"]!.GetValue<string>()).Distinct(StringComparer.Ordinal).Count() == items.Count;
     private static string Escape(string value) => value.Replace("~", "~0").Replace("/", "~1");
+    private static bool ValidPointerEscapes(string path)
+    {
+        for (var i = 0; i < path.Length; i++)
+            if (path[i] == '~' && (++i >= path.Length || path[i] is not ('0' or '1'))) return false;
+        return true;
+    }
     private static string Serialize(JsonNode? node) => node?.ToJsonString(JsonOptions) + "\n";
     private static string Key(string value)
     {
@@ -257,7 +263,7 @@ public static class GuaSemanticSnapshots
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(options.BaselineVariant) || string.IsNullOrWhiteSpace(options.BaselineDirectory) || string.IsNullOrWhiteSpace(options.ArtifactDirectory))
             throw new ArgumentException("Name, variant and directories are required.");
-        if (options.Rules is null || options.Rules.Any(r => r is null || string.IsNullOrEmpty(r.Path) || !r.Path.StartsWith("/", StringComparison.Ordinal) || !Enum.IsDefined(typeof(SemanticSnapshotRuleAction), r.Action)))
+        if (options.Rules is null || options.Rules.Any(r => r is null || string.IsNullOrEmpty(r.Path) || !r.Path.StartsWith("/", StringComparison.Ordinal) || !ValidPointerEscapes(r.Path) || !Enum.IsDefined(typeof(SemanticSnapshotRuleAction), r.Action)))
             throw new ArgumentException("Rules require JSON Pointer paths and valid actions.");
         if (options.Rules.Any(r => Matches(r.Path, "/snapshotVersion")))
             throw new ArgumentException("Rules cannot replace the baseline envelope version.");
