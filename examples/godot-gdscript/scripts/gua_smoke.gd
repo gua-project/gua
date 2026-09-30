@@ -909,6 +909,24 @@ func _verify_observe(ui: RefCounted, door: Node) -> bool:
 	isolated = null
 	if old_context.get_ref() != null or retained.owner_id != 0:
 		return false
+	# A getter may dispose the adapter during either UI or World sampling.
+	var dispose_button := Button.new()
+	dispose_button.name = "DisposeObserve"
+	dispose_button.set_meta(&"gua_id", "dispose-getter")
+	isolated_root.add_child(dispose_button)
+	for source in [1, 3]:
+		isolated = GuaAutoAdapterScript.new()
+		isolated.attach(isolated_root)
+		isolated.update("getter-dispose")
+		retained = isolated.create_observe_owner(source, "dispose-getter" if source == 1 else "", dispose_button if source == 1 else null)
+		if retained == null:
+			return false
+		retained.observe("dispose", func() -> Dictionary:
+			isolated.dispose()
+			return {"type": "integer", "value": 1})
+		isolated.update("getter-dispose")
+		if not isolated.disposed or isolated.context != null:
+			return false
 	isolated_root.queue_free()
 	print("Gua Observe Godot integration passed.")
 	return true

@@ -18,9 +18,12 @@ OPEN-03のSnapshot+cursorはnativeの原子的subscribeを使用する。切断�
 | Godot Web / Unity WebGL / WebMCP | Player | engineの同じ登録 | same-page port、独立購読とdetach解放 |
 
 Playerのprofileはhostが固定し、要求パラメータでDebugへ昇格させない。
+transport clientの作成時もhostの上限を適用する。hostがDebugからPlayerへ降格した後は、
+既存Debug clientの全commandを失効として拒否し、その購読を解放する。
 購読上限は一接続64。未知・他接続のsubscriptionIdは安全な固定エラーとする。
 subscribeの応答喪失・不正な成功応答・timeout・cancelでIDが不明な場合は、所有接続を閉じて購読を回収する。
 再接続は可能だが既存tokenは復元しない。明示的なサーバー拒否では既存購読を維持する。
+古い接続のtokenはpollを拒否し、Disposeは新しい接続へunsubscribeを送らない。
 enum候補はValue生成時のcatalogの必要な型だけを所有コピーして運ぶ。
 秘密値のcatalogを含めて除外する。候補定義を別途Observeへ再登録しない。
 
@@ -28,11 +31,12 @@ enum候補はValue生成時のcatalogの必要な型だけを所有コピーし�
 
 `get_observe_snapshot`、`subscribe_observations`、`poll_observations`、
 `unsubscribe_observations`。後二者だけ正の安全整数`subscriptionId`が必須。
+全commandの要求`id`も正の安全整数で、検証済みの値を応答へそのまま返す。
 未知field、重複key、不正JSON、不正IDを拒否する。
 subscribe応答は `{subscriptionId, snapshot}`。unsubscribe応答は `null`。
 Snapshot/pollの新transport応答は `{document, catalogs}`。
 `document`は変更しないObserve v1、`catalogs`はentries/eventsと同じ順の配列。
-各要素のvalue/before/afterは、そのValueで使用するEnum Catalog v1。
+各要素のvalue/before/afterは、そのValueで使用するEnum Catalog v1の定義一つだけを含む。
 非enum・取得不能の箇所は省略する。欠損時はevents/catalogsをともに空にする。
 標準worldPositionはWorld Object TreeのruntimeIdで関連付け、追加phaseだけ登録する。
 両方の取得は同時Snapshotとは限らず、sourceId/epoch/UI・World frame/revisionを保持する。

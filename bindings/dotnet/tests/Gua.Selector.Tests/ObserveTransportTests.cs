@@ -180,4 +180,90 @@ public sealed class ObserveTransportTests
         Assert.That(remote.GetVersion().Capabilities, Does.Contain("observe_v1"));
         await host;
     }
+    [Test]
+    public void TransportClientsCannotExceedCurrentHostProfile()
+    {
+        using var runtime = new GuaRuntime();
+        using var owner = runtime.CreateObserveOwner(GuaObserveSource.World);
+        using var item = owner.Property("private", () => GuaValue.String("SECRET_MARKER")); item.Notify();
+        using var debug = runtime.CreateObserveClient(GuaObservationProfile.Debug);
+        var sub = Parse(debug.CommandJson(2)).GetProperty("subscriptionId").GetUInt64();
+        Assert.That(debug.CommandJson(1), Does.Contain("SECRET_MARKER"));
+        runtime.SetObservationProfile(GuaObservationProfile.Player);
+        Assert.Throws<InvalidOperationException>(() => runtime.CreateObserveClient(GuaObservationProfile.Debug));
+        foreach (var command in new[] { 1, 2, 3, 4 })
+            Assert.That(Assert.Throws<GuaObserveException>(() => debug.CommandJson(command, command >= 3 ? sub : 0))!.Code, Is.EqualTo(2));
+        using var player = runtime.CreateObserveClient(GuaObservationProfile.Player);
+        Assert.That(player.CommandJson(1), Does.Not.Contain("SECRET_MARKER"));
+    }
+    [Test]
+    public async Task OldTokenCannotPollOrRemoveAReusedSubscriptionAfterReconnect()
+    {
+        int port = Port(); using var first = new GuaRuntime(); using var restarted = new GuaRuntime();
+        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var closed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var host = Task.Run(async () => {
+            foreach (var runtime in new[] { first, restarted }) {
+                var connection = await listener.GetContextAsync();
+                using var socket = (await connection.AcceptWebSocketAsync(null)).WebSocket;
+                using var client = runtime.CreateObserveClient();
+                for (int i = 0; i < (runtime == first ? 2 : 4); i++) {
+                    byte[] bytes = new byte[65536]; var received = await socket.ReceiveAsync(bytes.AsMemory(), timeout.Token);
+                    var request = Parse(Encoding.UTF8.GetString(bytes, 0, received.Count));
+                    string result = request.GetProperty("type").GetString() switch {
+                        "get_version" => runtime.GetVersionJson(),
+                        "subscribe_observations" => client.CommandJson(2),
+                        "poll_observations" => client.CommandJson(3, request.GetProperty("subscriptionId").GetUInt64()),
+                        "unsubscribe_observations" => client.CommandJson(4, request.GetProperty("subscriptionId").GetUInt64()),
+                        _ => throw new InvalidOperationException("Unexpected command")
+                    };
+                    if (request.GetProperty("type").GetString() == "subscribe_observations")
+                        Assert.That(Parse(result).GetProperty("subscriptionId").GetUInt64(), Is.EqualTo(1));
+                    await socket.SendAsync(Encoding.UTF8.GetBytes($"{{\"id\":{request.GetProperty("id")},\"ok\":true,\"result\":{result}}}").AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+                }
+                if (runtime == first) {
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "restart", timeout.Token);
+                    closed.SetResult(true);
+                    await socket.ReceiveAsync(new byte[65536].AsMemory(), timeout.Token);
+                }
+            }
+        });
+        using var remote = new GuaWebSocketContext($"ws://127.0.0.1:{port}/", TimeSpan.FromSeconds(3));
+        var old = remote.SubscribeObservations();
+        await closed.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Catch(() => remote.GetVersion()); // Receive the old connection's close frame.
+        using var fresh = remote.SubscribeObservations(); // Fresh native context reuses subscription ID 1.
+        Assert.Throws<InvalidOperationException>(() => old.PollJson());
+        Assert.DoesNotThrow(old.Dispose);
+        Assert.DoesNotThrow(() => fresh.PollJson());
+        fresh.Dispose(); await host;
+    }
+    [Test]
+    public async Task ObserveWireEchoesSafeWideIdsAndRejectsNonPositiveOrUnsafeIdsWithoutSubscribing()
+    {
+        using var runtime = new GuaRuntime(); int port = Port(); Assert.That(runtime.StartInspectorBridge(port), Is.True);
+        using var socket = new ClientWebSocket(); await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}"), CancellationToken.None);
+        async Task<JsonElement> Command(string json) {
+            await socket.SendAsync(Encoding.UTF8.GetBytes(json).AsMemory(), WebSocketMessageType.Text, true, CancellationToken.None);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            while (true) {
+                byte[] bytes = new byte[65536]; var frame = await socket.ReceiveAsync(bytes.AsMemory(), timeout.Token);
+                var response = Parse(Encoding.UTF8.GetString(bytes, 0, frame.Count));
+                if (response.TryGetProperty("id", out _)) return response;
+            }
+        }
+        foreach (string id in new[] { "-1", "0", "1.00000000000000001", "9007199254740992" }) {
+            var response = await Command($"{{\"id\":{id},\"type\":\"subscribe_observations\"}}");
+            Assert.That(response.GetProperty("ok").GetBoolean(), Is.False);
+            Assert.That(response.GetProperty("id").GetInt64(), Is.Zero);
+        }
+        var subscribed = await Command("{\"id\":2147483648,\"type\":\"subscribe_observations\"}");
+        Assert.That(subscribed.GetProperty("id").GetInt64(), Is.EqualTo(2147483648L));
+        Assert.That(subscribed.GetProperty("ok").GetBoolean(), Is.True);
+        Assert.That(subscribed.GetProperty("result").GetProperty("subscriptionId").GetUInt64(), Is.EqualTo(1));
+        var released = await Command("{\"id\":9007199254740991,\"type\":\"unsubscribe_observations\",\"subscriptionId\":1}");
+        Assert.That(released.GetProperty("id").GetInt64(), Is.EqualTo(9007199254740991L));
+        Assert.That(released.GetProperty("ok").GetBoolean(), Is.True);
+    }
 }

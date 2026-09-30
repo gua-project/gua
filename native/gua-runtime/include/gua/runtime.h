@@ -14,7 +14,9 @@ gua_context_t* gua_runtime_borrow_context(gua_runtime_t* runtime);
 enum { GUA_OBSERVE_SNAPSHOT = 1, GUA_OBSERVE_SUBSCRIBE = 2,
     GUA_OBSERVE_POLL = 3, GUA_OBSERVE_UNSUBSCRIBE = 4 };
 /* A transport client owns its profile and subscriptions (limit 64). Requests
- * cannot change profile or consume another client's cursor. Disconnect closes it. */
+ * cannot change profile or consume another client's cursor. Disconnect closes it.
+ * Creation returns 0 if the profile exceeds the host ceiling. A later host
+ * downgrade invalidates Debug clients; commands release cursors and return STALE. */
 uint64_t gua_runtime_create_observe_client(gua_runtime_t*, int profile);
 void gua_runtime_release_observe_client(gua_runtime_t*, uint64_t client);
 int gua_runtime_observe_command(gua_runtime_t*, uint64_t client, int command,

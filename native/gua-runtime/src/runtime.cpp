@@ -544,7 +544,9 @@ extern "C" gua_context_t* gua_runtime_borrow_context(gua_runtime_t* runtime) {
 }
 extern "C" uint64_t gua_runtime_create_observe_client(gua_runtime_t* r,int profile) {
     if(!valid_runtime(r) || profile<0 || profile>1) return 0;
-    try { std::lock_guard lock(r->context_mutex); auto id=r->next_observe_client++;
+    try { std::lock_guard lock(r->context_mutex);
+        if(r->observation_profile==GUA_OBSERVATION_PROFILE_PLAYER && profile==GUA_OBSERVATION_PROFILE_DEBUG) return 0;
+        auto id=r->next_observe_client++;
         r->observe_clients.emplace(id,gua_runtime_t::ObserveClient{profile,{}}); return id;
     } catch(...) { return 0; }
 }
@@ -564,6 +566,10 @@ extern "C" int gua_runtime_observe_command(gua_runtime_t* r,uint64_t client,int 
     try { std::lock_guard lock(r->context_mutex); auto i=r->observe_clients.find(client);
         if(i==r->observe_clients.end()) return GUA_OBSERVE_STALE;
         auto& c=i->second;
+        if(r->observation_profile==GUA_OBSERVATION_PROFILE_PLAYER && c.profile==GUA_OBSERVATION_PROFILE_DEBUG) {
+            for(auto id:c.subscriptions) gua_observe_unsubscribe(r->context,id);
+            c.subscriptions.clear(); return GUA_OBSERVE_STALE;
+        }
         if(command>=3 && !c.subscriptions.count(subscription)) return GUA_OBSERVE_STALE;
         if(command==GUA_OBSERVE_SNAPSHOT) return gua_observe_snapshot(r->context,c.profile,result);
         if(command==GUA_OBSERVE_SUBSCRIBE) {

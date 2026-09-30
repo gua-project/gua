@@ -12,6 +12,7 @@ public sealed partial class GuaWebSocketContext : IGuaContext, IGuaClockContext,
     private readonly TimeSpan requestTimeout;
     private readonly SemaphoreSlim requestGate = new(1, 1);
     private ClientWebSocket? socket;
+    private long connectionGeneration;
     private readonly List<GuaActionEvent> bufferedActionEvents = new();
     private int nextId = 1;
     private bool disposed;
@@ -208,13 +209,18 @@ public sealed partial class GuaWebSocketContext : IGuaContext, IGuaClockContext,
         }
         finally { requestGate.Release(); }
     }
-    private string Raw(object command, TimeSpan? responseTimeout = null)
+    private string Raw(object command, TimeSpan? responseTimeout = null, long? observeGeneration = null,
+        bool ignoreStaleObserve = false, Action<long>? onSuccess = null)
     {
         requestGate.Wait();
         try
         {
+            if (observeGeneration.HasValue && (disposed || socket?.State != WebSocketState.Open || observeGeneration.Value != connectionGeneration)) {
+                if (ignoreStaleObserve) return "null";
+                throw new InvalidOperationException("Observe subscription belongs to an inactive connection.");
+            }
             EnsureConnected(); var id = nextId++; Send(Envelope(id, command));
-            while (true) { using var document = JsonDocument.Parse(Receive(responseTimeout)); var root = document.RootElement; if (!root.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id) continue; if (!root.GetProperty("ok").GetBoolean()) throw new RemoteCommandRejectedException(root.GetProperty("error").GetString()); return root.GetProperty("result").GetRawText(); }
+            while (true) { using var document = JsonDocument.Parse(Receive(responseTimeout)); var root = document.RootElement; if (!root.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id) continue; if (!root.GetProperty("ok").GetBoolean()) throw new RemoteCommandRejectedException(root.GetProperty("error").GetString()); var result = root.GetProperty("result").GetRawText(); onSuccess?.Invoke(connectionGeneration); return result; }
         }
         finally { requestGate.Release(); }
     }
@@ -229,13 +235,13 @@ public sealed partial class GuaWebSocketContext : IGuaContext, IGuaClockContext,
     {
         if (disposed) throw new ObjectDisposedException(nameof(GuaWebSocketContext)); if (socket?.State == WebSocketState.Open) return;
         socket?.Dispose(); socket = new ClientWebSocket(); using var cts = new CancellationTokenSource(requestTimeout);
-        try { socket.ConnectAsync(uri, cts.Token).GetAwaiter().GetResult(); } catch { socket.Dispose(); socket = null; throw; }
+        try { socket.ConnectAsync(uri, cts.Token).GetAwaiter().GetResult(); connectionGeneration++; } catch { socket.Dispose(); socket = null; throw; }
     }
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         if (disposed) throw new ObjectDisposedException(nameof(GuaWebSocketContext)); if (socket?.State == WebSocketState.Open) return;
         socket?.Dispose(); socket = new ClientWebSocket(); using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeout.CancelAfter(requestTimeout);
-        try { await socket.ConnectAsync(uri, timeout.Token).ConfigureAwait(false); } catch { socket.Dispose(); socket = null; throw; }
+        try { await socket.ConnectAsync(uri, timeout.Token).ConfigureAwait(false); connectionGeneration++; } catch { socket.Dispose(); socket = null; throw; }
     }
     private void Send(byte[] payload) { using var cts = new CancellationTokenSource(requestTimeout); socket!.SendAsync(new ArraySegment<byte>(payload), WebSocketMessageType.Text, true, cts.Token).GetAwaiter().GetResult(); }
     private string Receive(TimeSpan? timeout = null)

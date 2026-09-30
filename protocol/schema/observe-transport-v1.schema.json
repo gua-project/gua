@@ -10,12 +10,20 @@
       "items": {
         "type": "object",
         "properties": {
-          "value": {"$ref": "enum-catalog-v1.schema.json"},
-          "before": {"$ref": "enum-catalog-v1.schema.json"},
-          "after": {"$ref": "enum-catalog-v1.schema.json"}
+          "value": {"$ref": "#/$defs/pairedCatalog"},
+          "before": {"$ref": "#/$defs/pairedCatalog"},
+          "after": {"$ref": "#/$defs/pairedCatalog"}
         },
         "additionalProperties": false
       }
+    }
+  },
+  "$defs": {
+    "pairedCatalog": {
+      "allOf": [
+        {"$ref": "enum-catalog-v1.schema.json"},
+        {"properties": {"enums": {"minItems": 1, "maxItems": 1}}}
+      ]
     }
   },
   "required": ["document", "catalogs"],

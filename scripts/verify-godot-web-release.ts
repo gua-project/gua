@@ -9,7 +9,7 @@ declare global {
 }
 
 const exportRoot = resolve(process.argv[2] ?? "artifacts/godot-web-release");
-const chromeExecutable = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+const chromeExecutable = Bun.env.CHROME_EXECUTABLE ?? ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
   .map((name) => Bun.which(name))
   .find((value): value is string => value !== null);
 
@@ -58,6 +58,7 @@ try {
   await client.open();
   try {
     await client.send("Runtime.enable", {}, 5_000);
+    await waitForDefaultExecutionContext(client, 10_000);
     const response = await client.send("Runtime.evaluate", {
       expression: `(${runSmoke.toString()})()`,
       awaitPromise: true,
@@ -147,6 +148,21 @@ async function runSmoke() {
 }
 
 type PageTarget = { url: string; type: string; webSocketDebuggerUrl: string };
+
+async function waitForDefaultExecutionContext(client: ReturnType<typeof createCdpClient>, timeoutMs: number) {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    try {
+      const response = await client.send("Runtime.evaluate", {expression: "document.readyState", returnByValue: true},
+        Math.max(1, Math.min(1_000, deadline - performance.now()))) as {result?: {value?: string}};
+      if (response.result?.value === "interactive" || response.result?.value === "complete") return;
+    } catch (error) {
+      if (!(error instanceof Error) || !["Cannot find default execution context", "Execution context was destroyed."].includes(error.message)) throw error;
+    }
+    await Bun.sleep(25);
+  }
+  throw new Error("Timed out waiting for the browser document execution context.");
+}
 
 async function waitForPageTarget(port: number, expectedUrl: string, timeoutMs: number): Promise<PageTarget> {
   const deadline = performance.now() + timeoutMs;

@@ -40,3 +40,13 @@ test("late subscription after tool timeout is released and never returned", asyn
   expect(released).toEqual([2]);
   registration.unregister();
 });
+test("a custom bridge without observation disposal cannot expose subscription tools", async () => {
+  const port:GuaInPagePort={capabilities:["observe_v1"],invoke:async()=>snapshot};
+  const bridge=createGuaInPageBridge(port);
+  delete bridge.disposeObservations;
+  const tools=new Map<string,unknown>();
+  const document={modelContext:{registerTool:(tool:any)=>tools.set(tool.name,tool)}} as unknown as Document;
+  const registration=await registerGuaWebMcp(bridge,{document});
+  for(const name of ["get_observe_snapshot","subscribe_observations","poll_observations","unsubscribe_observations"]) expect(tools.has(name)).toBe(false);
+  registration.unregister();
+});

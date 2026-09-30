@@ -216,7 +216,7 @@ export async function registerGuaWebMcp(
   }
   const gameInputTools = gameInputDefinitions(gameInputCapabilities, bridge);
   const definitions = [
-    ...(bridge.getObserveSnapshot && bridge.subscribeObservations && bridge.pollObservations && bridge.unsubscribeObservations ? observeTools : []),
+    ...(bridge.getObserveSnapshot && bridge.subscribeObservations && bridge.pollObservations && bridge.unsubscribeObservations && bridge.disposeObservations ? observeTools : []),
     ...guaWebMcpToolDefinitions.filter((definition) => definition.name !== "get_screenshot" || bridge.getScreenshot),
     ...(bridge.getWorldObjectTree ? worldObservationTools.filter((definition) => definition.name === "get_world_object_tree") : []),
     ...(bridge.findWorldObjects ? worldObservationTools.filter((definition) => definition.name !== "get_world_object_tree") : []),

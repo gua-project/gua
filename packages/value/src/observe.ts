@@ -91,7 +91,7 @@ export function parseObserveTransport(input: string | unknown, expectedKind?: "s
     if (!Array.isArray(entries) || entries.length !== raw.catalogs.length) return invalid();
     if (document.kind === "changes" && document.status !== "ok" && entries.length !== 0) return invalid();
     for (const entry of [document, ...entries.map(object)]) {
-      for (const key of ["schemaVersion", "sessionEpoch", "sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision", "ownerId", "registrationId"])
+      for (const key of ["schemaVersion", "sessionEpoch", "sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision", "ownerId", "registrationId", "error", "beforeError", "afterError"])
         if (entry[key] instanceof NumericToken) exactInteger((entry[key] as NumericToken).text, "$.");
     }
     entries.forEach((entry, i) => {

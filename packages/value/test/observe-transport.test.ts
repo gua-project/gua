@@ -63,3 +63,22 @@ test("operations cannot exchange Snapshot and Changes documents", () => {
   for (const [operation,result] of [["get_observe_snapshot",changes],["subscribe_observations",{subscriptionId:1,snapshot:changes}],["poll_observations",snapshot]] as const)
     expect(() => decodeObserveWireResponse(JSON.stringify({id:1,ok:true,result}),1,operation)).toThrow("Invalid Observe");
 });
+for (const field of ["error", "beforeError", "afterError"] as const) {
+  test(`Observe ${field} must be an exact integer before Number normalization`, () => {
+    const identity={ownerId:1,registrationId:2,source:"object",runtimeId:"enemy",name:"phase"};
+    const document=field === "error" ? {...metadata,kind:"snapshot",entries:[{...identity,status:"unavailable",error:1}]} :
+      {...metadata,kind:"changes",status:"ok",events:[{...metadata,...identity,boundary:"explicit",kind:field === "beforeError" ? "removed" : "unavailable",[field === "beforeError" ? "beforeStatus" : "afterStatus"]:"unavailable",[field]:1}]};
+    const wire=JSON.stringify({document,catalogs:[{}]});
+    expect(()=>parseObserveTransport(wire)).not.toThrow();
+    expect(()=>parseObserveTransport(wire.replace(`"${field}":1`, `"${field}":1.00000000000000001`))).toThrow("Invalid Observe transport response.");
+  });
+}
+test("transport schema restricts every paired catalog to one enum definition", () => {
+  const ajv=new Ajv2020({strict:false});ajv.addSchema(valueSchema);ajv.addSchema(observeSchema);ajv.addSchema(enumSchema);
+  const validate=ajv.compile(transportSchema);
+  const value={type:"enum",enumType:"game.Phase",value:"First"};
+  expect(validate(envelope(value,{value:catalog}))).toBe(true);
+  for(const key of ["value","before","after"]) for(const enums of [[],[...catalog.enums,{enumType:"game.Secret",members:["SECRET_MARKER"]}]]) {
+    expect(validate(envelope(value,{[key]:{schemaVersion:1,enums}}))).toBe(false);
+  }
+});

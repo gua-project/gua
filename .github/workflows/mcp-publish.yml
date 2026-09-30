@@ -38,6 +38,29 @@ jobs:
           node-version: 24.15.0
           registry-url: https://registry.npmjs.org
 
+      - name: Check whether Value version is already published
+        id: value_npm_version
+        shell: bash
+        run: |
+          package_name="gua-value"
+          package_version="${{ steps.version.outputs.version }}"
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "https://registry.npmjs.org/${package_name}/${package_version}")"
+
+          case "${status}" in
+            200)
+              echo "published=true" >> "${GITHUB_OUTPUT}"
+              echo "${package_name}@${package_version} is already published; npm publish will be skipped."
+              ;;
+            404)
+              echo "published=false" >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "Unexpected npm registry response for ${package_name}@${package_version}: HTTP ${status}" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Check whether World Tools version is already published
         id: world_tools_npm_version
         shell: bash
@@ -113,6 +136,8 @@ jobs:
 
       - name: Check
         run: |
+          bun run --filter gua-value check
+          bun run --filter gua-value test
           bun run --filter gua-world-tools check
           bun run --filter gua-world-tools test
           bun run --filter gua-webmcp check
@@ -121,9 +146,51 @@ jobs:
 
       - name: Build
         run: |
+          bun run --filter gua-value build
           bun run --filter gua-world-tools build
           bun run --filter gua-webmcp build
           bun run --filter gui-mcp build
+
+      - name: Prepare Value publish package
+        id: prepare_value
+        shell: bash
+        run: |
+          package_version="${{ steps.version.outputs.version }}"
+          publish_dir="${RUNNER_TEMP}/gua-value-package"
+
+          rm -rf "${publish_dir}"
+          mkdir -p "${publish_dir}/dist" "${publish_dir}/src"
+          cp packages/value/README.md "${publish_dir}/README.md"
+          cp -R packages/value/dist/. "${publish_dir}/dist/"
+          cp -R packages/value/src/. "${publish_dir}/src/"
+
+          PACKAGE_VERSION="${package_version}" PUBLISH_DIR="${publish_dir}" node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const packageJson = JSON.parse(fs.readFileSync("packages/value/package.json", "utf8"));
+          packageJson.version = process.env.PACKAGE_VERSION;
+          delete packageJson.scripts;
+          delete packageJson.devDependencies;
+
+          fs.writeFileSync(
+            path.join(process.env.PUBLISH_DIR, "package.json"),
+            `${JSON.stringify(packageJson, null, 2)}\n`,
+          );
+          NODE
+
+          echo "publish_dir=${publish_dir}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify Value package contents
+        run: |
+          cd "${{ steps.prepare_value.outputs.publish_dir }}"
+          npm pack --dry-run
+
+      - name: Publish Value to npm
+        if: steps.value_npm_version.outputs.published != 'true'
+        run: |
+          cd "${{ steps.prepare_value.outputs.publish_dir }}"
+          npm publish --access public --tag latest
 
       - name: Prepare World Tools publish package
         id: prepare_world_tools
@@ -186,6 +253,7 @@ jobs:
           const packageJson = JSON.parse(fs.readFileSync("packages/webmcp/package.json", "utf8"));
           packageJson.version = process.env.PACKAGE_VERSION;
           packageJson.dependencies["gua-world-tools"] = `^${process.env.PACKAGE_VERSION}`;
+          packageJson.dependencies["gua-value"] = `^${process.env.PACKAGE_VERSION}`;
           delete packageJson.scripts;
           delete packageJson.devDependencies;
           for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {

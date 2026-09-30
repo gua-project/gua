@@ -260,8 +260,12 @@ func update(screen: String) -> void:
 	controls_by_id.clear()
 	_collect_control(root, "")
 	_sample_observations(true)
+	if disposed or context == null:
+		return
 	context.end_frame()
 	_publish_world_frame(screen)
+	if disposed or context == null:
+		return
 	_dispatch_click_requests()
 	_dispatch_action_requests()
 	_dispatch_game_input_requests()
@@ -367,6 +371,8 @@ func _publish_world_frame(scene: String, report_errors: bool = true) -> void:
 			context.abort_world_frame()
 			return
 	_sample_observations(false)
+	if disposed or context == null:
+		return
 	if not context.end_world_frame():
 		_report_world_frame_error("Gua world frame was rejected", report_errors)
 

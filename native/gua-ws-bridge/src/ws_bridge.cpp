@@ -976,7 +976,7 @@ Command parse_command(std::string_view json)
     return command;
 }
 
-std::string ok_response(int id, std::string_view result_json)
+std::string ok_response(int64_t id, std::string_view result_json)
 {
     return "{\"id\":" + std::to_string(id) + ",\"ok\":true,\"result\":" + std::string(result_json) + "}";
 }
@@ -986,7 +986,7 @@ std::string ok_null_response(int id)
     return "{\"id\":" + std::to_string(id) + ",\"ok\":true,\"result\":null}";
 }
 
-std::string error_response(int id, std::string_view message)
+std::string error_response(int64_t id, std::string_view message)
 {
     return "{\"id\":" + std::to_string(id) + ",\"ok\":false,\"error\":\"" + escape_json(message) + "\"}";
 }
@@ -1295,22 +1295,24 @@ private:
             if(command.type=="get_observe_snapshot" || command.type=="subscribe_observations" ||
                 command.type=="poll_observations" || command.type=="unsubscribe_observations") {
                 int operation=command.type=="get_observe_snapshot" ? 1 : command.type=="subscribe_observations" ? 2 : command.type=="poll_observations" ? 3 : 4;
-                uint64_t subscription=0;
+                uint64_t subscription=0; int64_t response_id=0;
                 try {
                     using namespace gua_value_detail;
                     const auto request=parser(message).parse();
-                    if(request.type!=json::object || request.fields.size()!=static_cast<size_t>(operation>=3 ? 3 : 2)) return error_response(command.id,"invalid_request");
-                    if(request.at("type").type!=json::string || request.at("id").type!=json::number) return error_response(command.id,"invalid_request");
-                    (void)integer(request.at("id").text,"$.id");
+                    if(request.type!=json::object) return error_response(response_id,"invalid_request");
+                    if(request.at("type").type!=json::string || request.at("id").type!=json::number) return error_response(response_id,"invalid_request");
+                    response_id=integer(request.at("id").text,"$.id");
+                    if(response_id<=0) { response_id=0; return error_response(response_id,"invalid_request"); }
+                    if(request.fields.size()!=static_cast<size_t>(operation>=3 ? 3 : 2)) return error_response(response_id,"invalid_request");
                     if(operation>=3) {
                         const auto& value=request.at("subscriptionId");
-                        if(value.type!=json::number) return error_response(command.id,"invalid_request");
-                        auto id=integer(value.text,"$.subscriptionId"); if(id<=0) return error_response(command.id,"invalid_request"); subscription=static_cast<uint64_t>(id);
+                        if(value.type!=json::number) return error_response(response_id,"invalid_request");
+                        auto id=integer(value.text,"$.subscriptionId"); if(id<=0) return error_response(response_id,"invalid_request"); subscription=static_cast<uint64_t>(id);
                     }
-                } catch(...) { return error_response(command.id,"invalid_request"); }
-                if(!handlers_.observe_command || !observe_client_id) return error_response(command.id,"unsupported");
+                } catch(...) { return error_response(response_id,"invalid_request"); }
+                if(!handlers_.observe_command || !observe_client_id) return error_response(response_id,"unsupported");
                 auto result=handlers_.observe_command(observe_client_id,operation,subscription);
-                return result.ok ? ok_response(command.id,result.json) : error_response(command.id,result.error);
+                return result.ok ? ok_response(response_id,result.json) : error_response(response_id,result.error);
             }
             if (command.type == "get_ui_tree") {
                 return ok_response(command.id, handlers_.get_ui_tree_json());
