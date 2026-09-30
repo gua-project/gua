@@ -1,4 +1,6 @@
 import { ObserveWireRejectionError, decodeObserveWireResponse, parseObserveTransport, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value";
+import { parseSemanticLintReport, type SemanticLintReport } from "./semanticLint";
+export type { SemanticLintReport, LintFinding, LintSeverity } from "./semanticLint";
 export type { ObserveTransport, ObserveSubscription } from "gua-value";
 
 export interface GuaBounds {
@@ -106,6 +108,7 @@ export interface InspectorState extends InspectorSnapshot {
 }
 
 export interface GuaInspectorClient {
+  analyzeSemanticLint?(includeWorld?: boolean): Promise<SemanticLintReport>;
   getObserveSnapshot?(): Promise<ObserveTransport>;
   subscribeObservations?(): Promise<ObserveSubscription>;
   pollObservations?(subscriptionId: number): Promise<ObserveTransport>;
@@ -130,6 +133,7 @@ export interface GuaInspectorClient {
 }
 
 export type GuaInspectorCommand =
+  | { id: number; type: "semantic_lint"; includeWorld?: boolean }
   | { id: number; type: "get_ui_tree" }
   | { id: number; type: "get_world_object_tree" }
   | { id: number; type: "get_logs" }
@@ -154,6 +158,7 @@ export type GuaInspectorCommand =
 
 type GuaInspectorCommandInput =
   | { type: "get_version" }
+  | { type: "semantic_lint"; includeWorld?: boolean }
   | { type: "get_observe_snapshot" | "subscribe_observations" }
   | { type: "poll_observations" | "unsubscribe_observations"; subscriptionId: number }
   | { type: "get_ui_tree" }
@@ -654,6 +659,10 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
       await new Promise((resolve) => window.setTimeout(resolve, 25));
     }
     throw new Error(`Timed out waiting for Gua action request ${receipt.requestId}.`);
+  }
+
+  async analyzeSemanticLint(includeWorld = true): Promise<SemanticLintReport> {
+    return parseSemanticLintReport(await this.request({ type: "semantic_lint", includeWorld }));
   }
 
   async clickNode(nodeId: string): Promise<void> {

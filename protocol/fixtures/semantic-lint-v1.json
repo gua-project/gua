@@ -1,0 +1,629 @@
+{
+  "cases": [
+    {
+      "name": "good",
+      "uiTree": {
+        "schemaVersion": 2,
+        "sessionEpoch": 1,
+        "frameSequence": 7,
+        "revision": 4,
+        "screen": "fixture",
+        "nodes": [
+          {
+            "id": "root",
+            "role": "panel",
+            "label": "root",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": []
+          },
+          {
+            "id": "ok",
+            "role": "button",
+            "label": "ok",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [
+              "click",
+              "focus"
+            ],
+            "parentId": "root"
+          },
+          {
+            "id": "slider",
+            "role": "slider",
+            "label": "slider",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "rangeMin": 0,
+              "rangeMax": 10,
+              "rangeValue": 5
+            }
+          },
+          {
+            "id": "input",
+            "role": "textbox",
+            "label": "input",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "selectionStart": 0,
+              "selectionEnd": 2,
+              "caretPosition": 1
+            }
+          },
+          {
+            "id": "scroll",
+            "role": "scrollarea",
+            "label": "scroll",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "scrollX": 0,
+              "scrollY": 4,
+              "scrollMaxX": 0,
+              "scrollMaxY": 10
+            }
+          },
+          {
+            "id": "check",
+            "role": "checkbox",
+            "label": "check",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "checked": false
+            }
+          }
+        ]
+      },
+      "worldObjectTree": {
+        "schemaVersion": 1,
+        "sessionEpoch": 1,
+        "frameSequence": 5,
+        "revision": 3,
+        "scene": "fixture",
+        "objects": [
+          {
+            "id": "root",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {}
+          },
+          {
+            "id": "child",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {},
+            "parentId": "root",
+            "relatedUiNodeId": "ok"
+          }
+        ]
+      },
+      "expected": []
+    },
+    {
+      "name": "structure",
+      "uiTree": {
+        "schemaVersion": 2,
+        "sessionEpoch": 1,
+        "frameSequence": 7,
+        "revision": 4,
+        "screen": "fixture",
+        "nodes": [
+          {
+            "id": "dup",
+            "role": "text",
+            "label": "dup",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": []
+          },
+          {
+            "id": "dup",
+            "role": "text",
+            "label": "dup",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": []
+          },
+          {
+            "id": "dangling",
+            "role": "text",
+            "label": "dangling",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "parentId": "absent"
+          },
+          {
+            "id": "a",
+            "role": "text",
+            "label": "a",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "parentId": "b"
+          },
+          {
+            "id": "b",
+            "role": "text",
+            "label": "b",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "parentId": "a"
+          },
+          {
+            "id": "self",
+            "role": "text",
+            "label": "self",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "parentId": "self"
+          },
+          {
+            "id": "desc",
+            "role": "text",
+            "label": "desc",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "parentId": "a"
+          }
+        ]
+      },
+      "worldObjectTree": {
+        "schemaVersion": 1,
+        "sessionEpoch": 1,
+        "frameSequence": 5,
+        "revision": 3,
+        "scene": "fixture",
+        "objects": [
+          {
+            "id": "dup",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {}
+          },
+          {
+            "id": "dup",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {}
+          },
+          {
+            "id": "dangling",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {},
+            "parentId": "absent"
+          },
+          {
+            "id": "a",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {},
+            "parentId": "b"
+          },
+          {
+            "id": "b",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {},
+            "parentId": "a"
+          },
+          {
+            "id": "linked",
+            "kind": "fixture",
+            "space": "world2d",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "visibleToPlayer": true,
+            "active": true,
+            "agentExposure": "auto",
+            "tags": [],
+            "state": {},
+            "relatedUiNodeId": "absent"
+          }
+        ]
+      },
+      "expected": [
+        "duplicate-id",
+        "missing-parent",
+        "parent-cycle",
+        "broken-related-ui"
+      ]
+    },
+    {
+      "name": "semantics",
+      "uiTree": {
+        "schemaVersion": 2,
+        "sessionEpoch": 1,
+        "frameSequence": 7,
+        "revision": 4,
+        "screen": "fixture",
+        "nodes": [
+          {
+            "id": "blank",
+            "role": "button",
+            "label": " \t",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": []
+          },
+          {
+            "id": "action",
+            "role": "text",
+            "label": "action",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [
+              "click"
+            ]
+          },
+          {
+            "id": "disabled",
+            "role": "button",
+            "label": "disabled",
+            "visible": true,
+            "enabled": false,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [
+              "click"
+            ]
+          },
+          {
+            "id": "wrong",
+            "role": "text",
+            "label": "wrong",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "checked": false,
+              "rangeValue": 1
+            }
+          },
+          {
+            "id": "range",
+            "role": "slider",
+            "label": "range",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "rangeMin": 10,
+              "rangeMax": 1,
+              "rangeValue": 5
+            }
+          },
+          {
+            "id": "selection",
+            "role": "textbox",
+            "label": "selection",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "selectionStart": 5,
+              "selectionEnd": 1
+            }
+          },
+          {
+            "id": "scroll",
+            "role": "scrollarea",
+            "label": "scroll",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "scrollX": -1,
+              "scrollY": 20,
+              "scrollMaxX": 3,
+              "scrollMaxY": 10
+            }
+          }
+        ]
+      },
+      "worldObjectTree": {
+        "schemaVersion": 1,
+        "sessionEpoch": 1,
+        "frameSequence": 5,
+        "revision": 3,
+        "scene": "fixture",
+        "objects": []
+      },
+      "expected": [
+        "missing-accessible-name",
+        "role-action-contradiction",
+        "disabled-actions",
+        "role-state-contradiction",
+        "range-bounds",
+        "range-value",
+        "selection-order",
+        "scroll-bounds"
+      ]
+    },
+    {
+      "name": "unknown-pairs",
+      "uiTree": {
+        "schemaVersion": 2,
+        "sessionEpoch": 1,
+        "frameSequence": 7,
+        "revision": 4,
+        "screen": "fixture",
+        "nodes": [
+          {
+            "id": "slider",
+            "role": "slider",
+            "label": "slider",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "rangeValue": 5
+            }
+          },
+          {
+            "id": "text",
+            "role": "textbox",
+            "label": "text",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "selectionStart": 5
+            }
+          },
+          {
+            "id": "scroll",
+            "role": "scrollarea",
+            "label": "scroll",
+            "visible": true,
+            "enabled": true,
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "w": 1,
+              "h": 1
+            },
+            "actions": [],
+            "state": {
+              "scrollY": 2
+            }
+          }
+        ]
+      },
+      "worldObjectTree": {
+        "schemaVersion": 1,
+        "sessionEpoch": 1,
+        "frameSequence": 5,
+        "revision": 3,
+        "scene": "fixture",
+        "objects": []
+      },
+      "expected": []
+    }
+  ],
+  "report": {
+    "schemaVersion": 1,
+    "profile": "debug",
+    "uiTree": {
+      "schemaVersion": 2,
+      "sessionEpoch": 1,
+      "frameSequence": 7,
+      "revision": 4,
+      "screen": "fixture"
+    },
+    "worldObjectTree": {
+      "schemaVersion": 1,
+      "sessionEpoch": 1,
+      "frameSequence": 5,
+      "revision": 3,
+      "scene": "fixture"
+    },
+    "summary": {
+      "error": 0,
+      "warning": 0,
+      "info": 0,
+      "total": 0
+    },
+    "findings": []
+  }
+}

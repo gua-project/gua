@@ -1,4 +1,5 @@
 #include "gua/gua.h"
+#include "gua/semantic_lint.h"
 
 #include <algorithm>
 #include <atomic>
@@ -50,7 +51,7 @@ std::string build_version_json(const char* godot_plugin_version = nullptr)
     return "{\"protocolSchemaVersion\":\"2\",\"coreVersion\":\"" GUA_VERSION
         "\",\"runtimeVersion\":\"" GUA_VERSION "\",\"godotPluginVersion\":" + plugin + ",\"adapterVersions\":{}" +
         ",\"abiVersion\":1,\"buildId\":\"" GUA_BUILD_ID
-        "\",\"capabilities\":[\"semantic_ui_tree_v2\",\"detailed_semantic_state_v1\",\"semantic_actions_v2\",\"context_reset_v1\",\"diagnostics_v1\",\"version_v1\",\"capture_screenshot_v1\",\"virtual_clock_v1\",\"semantic_game_input_v1\",\"semantic_game_input_search_v1\",\"raw_keyboard_input_v1\",\"raw_pointer_input_v1\",\"raw_gamepad_input_v1\",\"text_input_v1\",\"game_input_lease_v1\",\"world_object_tree_v1\",\"agent_projection_v1\",\"observe_v1\"]}";
+        "\",\"capabilities\":[\"semantic_ui_tree_v2\",\"detailed_semantic_state_v1\",\"semantic_actions_v2\",\"context_reset_v1\",\"diagnostics_v1\",\"version_v1\",\"capture_screenshot_v1\",\"virtual_clock_v1\",\"semantic_game_input_v1\",\"semantic_game_input_search_v1\",\"raw_keyboard_input_v1\",\"raw_pointer_input_v1\",\"raw_gamepad_input_v1\",\"text_input_v1\",\"game_input_lease_v1\",\"world_object_tree_v1\",\"agent_projection_v1\",\"semantic_lint_v1\",\"observe_v1\"]}";
 }
 
 struct AgentFieldRule {
@@ -2256,6 +2257,24 @@ extern "C" int gua_copy_ui_tree_json_for_profile(gua_context_t* ctx, int observa
     if (ctx == nullptr || (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 0;
     const std::lock_guard lock(ctx->mutex);
     return copy_json_string(build_ui_tree_json(*ctx, observation_profile), out_json, out_json_size);
+}
+
+extern "C" int gua_semantic_lint_analyze(gua_context_t* ctx, const gua_semantic_lint_options_v1_t* options,
+    gua_semantic_lint_report_t** out_report)
+{
+    if (!out_report) return 1;
+    *out_report = nullptr;
+    if (!ctx || !options || options->struct_size < sizeof(*options) ||
+        (options->include_world != 0 && options->include_world != 1) ||
+        (options->observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && options->observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 1;
+    try {
+        const std::lock_guard lock(ctx->mutex);
+        const auto profile = options->observation_profile;
+        const auto ui = build_ui_tree_json(*ctx, profile);
+        const auto world = options->include_world ? build_world_tree_json(ctx->world_scene, ctx->world_objects, ctx->session_epoch,
+            ctx->world_frame_sequence, profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_world_revision : ctx->world_revision, profile) : "";
+        return gua_semantic_lint_analyze_snapshots(ui.c_str(), options->include_world ? world.c_str() : nullptr, profile, out_report);
+    } catch (...) { return 2; }
 }
 
 extern "C" void gua_add_log(gua_context_t* ctx, int level, const char* message)

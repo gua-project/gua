@@ -1,5 +1,11 @@
 # Gua Protocol Draft
 
+## Explicit Semantic Lint
+
+[Semantic Lint v1](semantic-lint-v1.md) inspects published UI/World snapshots on
+request and returns a versioned report. The native core owns the rules;
+publication behavior is unchanged.
+
 ## Common Value v1
 
 Additional observations use the independent [Value v1 contract](value-v1.md).

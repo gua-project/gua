@@ -32,6 +32,7 @@ export function handleMessage(message: string | Buffer, target: DemoRuntime = ru
 
   try {
     switch (command.type) {
+      case "semantic_lint": return { id: command.id, ok: false, error: "semantic_lint is not supported by this demo bridge" };
       case "get_ui_tree":
         return ok(command.id, target.getUiTree());
       case "get_world_object_tree":

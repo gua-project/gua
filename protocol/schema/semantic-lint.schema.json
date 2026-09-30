@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/semantic-lint.schema.json",
+  "title": "Gua Semantic Lint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profile",
+    "uiTree",
+    "worldObjectTree",
+    "summary",
+    "findings"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "profile": {
+      "enum": [
+        "debug",
+        "player"
+      ]
+    },
+    "uiTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sessionEpoch",
+        "frameSequence",
+        "revision",
+        "screen"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 2
+        },
+        "sessionEpoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "screen": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "worldObjectTree": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "sessionEpoch",
+            "frameSequence",
+            "revision",
+            "scene"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": 1
+            },
+            "sessionEpoch": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "frameSequence": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "scene": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error",
+        "warning",
+        "info",
+        "total"
+      ],
+      "properties": {
+        "error": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "info": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleId",
+          "severity",
+          "message",
+          "targetKind",
+          "targetId",
+          "path"
+        ],
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "targetKind": {
+            "enum": [
+              "ui",
+              "world"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^\\$\\.(uiTree\\.nodes|worldObjectTree\\.objects)\\[[0-9]+\\]\\."
+          }
+        }
+      }
+    }
+  }
+}
