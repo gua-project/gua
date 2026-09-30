@@ -12,6 +12,7 @@
 #include <deque>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <memory>
 #include <map>
@@ -21,6 +22,9 @@
 #include <utility>
 
 struct gua_runtime_t {
+    struct ObserveClient { int profile; std::unordered_set<uint64_t> subscriptions; };
+    uint64_t next_observe_client = 1;
+    std::unordered_map<uint64_t, ObserveClient> observe_clients;
     struct ScreenshotBatch {
         uint64_t session_epoch = 0;
         std::vector<uint64_t> request_ids;
@@ -533,6 +537,52 @@ extern "C" void gua_runtime_destroy(gua_runtime_t* runtime)
     }
 
     delete runtime;
+}
+
+extern "C" gua_context_t* gua_runtime_borrow_context(gua_runtime_t* runtime) {
+    return valid_runtime(runtime) ? runtime->context : nullptr;
+}
+extern "C" uint64_t gua_runtime_create_observe_client(gua_runtime_t* r,int profile) {
+    if(!valid_runtime(r) || profile<0 || profile>1) return 0;
+    try { std::lock_guard lock(r->context_mutex);
+        if(r->observation_profile==GUA_OBSERVATION_PROFILE_PLAYER && profile==GUA_OBSERVATION_PROFILE_DEBUG) return 0;
+        auto id=r->next_observe_client++;
+        r->observe_clients.emplace(id,gua_runtime_t::ObserveClient{profile,{}}); return id;
+    } catch(...) { return 0; }
+}
+extern "C" void gua_runtime_release_observe_client(gua_runtime_t* r,uint64_t client) {
+    if(!valid_runtime(r)) return;
+    try { std::lock_guard lock(r->context_mutex); auto i=r->observe_clients.find(client);
+        if(i==r->observe_clients.end()) return;
+        for(auto id:i->second.subscriptions) gua_observe_unsubscribe(r->context,id);
+        r->observe_clients.erase(i);
+    } catch(...) {}
+}
+extern "C" int gua_runtime_observe_command(gua_runtime_t* r,uint64_t client,int command,uint64_t subscription,
+    uint64_t* out_subscription,gua_observe_result_t** result) {
+    if(result) *result=nullptr; if(out_subscription) *out_subscription=0;
+    if(!valid_runtime(r) || !result || !out_subscription || command<1 || command>4 ||
+        ((command>=3)!=(subscription!=0))) return GUA_OBSERVE_ARGUMENT;
+    try { std::lock_guard lock(r->context_mutex); auto i=r->observe_clients.find(client);
+        if(i==r->observe_clients.end()) return GUA_OBSERVE_STALE;
+        auto& c=i->second;
+        if(r->observation_profile==GUA_OBSERVATION_PROFILE_PLAYER && c.profile==GUA_OBSERVATION_PROFILE_DEBUG) {
+            for(auto id:c.subscriptions) gua_observe_unsubscribe(r->context,id);
+            c.subscriptions.clear(); return GUA_OBSERVE_STALE;
+        }
+        if(command>=3 && !c.subscriptions.count(subscription)) return GUA_OBSERVE_STALE;
+        if(command==GUA_OBSERVE_SNAPSHOT) return gua_observe_snapshot(r->context,c.profile,result);
+        if(command==GUA_OBSERVE_SUBSCRIBE) {
+            if(c.subscriptions.size()>=64) return GUA_OBSERVE_ARGUMENT;
+            uint64_t id=0; int status=gua_observe_subscribe(r->context,c.profile,&id,result);
+            if(status) return status;
+            try { c.subscriptions.insert(id); }
+            catch(...) { gua_observe_unsubscribe(r->context,id); gua_observe_result_destroy(*result); *result=nullptr; throw; }
+            *out_subscription=id; return 0;
+        }
+        if(command==GUA_OBSERVE_POLL) return gua_observe_poll(r->context,subscription,result);
+        int status=gua_observe_unsubscribe(r->context,subscription); c.subscriptions.erase(subscription); return status;
+    } catch(...) { return GUA_OBSERVE_INTERNAL; }
 }
 
 extern "C" void gua_runtime_begin_frame(gua_runtime_t* runtime, const char* screen)
@@ -1528,6 +1578,19 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
     runtime->bridge_stopping.store(false);
 
     gua::ws::BridgeHandlers handlers {
+        .create_observe_client = [runtime] { return gua_runtime_create_observe_client(runtime,runtime->observation_profile); },
+        .release_observe_client = [runtime](unsigned long long client) { gua_runtime_release_observe_client(runtime,client); },
+        .observe_command = [runtime](unsigned long long client,int operation,unsigned long long subscription) -> gua::ws::CommandResult {
+            gua_observe_result_t* raw=nullptr; uint64_t id=0;
+            int status=gua_runtime_observe_command(runtime,client,operation,subscription,&id,&raw);
+            std::unique_ptr<gua_observe_result_t,decltype(&gua_observe_result_destroy)> result(raw,gua_observe_result_destroy);
+            if(status) return {false,"","observe_rejected"};
+            if(operation==4) return {true,"null",""};
+            int n=gua_observe_result_copy_transport_json(raw,nullptr,0); if(n<=0) return {false,"","observe_failed"};
+            std::string json(static_cast<size_t>(n),'\0'); gua_observe_result_copy_transport_json(raw,json.data(),n); json.pop_back();
+            if(operation==2) json="{\"subscriptionId\":"+std::to_string(id)+",\"snapshot\":"+json+"}";
+            return {true,std::move(json),""};
+        },
         .get_ui_tree_json = [runtime] {
             return copy_ui_tree_json(runtime);
         },

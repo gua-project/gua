@@ -16,6 +16,8 @@ function godotCallback<TArgs extends unknown[], TResult extends string | number>
 
 const godotGlobals = globalThis as typeof globalThis & {
   __guaGodotWebPort?: GodotWebPort;
+  __guaGodotObserve?: GodotCallback<[request: string]>;
+  __guaGodotReleaseObserve?: GodotCallback;
   __guaGodotGetTree?: GodotCallback;
   __guaGodotGetWorldTree?: GodotCallback;
   __guaGodotQueryWorld?: GodotCallback<[request: string]>;
@@ -66,6 +68,8 @@ async function installGodotWebPort(
   )).text();
   const match = source.match(/JavaScriptBridge\.eval\("""([\s\S]*?)"""/);
   if (!match) throw new Error("Godot WebMCP install script was not found.");
+  godotGlobals.__guaGodotObserve = godotCallback(() => "null");
+  godotGlobals.__guaGodotReleaseObserve = godotCallback(() => 1);
   godotGlobals.__guaGodotGetTree = godotCallback(() => JSON.stringify({ screen: "title", nodes: [] }));
   godotGlobals.__guaGodotGetWorldTree = godotCallback(() => JSON.stringify({ schemaVersion: 1, sessionEpoch: 1, frameSequence: 1, revision: 1, scene: "level", objects: [] }));
   godotGlobals.__guaGodotQueryWorld = godotCallback(() => JSON.stringify({ valid: true, matches: [] }));
@@ -90,6 +94,17 @@ async function installGodotWebPort(
 }
 
 describe("Godot Web same-page port", () => {
+  test("detaching removes all observation callback globals", async () => {
+    const port = await installGodotWebPort([]);
+    expect(typeof godotGlobals.__guaGodotObserve).toBe("function");
+    port.__guaUninstall();
+    // Uninstall releases client resources; GDScript detach owns global deletion.
+    const source = await Bun.file(new URL("../../../examples/godot-gdscript/addons/gua/gua_webmcp_bridge.gd", import.meta.url)).text();
+    const scripts = [...source.matchAll(/JavaScriptBridge\.eval\("""([\s\S]*?)"""/g)];
+    new Function(scripts[1]![1]!.replaceAll("%s", "test-owner"))();
+    expect("__guaGodotObserve" in godotGlobals).toBe(false);
+    expect("__guaGodotReleaseObserve" in godotGlobals).toBe(false);
+  });
   test("preserves structured selector errors from the Godot binding", async () => {
     const port = await installGodotWebPort([], {
       findGameInputActions: () => JSON.stringify({ code: "invalid_request", message: "Invalid game input selector." }),

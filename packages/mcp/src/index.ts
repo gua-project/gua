@@ -1,4 +1,5 @@
 import path from "node:path";
+import { ObserveWireRejectionError, decodeObserveWireResponse, observeTools, observeSubscriptionId, parseObserveTransport } from "gua-value";
 
 import {
   guaPhysicalKeyboardCodes,
@@ -135,6 +136,7 @@ const defaultBridgeUrl = "ws://127.0.0.1:8765";
 const clockPauseResponseTimeoutMs = 11_000;
 
 export const guaMcpTools = [
+  "get_observe_snapshot", "subscribe_observations", "poll_observations", "unsubscribe_observations",
   "get_ui_tree",
   "get_world_object_tree",
   "find_world_objects",
@@ -185,6 +187,7 @@ export const guaMcpTools = [
 export type GuaMcpTool = (typeof guaMcpTools)[number];
 
 export const guaMcpToolDefinitions: readonly McpTool[] = [
+  ...observeTools,
   ...guaWebMcpToolDefinitions.map(toMcpToolDefinition),
   ...worldObservationTools,
   { name: "get_game_input_actions", description: "Read the host-published semantic game action map.", inputSchema: objectSchema({}) },
@@ -485,6 +488,7 @@ async function callTool(params: unknown, bridge: GuaBridgeClient, automation: Gu
   }
 
   try {
+    if (observeTools.some(tool => tool.name === name) && params.arguments !== undefined && !isRecord(params.arguments)) throw new Error("Invalid Observe arguments.");
     const result = await executeTool(name, isRecord(params.arguments) ? params.arguments : {}, bridge, automation, signal);
     return textResult(result);
   } catch (error) {
@@ -500,6 +504,11 @@ async function executeTool(
   signal?: AbortSignal,
 ): Promise<unknown> {
   switch (name) {
+    case "get_observe_snapshot": case "subscribe_observations": case "poll_observations": case "unsubscribe_observations": {
+      const needsId = name === "poll_observations" || name === "unsubscribe_observations";
+      if (Object.keys(args).some(key => !needsId || key !== "subscriptionId")) throw new Error("Invalid Observe arguments.");
+      return bridge.observeCommand(name, needsId ? observeSubscriptionId(args.subscriptionId) : undefined, signal);
+    }
     case "get_ui_tree":
       return bridge.getUiTree();
     case "get_world_object_tree":
@@ -989,9 +998,32 @@ function compactResult<T extends Record<string, unknown>>(value: T): T {
 }
 
 export class GuaBridgeClient {
+  async observeCommand(type: "get_observe_snapshot" | "subscribe_observations" | "poll_observations" | "unsubscribe_observations", subscriptionId?: number, signal?: AbortSignal): Promise<unknown> {
+    const needsId = type === "poll_observations" || type === "unsubscribe_observations";
+    const owner = needsId ? this.observeSubscriptions.get(observeSubscriptionId(subscriptionId)) : undefined;
+    if (needsId && (!owner || owner.socket !== this.socket || owner.socket.readyState !== WebSocket.OPEN)) {
+      if (type === "unsubscribe_observations") { this.observeSubscriptions.delete(subscriptionId!); return null; }
+      throw new Error("Observe subscription belongs to an inactive connection.");
+    }
+    const socket = owner?.socket ?? await this.connectForRequest("get_version", this.requestTimeoutMs, signal);
+    const version = await this.request<{ capabilities: string[] }>({ type: "get_version" }, this.requestTimeoutMs, signal, socket);
+    if (!version.capabilities.includes("observe_v1")) throw new Error("observe_v1 is unsupported.");
+    const result = await this.request<any>(owner === undefined ? { type: type as "get_observe_snapshot" | "subscribe_observations" } : { type: type as "poll_observations" | "unsubscribe_observations", subscriptionId: owner.remoteId }, this.requestTimeoutMs, signal, socket);
+    if (type === "unsubscribe_observations") { this.observeSubscriptions.delete(subscriptionId!); return null; }
+    if (type === "subscribe_observations") {
+      const remoteId = observeSubscriptionId(result.subscriptionId), snapshot = parseObserveTransport(result.snapshot);
+      if (socket !== this.socket || socket.readyState !== WebSocket.OPEN) throw new Error("Observe subscription belongs to an inactive connection.");
+      const handle = observeSubscriptionId(this.nextObserveHandle++);
+      this.observeSubscriptions.set(handle, { socket, remoteId });
+      return { subscriptionId: handle, snapshot };
+    }
+    return parseObserveTransport(result);
+  }
   private socket: WebSocket | null = null;
   private connectionAttempt: ConnectionAttempt | null = null;
   private nextId = 1;
+  private nextObserveHandle = 1;
+  private readonly observeSubscriptions = new Map<number, { socket: WebSocket; remoteId: number }>();
   private readonly pending = new Map<number, PendingRequest>();
 
   constructor(
@@ -1154,6 +1186,7 @@ export class GuaBridgeClient {
   }
 
   close(): void {
+    this.observeSubscriptions.clear();
     const error = new Error("Gua MCP bridge client closed.");
     this.rejectAll(error);
     const attempt = this.connectionAttempt;
@@ -1165,10 +1198,11 @@ export class GuaBridgeClient {
   }
 
   private async request<T>(command: BridgeCommandInput, timeoutMs = this.requestTimeoutMs,
-    signal?: AbortSignal): Promise<T> {
+    signal?: AbortSignal, ownerSocket?: WebSocket): Promise<T> {
     throwIfAborted(signal);
     const deadline = Date.now() + timeoutMs;
-    const socket = await this.connectForRequest(command.type, timeoutMs, signal);
+    const socket = ownerSocket ?? await this.connectForRequest(command.type, timeoutMs, signal);
+    if (ownerSocket && (socket !== this.socket || socket.readyState !== WebSocket.OPEN)) throw new Error("Observe subscription belongs to an inactive connection.");
     throwIfAborted(signal);
     const remainingTimeoutMs = deadline - Date.now();
     if (remainingTimeoutMs <= 0) {
@@ -1182,6 +1216,7 @@ export class GuaBridgeClient {
         this.pending.delete(id);
         signal?.removeEventListener("abort", aborted);
         reject(new Error(`Timed out waiting for Gua bridge command: ${command.type}`));
+        if (command.type === "subscribe_observations" || command.type === "poll_observations") socket.close();
       }, remainingTimeoutMs);
 
       const aborted = () => {
@@ -1191,9 +1226,11 @@ export class GuaBridgeClient {
         this.pending.delete(id);
         signal?.removeEventListener("abort", aborted);
         reject(new RpcFailure(-32800, "MCP request was cancelled."));
+        if (command.type === "subscribe_observations" || command.type === "poll_observations") socket.close();
       };
 
       this.pending.set(id, {
+        observeOperation: ["get_observe_snapshot", "subscribe_observations", "poll_observations", "unsubscribe_observations"].includes(command.type) ? command.type : undefined,
         resolve: (value) => {
           signal?.removeEventListener("abort", aborted);
           resolve(value as T);
@@ -1280,10 +1317,11 @@ export class GuaBridgeClient {
     });
 
     socket.addEventListener("message", (event) => {
-      if (this.socket === socket) this.handleMessage(event.data);
+      if (this.socket === socket) this.handleMessage(event.data, socket);
     });
 
     socket.addEventListener("close", () => {
+      for (const [id, owner] of this.observeSubscriptions) if (owner.socket === socket) this.observeSubscriptions.delete(id);
       if (this.connectionAttempt === attempt) {
         this.connectionAttempt = null;
         rejectAttempt(new Error("Gua bridge WebSocket connection closed."));
@@ -1317,7 +1355,7 @@ export class GuaBridgeClient {
     closePendingSocket(attempt.socket);
   }
 
-  private handleMessage(data: unknown): void {
+  private handleMessage(data: unknown, ownerSocket: WebSocket): void {
     if (typeof data !== "string") {
       return;
     }
@@ -1341,7 +1379,13 @@ export class GuaBridgeClient {
     clearTimeout(pending.timeoutId);
     this.pending.delete(response.id);
 
-    if (response.ok) {
+    if (pending.observeOperation) {
+      try { pending.resolve(decodeObserveWireResponse(data, response.id, pending.observeOperation)); }
+      catch (error) {
+        pending.reject(error instanceof ObserveWireRejectionError ? error : new Error("Invalid Observe transport response."));
+        if ((pending.observeOperation === "subscribe_observations" || pending.observeOperation === "poll_observations") && !(error instanceof ObserveWireRejectionError)) ownerSocket.close();
+      }
+    } else if (response.ok) {
       pending.resolve(response.result);
     } else {
       pending.reject(new Error(response.error));
@@ -1358,6 +1402,8 @@ export class GuaBridgeClient {
 }
 
 type BridgeCommandInput =
+  | { type: "get_version" | "get_observe_snapshot" | "subscribe_observations" }
+  | { type: "poll_observations" | "unsubscribe_observations"; subscriptionId: number }
   | { type: "get_ui_tree" }
   | { type: "get_world_object_tree" }
   | { type: "query_world_objects"; worldId?: string; kind?: string; label?: string; tag?: string; parentId?: string; directChild?: number; visibleToPlayer?: number; active?: number; stateKey?: string; stateType?: number; stateString?: string; stateNumber?: number; stateBool?: boolean; relativeToObjectId?: string; maxDistance?: number; limit?: number }
@@ -1390,6 +1436,7 @@ function filter(value: boolean | undefined): number { return value === undefined
 type BridgeCommand = BridgeCommandInput & { id: number };
 
 interface PendingRequest {
+  observeOperation?: string;
   resolve(value: unknown): void;
   reject(reason: Error): void;
   timeoutId: ReturnType<typeof setTimeout>;

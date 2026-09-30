@@ -91,7 +91,7 @@ if (-not ($filteredOutput -contains "Gua GDScript smoke passed.")) {
     $godotOutput | Write-Host
     throw "Godot GDScript smoke did not report successful completion. Log: $log"
 }
-if ($filteredOutput | Where-Object { $_ -match "^ERROR:" }) {
+if ($filteredOutput | Where-Object { $_ -match "^(ERROR:|SCRIPT ERROR:)" }) {
     $godotOutput | Write-Host
     throw "Godot GDScript smoke emitted an unexpected error. Log: $log"
 }

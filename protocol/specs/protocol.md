@@ -6,7 +6,7 @@ Additional observations use the independent [Value v1 contract](value-v1.md).
 Its tagged scalar/enum/list/set values, enum catalog, validation and equality do
 not replace existing nullable UI/World fields or game-input vector2 objects.
 Observe registration, lifetime and local subscriptions follow [Observe v1](observe-v1.md).
-Transport integration and capability negotiation remain separate follow-up work.
+Transport integration and capability negotiation follow [Observe transport v1](observe-transport-v1.md).
 
 Gua exposes the current UI state of a running game as a semantic UI tree and
 accepts commands that interact with nodes in that tree.

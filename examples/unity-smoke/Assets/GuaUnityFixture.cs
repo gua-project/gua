@@ -99,7 +99,7 @@ public static class GuaUnityFixture
             titleScreen.gameObject.SetActive(false);
             loadingScreen.gameObject.SetActive(true);
         });
-        settings.onClick.AddListener(() => { });
+        settings.onClick.AddListener(() => { Object.FindFirstObjectByType<GuaUnityObserveFixture>()?.Advance(); });
         if (string.Equals(Environment.GetEnvironmentVariable("GUA_UNITY_HOST_CLICK"), "1", StringComparison.Ordinal))
             settings.gameObject.AddComponent<GuaUnityHostClickDriver>().Button = settings;
 
@@ -112,6 +112,8 @@ public static class GuaUnityFixture
         AddWorldObject("Player", "player-world", "actor", GuaWorldSpace.World2D, new Vector3(635, 180, 0));
         var doorA = AddWorldObject("Door A", "door-a", "door", GuaWorldSpace.World2D, new Vector3(640, 180, 0));
         doorA.SetState("locked", true);
+        if (Application.platform == RuntimePlatform.WebGLPlayer || string.Equals(Environment.GetEnvironmentVariable("GUA_UNITY_OBSERVE"), "1", StringComparison.Ordinal))
+            doorA.gameObject.AddComponent<GuaUnityObserveFixture>();
         var doorB = AddWorldObject("Door B", "door-b", "door", GuaWorldSpace.World2D, new Vector3(635, 185, 0));
         doorB.SetState("locked", true);
         AddWorldObject("3D Anchor", "anchor-3d", "anchor", GuaWorldSpace.World3D, Vector3.zero);
@@ -378,6 +380,25 @@ public static class GuaUnityFixture
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
     }
+}
+
+public sealed class GuaUnityObserveFixture : MonoBehaviour
+{
+    private GuaEnumCatalog catalog;
+    private string phase = "First";
+    private IEnumerator Start()
+    {
+        yield return null;
+        GuaUnityRuntime.RunFrame();
+        catalog = new GuaEnumCatalog(); catalog.Register("game.Phase", "First", "Second");
+        var source = GetComponent<GuaUnityWorldObject>();
+        source.Observe("phase", () => GuaValue.Enum("game.Phase", phase, catalog), allowPlayer: true);
+        source.Observe("empty", () => GuaValue.Collection(GuaValueType.List, GuaValueType.Enum, Array.Empty<GuaValue>(), "game.Phase", catalog), allowPlayer: true);
+        source.Observe("private", () => GuaValue.String("SECRET_MARKER"));
+        source.Observe("sensitive", () => GuaValue.String("SECRET_MARKER"), allowPlayer: true, sensitive: true);
+    }
+    public void Advance() => phase = "Second";
+    private void OnDestroy() => catalog?.Dispose();
 }
 
 public sealed class GuaUnityThrowingControl : MonoBehaviour

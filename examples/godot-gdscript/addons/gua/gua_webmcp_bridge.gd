@@ -20,6 +20,9 @@ var release_game_input_callback: JavaScriptObject
 var bridge_owner_id := ""
 var game_input_owner_id := 0
 var attached := false
+var observe_callback: JavaScriptObject
+var release_observe_callback: JavaScriptObject
+var observe_client_id := 0
 
 
 func attach(gua_adapter: RefCounted) -> bool:
@@ -43,6 +46,11 @@ func attach(gua_adapter: RefCounted) -> bool:
 	enqueue_game_input_callback = JavaScriptBridge.create_callback(_enqueue_game_input)
 	poll_game_input_callback = JavaScriptBridge.create_callback(_poll_game_input)
 	release_game_input_callback = JavaScriptBridge.create_callback(_release_game_input_owner)
+	observe_callback = JavaScriptBridge.create_callback(_observe_command)
+	release_observe_callback = JavaScriptBridge.create_callback(_release_observe_client)
+	window.__guaGodotObserve = observe_callback
+	window.__guaGodotReleaseObserve = release_observe_callback
+	observe_client_id = gua_adapter.context.create_observe_client(1)
 	window.__guaGodotGetTree = get_tree_callback
 	window.__guaGodotGetWorldTree = get_world_tree_callback
 	window.__guaGodotQueryWorld = query_world_callback
@@ -64,6 +72,8 @@ func attach(gua_adapter: RefCounted) -> bool:
   const previousPort = globalThis.__guaGodotWebPort;
   if (previousPort && typeof previousPort.__guaUninstall === 'function') previousPort.__guaUninstall();
   const getTree = globalThis.__guaGodotGetTree;
+  const observe = globalThis.__guaGodotObserve;
+  const releaseObserve = globalThis.__guaGodotReleaseObserve;
   const getWorldTree = globalThis.__guaGodotGetWorldTree;
   const queryWorld = globalThis.__guaGodotQueryWorld;
   const enqueueAction = globalThis.__guaGodotEnqueueAction;
@@ -94,6 +104,7 @@ func attach(gua_adapter: RefCounted) -> bool:
     }
   };
   const port = {
+    capabilities: ['observe_v1'],
     __guaOwnerId: "%s",
     __guaUninstall() {
       if (disposed) return;
@@ -102,10 +113,20 @@ func attach(gua_adapter: RefCounted) -> bool:
       for (const call of pending.values()) call.cancelOrDrain(error);
       for (const call of [...pendingGameInputs.values()]) call.fail(error);
       try { callGodot(releaseGameInput); } catch (_) {}
+      try { callGodot(releaseObserve); } catch (_) {}
     },
     async invoke(command, options) {
       if (disposed) throw engineError('engine_unsupported', 'The Godot Gua adapter is no longer available.');
       if (!command || typeof command.type !== 'string') throw engineError('invalid_request', 'Missing Gua in-page command.');
+      if (['get_observe_snapshot', 'subscribe_observations', 'poll_observations', 'unsubscribe_observations'].includes(command.type)) {
+        const needsId = command.type === 'poll_observations' || command.type === 'unsubscribe_observations';
+        if (Object.keys(command).some(key => key !== 'type' && (!needsId || key !== 'subscriptionId')) ||
+            (needsId && (!Number.isSafeInteger(command.subscriptionId) || command.subscriptionId <= 0))) throw engineError('invalid_request', 'Invalid Observe request.');
+        if (options && options.signal && options.signal.aborted) throw engineError('aborted', 'Observe request aborted.');
+        const result = JSON.parse(callGodot(observe, JSON.stringify(command)));
+        if (result && result.code) throw engineError(result.code, 'Observe request rejected.');
+        return result;
+      }
       const signal = options && options.signal;
       const requestedTimeoutMs = options && options.timeoutMs;
       if (signal && signal.aborted) throw engineError('aborted', 'The Godot Gua call was aborted.');
@@ -259,7 +280,9 @@ func detach() -> void:
   if (!port || port.__guaOwnerId !== "%s") return;
   port.__guaUninstall();
   delete globalThis.__guaGodotWebPort;
-  delete globalThis.__guaGodotGetTree;
+  delete globalThis.__guaGodotObserve;
+          delete globalThis.__guaGodotReleaseObserve;
+          delete globalThis.__guaGodotGetTree;
   delete globalThis.__guaGodotGetWorldTree;
   delete globalThis.__guaGodotQueryWorld;
   delete globalThis.__guaGodotEnqueueAction;
@@ -275,6 +298,9 @@ func detach() -> void:
 })();
 """ % bridge_owner_id)
 	_release_game_input_owner([])
+	_release_observe_client([])
+	observe_callback = null
+	release_observe_callback = null
 	bridge_owner_id = ""
 	get_tree_callback = null
 	get_world_tree_callback = null
@@ -297,6 +323,37 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE and attached:
 		detach()
 
+
+func _release_observe_client(_arguments: Array) -> void:
+	var adapter := _adapter()
+	if adapter != null and observe_client_id != 0:
+		adapter.context.release_observe_client(observe_client_id)
+	observe_client_id = 0
+
+func _observe_command(arguments: Array) -> void:
+	var adapter := _adapter()
+	if adapter == null or observe_client_id == 0:
+		_respond(arguments, '{"code":"engine_unsupported"}')
+		return
+	var command: Variant = JSON.parse_string(str(arguments[1]))
+	if not command is Dictionary:
+		_respond(arguments, '{"code":"invalid_request"}')
+		return
+	var operations := {"get_observe_snapshot": 1, "subscribe_observations": 2, "poll_observations": 3, "unsubscribe_observations": 4}
+	var operation: int = operations.get(command.get("type", ""), 0)
+	var subscription: Variant = command.get("subscriptionId", 0)
+	if operation == 0 or not (subscription is int or subscription is float) or not is_finite(float(subscription)) or float(subscription) != floor(float(subscription)) or float(subscription) < 0 or float(subscription) > 9007199254740991:
+		_respond(arguments, '{"code":"invalid_request"}')
+		return
+	var result: Dictionary = adapter.context.observe_command(observe_client_id, operation, int(subscription))
+	if int(result.get("status", 5)) != 0:
+		_respond(arguments, '{"code":"invalid_request"}')
+	elif operation == 4:
+		_respond(arguments, "null")
+	elif operation == 2:
+		_respond(arguments, '{"subscriptionId":%d,"snapshot":%s}' % [result.subscriptionId, result.json])
+	else:
+		_respond(arguments, result.json)
 
 func _get_tree(arguments: Array) -> void:
 	var adapter := _adapter()

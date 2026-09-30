@@ -16,6 +16,7 @@ struct gua_value_t {
     int64_t integer=0;
     double number=0;
     std::string text, enum_type;
+    std::vector<std::string> enum_members;
     std::vector<gua_value_t> items;
 };
 namespace {
@@ -186,7 +187,7 @@ int gua_enum_catalog_copy_json(const gua_enum_catalog_t* c,char* out,int cap) {
 }
 int gua_value_from_json(gua_value_text_t s,const gua_enum_catalog_t* cat,gua_value_t** out,gua_value_error_t* error) {
     if(out) *out=nullptr;
-    return protect(error,[&] { if(!out) fail(GUA_VALUE_STRUCTURE); auto j=parser(input(s)).parse(); auto v=std::make_unique<gua_value_t>(parse_value(j,cat)); *out=v.release(); });
+    return protect(error,[&] { if(!out) fail(GUA_VALUE_STRUCTURE); auto j=parser(input(s)).parse(); auto v=std::make_unique<gua_value_t>(parse_value(j,cat)); if (!v->enum_type.empty()) v->enum_members=cat->enums.at(v->enum_type); *out=v.release(); });
 }
 int gua_value_create(const gua_value_descriptor_v1_t* d,const gua_enum_catalog_t* cat,gua_value_t** out,gua_value_error_t* error) {
     if(out) *out=nullptr;
@@ -197,7 +198,7 @@ int gua_value_create(const gua_value_descriptor_v1_t* d,const gua_enum_catalog_t
         bool collection=d->type>=GUA_VALUE_LIST, en=d->type==GUA_VALUE_ENUM||(collection&&d->element_type==GUA_VALUE_ENUM);
         if(!collection&&(d->element_type||d->item_count||d->items)) fail(GUA_VALUE_STRUCTURE);
         if(!en&&d->enum_type.size) fail(GUA_VALUE_STRUCTURE,"$.enumType");
-        if(en) { v->enum_type=input(d->enum_type,"$.enumType"); enum_check(cat,v->enum_type,nullptr); }
+        if(en) { v->enum_type=input(d->enum_type,"$.enumType"); enum_check(cat,v->enum_type,nullptr); v->enum_members=cat->enums.at(v->enum_type); }
         switch(d->type) {
         case GUA_VALUE_BOOL:if(d->boolean!=0&&d->boolean!=1) fail(GUA_VALUE_ELEMENT_TYPE,"$.value"); v->boolean=d->boolean!=0; break;
         case GUA_VALUE_INTEGER:if(d->integer < -9007199254740991LL||d->integer>9007199254740991LL) fail(GUA_VALUE_RANGE,"$.value"); v->integer=d->integer; break;
@@ -218,3 +219,9 @@ int gua_value_copy_json(const gua_value_t* v,char* out,int cap) { try { return v
 int gua_value_equals(const gua_value_t* a,const gua_value_t* b,int* result,gua_value_error_t* error) { if(result) *result=0; return protect(error,[&] { if(!a||!b||!result) fail(GUA_VALUE_STRUCTURE); *result=equal(*a,*b)?1:0; }); }
 }
 extern "C" gua_value_t* gua_value_clone(const gua_value_t* value) { try { return value ? new gua_value_t(*value) : nullptr; } catch (...) { return nullptr; } }
+extern "C" int gua_value_copy_enum_catalog_json(const gua_value_t* v, char* out, int cap) {
+    try { if (!v) return 0; gua_enum_catalog_t catalog;
+        if (!v->enum_type.empty()) catalog.enums.emplace(v->enum_type, v->enum_members);
+        return gua_enum_catalog_copy_json(&catalog,out,cap);
+    } catch (...) { return 0; }
+}

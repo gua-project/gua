@@ -46,6 +46,7 @@ public:
     int type() const { return gua_value_get_type(get()); }
     int element_type() const { return gua_value_get_element_type(get()); }
     std::string to_json() const { return value_copy_json(get(),gua_value_copy_json); }
+    std::string enum_catalog_json() const { return value_copy_json(get(),gua_value_copy_enum_catalog_json); }
     bool operator==(const Value& other) const { int result=0; gua_value_error_t e{}; if(gua_value_equals(get(),other.get(),&result,&e)) throw ValueError(e); return result!=0; }
 };
 }

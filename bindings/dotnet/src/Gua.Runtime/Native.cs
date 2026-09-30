@@ -4,7 +4,7 @@ using Gua.Core;
 
 namespace Gua.Runtime;
 
-internal static unsafe class Native
+internal static unsafe partial class Native
 {
     [StructLayout(LayoutKind.Sequential)] internal struct NodeV2 { internal uint StructSize; internal ulong KnownMask; internal nint Id, ParentId, Role, Label, Text, Value; internal GuaBounds Bounds; internal int Visible, Enabled, Focused, Hovered, Pressed, Checked, Selected; }
     [StructLayout(LayoutKind.Sequential)] internal struct NodeV3 { internal uint StructSize; internal NodeV2 Base; internal long CaretPosition, SelectionStart, SelectionEnd; internal double ScrollX, ScrollY, ScrollMaxX, ScrollMaxY, RangeValue, RangeMin, RangeMax; internal long SelectedIndex; }

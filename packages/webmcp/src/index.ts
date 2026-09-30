@@ -1,4 +1,5 @@
 export * from "./tool-definitions.js";
+import { observeTools, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value";
 export * from "./ports.js";
 export type {
   GuaWorldObject,
@@ -125,6 +126,11 @@ export interface GuaBridgeCallOptions { signal?: AbortSignal; timeoutMs?: number
 
 /** Implemented by the engine adapter in the same page. performAction resolves only after host completion. */
 export interface GuaBrowserBridge {
+  disposeObservations?(): Promise<void>;
+  getObserveSnapshot?(options?: GuaBridgeCallOptions): Promise<ObserveTransport>;
+  subscribeObservations?(options?: GuaBridgeCallOptions): Promise<ObserveSubscription>;
+  pollObservations?(subscriptionId: number, options?: GuaBridgeCallOptions): Promise<ObserveTransport>;
+  unsubscribeObservations?(subscriptionId: number, options?: GuaBridgeCallOptions): Promise<void>;
   getUiTree(): Promise<GuaUiTree>;
   performAction(request: GuaWebActionRequest, options?: GuaBridgeCallOptions): Promise<GuaWebActionCompletion>;
   getScreenshot?(): Promise<GuaScreenshot>;
@@ -210,6 +216,7 @@ export async function registerGuaWebMcp(
   }
   const gameInputTools = gameInputDefinitions(gameInputCapabilities, bridge);
   const definitions = [
+    ...(bridge.getObserveSnapshot && bridge.subscribeObservations && bridge.pollObservations && bridge.unsubscribeObservations && bridge.disposeObservations ? observeTools : []),
     ...guaWebMcpToolDefinitions.filter((definition) => definition.name !== "get_screenshot" || bridge.getScreenshot),
     ...(bridge.getWorldObjectTree ? worldObservationTools.filter((definition) => definition.name === "get_world_object_tree") : []),
     ...(bridge.findWorldObjects ? worldObservationTools.filter((definition) => definition.name !== "get_world_object_tree") : []),
@@ -222,7 +229,7 @@ export async function registerGuaWebMcp(
         ...definition,
         execute: async (input, executionOptions) => executeTool(
           definition.name,
-          input ?? {},
+          input === undefined ? {} : input,
           bridge,
           executionOptions?.signal,
           pollIntervalMs,
@@ -234,6 +241,7 @@ export async function registerGuaWebMcp(
     }
   } catch (error) {
     controller.abort();
+    try { await bridge.disposeObservations?.(); } catch { /* Preserve the registration error. */ }
     const message = error instanceof Error ? error.message : "The browser rejected WebMCP tool registration.";
     return {
       supported: false,
@@ -246,6 +254,7 @@ export async function registerGuaWebMcp(
     supported: true,
     registeredTools,
     unregister: () => {
+      void bridge.disposeObservations?.().catch(() => undefined);
       if (bridge.performGameInput && gameInputCapabilities.length > 0) {
         void bridge.performGameInput({ type: "release_all_game_inputs" }).catch(() => undefined);
       }
@@ -280,6 +289,24 @@ async function executeTool(
 ): Promise<unknown> {
   try {
     throwIfAborted(signal);
+    if (observeTools.some(tool => tool.name === name)) {
+      if (!input || typeof input !== "object" || Array.isArray(input)) throw new GuaWebError("invalid_request", "Invalid Observe arguments.");
+      const needsId = name === "poll_observations" || name === "unsubscribe_observations";
+      if (Object.keys(input).some(key => !needsId || key !== "subscriptionId")) throw new GuaWebError("invalid_request", "Invalid Observe arguments.");
+      const id = needsId ? observeSubscriptionId(input.subscriptionId) : 0;
+      const controller = new AbortController();
+      const relay = () => controller.abort();
+      signal?.addEventListener("abort", relay, { once: true });
+      const callOptions = { signal: controller.signal, timeoutMs: defaultTimeoutMs };
+      let result: Promise<unknown> | undefined;
+      if (name === "get_observe_snapshot") result = bridge.getObserveSnapshot?.(callOptions);
+      if (name === "subscribe_observations") result = bridge.subscribeObservations?.(callOptions);
+      if (name === "poll_observations") result = bridge.pollObservations?.(id, callOptions);
+      if (name === "unsubscribe_observations") result = bridge.unsubscribeObservations?.(id, callOptions).then(() => null);
+      if (!result) throw new GuaWebError("engine_unsupported", "The engine bridge does not support observations.");
+      try { return await withTimeout(result, defaultTimeoutMs, signal, "Timed out reading observations."); }
+      finally { signal?.removeEventListener("abort", relay); controller.abort(); }
+    }
     if (name === "get_ui_tree") {
       return await withTimeout(
         bridge.getUiTree(),
@@ -395,12 +422,12 @@ async function executeTool(
       : completion;
     return safeCompletion;
   } catch (error) {
-    if (name === "text_input" && input.sensitive === true) {
+    if (name === "text_input" && input?.sensitive === true) {
       const code = error instanceof GuaWebError ? error.code : "action_failed";
       const normalized = new GuaWebError(code, "Sensitive text input failed; engine details were [REDACTED].");
       return { content: [{ type: "text", text: JSON.stringify({ error: normalized.toJSON() }) }], isError: true };
     }
-    const secret = input.sensitive === true
+    const secret = input?.sensitive === true
       ? String(name === "text_input" ? input.text ?? "" : input.value ?? "")
       : undefined;
     const normalized = normalizeError(error, secret);

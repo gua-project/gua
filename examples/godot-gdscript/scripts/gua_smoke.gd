@@ -820,6 +820,10 @@ func _run() -> void:
 		_fail("Gua reinserted a repeating schedule whose deadline did not advance.")
 		return
 
+	if not _verify_observe(ui, door):
+		_fail("Gua Observe adapter integration failed.")
+		return
+
 	var leaked := ui.enqueue_action({"action": "focus", "node_id": "start"})
 	if leaked.get("request_id", 0) == 0:
 		_fail("Gua smoke could not create a pending request for reset validation.")
@@ -848,6 +852,84 @@ func _run() -> void:
 	print("Gua GDScript smoke passed.")
 	call_deferred("_finish", 0)
 
+
+func _verify_observe(ui: RefCounted, door: Node) -> bool:
+	if ui.register_value_enum("game.Phase", ["First", "Second"]) != 0:
+		return false
+	var owner: RefCounted = ui.create_observe_owner(2, "door-a", door)
+	if owner == null:
+		return false
+	var phase := ["First"]
+	var registration: int = owner.observe("phase", func() -> Dictionary: return {"type": "enum", "enumType": "game.Phase", "value": phase[0]}, true)
+	owner.observe("empty", func() -> Dictionary: return {"type": "list", "elementType": "enum", "enumType": "game.Phase", "value": []}, true)
+	ui.update("title")
+	var client: int = ui.context.create_observe_client(0)
+	var player: int = ui.context.create_observe_client(1)
+	var initial: Dictionary = ui.context.observe_command(client, 2, 0)
+	var player_initial: Dictionary = ui.context.observe_command(player, 2, 0)
+	var snapshot: Dictionary = JSON.parse_string(initial.json)
+	if snapshot.document.entries.size() != 2 or snapshot.document.entries[0].runtimeId != "door-a" or snapshot.catalogs[1].value.enums[0].members != ["First", "Second"]:
+		return false
+	phase[0] = "Second"
+	owner.notify(registration)
+	var changes: Dictionary = JSON.parse_string(ui.context.observe_command(client, 3, initial.subscriptionId).json)
+	if changes.document.events.size() != 1 or changes.document.events[0].after.value != "Second":
+		return false
+	door.set_meta(&"gua_world_visible_to_player", false)
+	ui.update("title")
+	var gap: Dictionary = JSON.parse_string(ui.context.observe_command(player, 3, player_initial.subscriptionId).json)
+	if gap.document.status != "gap" or not gap.document.events.is_empty():
+		return false
+	door.set_meta(&"gua_world_visible_to_player", true)
+	ui.update("title")
+	owner.dispose()
+	changes = JSON.parse_string(ui.context.observe_command(client, 3, initial.subscriptionId).json)
+	if changes.document.events.size() != 2 or changes.document.events[0].kind != "removed":
+		return false
+	ui.context.release_observe_client(client)
+	ui.context.release_observe_client(player)
+	# Retaining a disposed token must not retain the old native runtime.
+	var isolated: RefCounted = preload("res://addons/gua/gua_auto_adapter.gd").new()
+	var isolated_root := Control.new()
+	get_tree().root.add_child(isolated_root)
+	isolated.attach(isolated_root)
+	isolated.update("lifetime")
+	var retained: RefCounted = isolated.create_observe_owner(3)
+	var old_context: WeakRef = weakref(isolated.context)
+	isolated.dispose()
+	if old_context.get_ref() != null or retained.unregister(0) != 2 or retained.notify(0) != 2:
+		return false
+	retained.dispose()
+	# The normal RefCounted destruction path must clean retained tokens too.
+	isolated = preload("res://addons/gua/gua_auto_adapter.gd").new()
+	isolated.attach(isolated_root)
+	isolated.update("lifetime")
+	retained = isolated.create_observe_owner(3)
+	old_context = weakref(isolated.context)
+	isolated = null
+	if old_context.get_ref() != null or retained.owner_id != 0:
+		return false
+	# A getter may dispose the adapter during either UI or World sampling.
+	var dispose_button := Button.new()
+	dispose_button.name = "DisposeObserve"
+	dispose_button.set_meta(&"gua_id", "dispose-getter")
+	isolated_root.add_child(dispose_button)
+	for source in [1, 3]:
+		isolated = GuaAutoAdapterScript.new()
+		isolated.attach(isolated_root)
+		isolated.update("getter-dispose")
+		retained = isolated.create_observe_owner(source, "dispose-getter" if source == 1 else "", dispose_button if source == 1 else null)
+		if retained == null:
+			return false
+		retained.observe("dispose", func() -> Dictionary:
+			isolated.dispose()
+			return {"type": "integer", "value": 1})
+		isolated.update("getter-dispose")
+		if not isolated.disposed or isolated.context != null:
+			return false
+	isolated_root.queue_free()
+	print("Gua Observe Godot integration passed.")
+	return true
 
 func _on_start_pressed() -> void:
 	if expected_click_request_id != 0:

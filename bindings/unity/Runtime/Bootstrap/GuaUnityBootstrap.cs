@@ -1,4 +1,8 @@
 using UnityEngine;
+using UnityEngine.Scripting;
+
+// The driver assembly may be referenced only by its runtime initialization hook.
+[assembly: AlwaysLinkAssembly]
 
 namespace Gua.Unity
 {

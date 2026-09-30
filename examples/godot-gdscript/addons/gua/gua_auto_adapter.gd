@@ -13,6 +13,9 @@ const CONTEXT_CLASS := "GuaContext"
 const GDEXTENSION_RESOURCE := "res://addons/gua/gua.gdextension"
 const REBUILD_COMMAND := "cmake --build --preset windows-msvc-debug --target gua-godot"
 const REQUIRED_CONTEXT_METHODS := [
+	"create_observe_owner", "destroy_observe_owner", "register_observe", "unregister_observe",
+	"observe_registration_alive", "register_value_enum", "publish_observe_json",
+	"create_observe_client", "release_observe_client", "observe_command",
 	"begin_frame",
 	"register_node",
 	"register_node_v2",
@@ -110,6 +113,31 @@ var player_semantic_input_allowed := false
 var player_raw_input_allowed := false
 var last_game_input_ticks_ms := Time.get_ticks_msec()
 var disposed := false
+var observe_owners: Array[WeakRef] = []
+
+func create_observe_owner(source: int, runtime_id: String = "", target_node: Node = null) -> RefCounted:
+	if not _ensure_context():
+		return null
+	var id: int = context.create_observe_owner(source, runtime_id)
+	if id == 0:
+		return null
+	var owner: RefCounted = preload("res://addons/gua/gua_observe_owner.gd").new()
+	owner.context = context
+	owner.owner_id = id
+	owner.source = source
+	owner.target = weakref(target_node) if target_node != null else null
+	observe_owners.append(weakref(owner))
+	return owner
+
+func register_value_enum(enum_type: String, members: Array) -> int:
+	return context.register_value_enum(enum_type, members) if _ensure_context() else 1
+
+func _sample_observations(ui: bool) -> void:
+	for reference: WeakRef in observe_owners.duplicate():
+		var owner: RefCounted = reference.get_ref()
+		if owner != null:
+			owner.sample_frame(ui)
+	observe_owners = observe_owners.filter(func(reference: WeakRef) -> bool: return reference.get_ref() != null)
 
 
 func attach(root_control: Control) -> void:
@@ -129,8 +157,17 @@ func attach(root_control: Control) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE and not disposed:
-		_detach_webmcp_bridge()
-		_release_all_injected_inputs()
+		for reference: WeakRef in observe_owners:
+			var owner: RefCounted = reference.get_ref()
+			if owner != null:
+				owner.dispose()
+		observe_owners.clear()
+		if webmcp_bridge != null:
+			webmcp_bridge.detach()
+		webmcp_bridge = null
+		# RefCounted self method calls are invalid during PREDELETE. Pass state to
+		# a static script call so the final held-input cleanup still runs.
+		load("res://addons/gua/gua_auto_adapter.gd").release_injected_state(held_physical_keys, held_pointer_buttons, held_gamepad_buttons, held_gamepad_axes, synthetic_pointer_position, semantic_values_by_owner, game_input_values, Signal())
 
 
 func _detach_webmcp_bridge() -> void:
@@ -140,6 +177,11 @@ func _detach_webmcp_bridge() -> void:
 
 
 func dispose() -> void:
+	for reference: WeakRef in observe_owners:
+		var owner: RefCounted = reference.get_ref()
+		if owner != null:
+			owner.dispose()
+	observe_owners.clear()
 	if disposed:
 		return
 	disposed = true
@@ -217,8 +259,13 @@ func update(screen: String) -> void:
 	list_items_by_id.clear()
 	controls_by_id.clear()
 	_collect_control(root, "")
+	_sample_observations(true)
+	if disposed or context == null:
+		return
 	context.end_frame()
 	_publish_world_frame(screen)
+	if disposed or context == null:
+		return
 	_dispatch_click_requests()
 	_dispatch_action_requests()
 	_dispatch_game_input_requests()
@@ -323,6 +370,9 @@ func _publish_world_frame(scene: String, report_errors: bool = true) -> void:
 			_report_world_frame_error("Failed to register Gua world object: %s" % object_id, report_errors)
 			context.abort_world_frame()
 			return
+	_sample_observations(false)
+	if disposed or context == null:
+		return
 	if not context.end_world_frame():
 		_report_world_frame_error("Gua world frame was rejected", report_errors)
 
@@ -1472,26 +1522,7 @@ func _release_owner_injected_inputs(owner_id: int) -> void:
 
 
 func _release_all_injected_inputs() -> void:
-	for held in held_physical_keys.values():
-		var keycode: Key = int(held.get("keycode", KEY_NONE))
-		var location: KeyLocation = int(held.get("location", KEY_LOCATION_UNSPECIFIED))
-		_inject_key(keycode, false, location)
-	held_physical_keys.clear()
-	for held in held_pointer_buttons.values():
-		var event := InputEventMouseButton.new()
-		var button: MouseButton = int(held.get("button", MOUSE_BUTTON_NONE))
-		event.button_index = button
-		event.pressed = false
-		event.position = synthetic_pointer_position
-		event.global_position = synthetic_pointer_position
-		Input.parse_input_event(event)
-	held_pointer_buttons.clear()
-	for device in range(4):
-		_release_gamepad(device)
-	semantic_values_by_owner.clear()
-	for action_id in game_input_values.keys():
-		var current = game_input_values[action_id]
-		_set_semantic_input(action_id, _neutral_semantic_input(current))
+	release_injected_state(held_physical_keys, held_pointer_buttons, held_gamepad_buttons, held_gamepad_axes, synthetic_pointer_position, semantic_values_by_owner, game_input_values, game_input_action_changed)
 
 
 func _semantic_scroll_extent(control: Control, horizontal: bool) -> float:
@@ -1705,3 +1736,42 @@ func _control_focused(control: Control) -> bool:
 	if control is SpinBox:
 		return (control as SpinBox).get_line_edit().has_focus()
 	return control.has_focus()
+
+static func release_injected_state(keys: Dictionary, pointers: Dictionary, buttons: Dictionary, axes: Dictionary, position: Vector2, owners: Dictionary, values: Dictionary, changed: Signal) -> void:
+	for held: Dictionary in keys.values():
+		var event := InputEventKey.new()
+		event.physical_keycode = int(held.get("keycode", KEY_NONE))
+		event.keycode = event.physical_keycode
+		event.location = int(held.get("location", KEY_LOCATION_UNSPECIFIED))
+		event.pressed = false
+		Input.parse_input_event(event)
+	keys.clear()
+	for held: Dictionary in pointers.values():
+		var event := InputEventMouseButton.new()
+		event.button_index = int(held.get("button", MOUSE_BUTTON_NONE))
+		event.pressed = false
+		event.position = position
+		event.global_position = position
+		Input.parse_input_event(event)
+	pointers.clear()
+	for held: Dictionary in buttons.values():
+		var event := InputEventJoypadButton.new()
+		event.device = int(held.device)
+		event.button_index = int(held.button)
+		event.pressed = false
+		Input.parse_input_event(event)
+	buttons.clear()
+	for held: Dictionary in axes.values():
+		var event := InputEventJoypadMotion.new()
+		event.device = int(held.device)
+		event.axis = int(held.axis)
+		event.axis_value = 0.0
+		Input.parse_input_event(event)
+	axes.clear()
+	owners.clear()
+	for action_id: String in values.keys():
+		var current: Variant = values[action_id]
+		var neutral: Variant = Vector2.ZERO if current is Vector2 else 0.0 if current is float or current is int else "" if current is String else false
+		values[action_id] = neutral
+		if not changed.is_null():
+			changed.emit(action_id, neutral)

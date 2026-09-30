@@ -107,6 +107,7 @@ jobs:
           Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension" $godotTarget
           Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension.uid" $godotTarget
           Copy-Item "examples/godot-gdscript/addons/gua/gua_auto_adapter.gd" $godotTarget
+          Copy-Item "examples/godot-gdscript/addons/gua/gua_observe_owner.gd" $godotTarget
           Copy-Item "examples/godot-gdscript/addons/gua/gua_webmcp_bridge.gd" $godotTarget
           Copy-Item "examples/godot-gdscript/addons/gua/plugin.cfg" $godotTarget
           Copy-Item "examples/godot-gdscript/addons/gua/plugin.gd" $godotTarget
@@ -436,6 +437,7 @@ jobs:
           Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension" $godot
           Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension.uid" $godot
           Copy-Item "examples/godot-gdscript/addons/gua/gua_auto_adapter.gd" $godot
+          Copy-Item "examples/godot-gdscript/addons/gua/gua_observe_owner.gd" $godot
           Copy-Item "examples/godot-gdscript/addons/gua/gua_webmcp_bridge.gd" $godot
           Copy-Item "examples/godot-gdscript/addons/gua/plugin.cfg" $godot
           Copy-Item "examples/godot-gdscript/addons/gua/plugin.gd" $godot
@@ -482,7 +484,7 @@ jobs:
           $root = 'artifacts/godot-addon'
           $addon = Join-Path $root 'addons/gua'
           New-Item -ItemType Directory -Force (Join-Path $addon 'bin') | Out-Null
-          foreach ($file in 'gua.gdextension', 'gua.gdextension.uid', 'gua_auto_adapter.gd', 'gua_webmcp_bridge.gd', 'plugin.cfg', 'plugin.gd', 'plugin.gd.uid') {
+          foreach ($file in 'gua.gdextension', 'gua.gdextension.uid', 'gua_auto_adapter.gd', 'gua_observe_owner.gd', 'gua_webmcp_bridge.gd', 'plugin.cfg', 'plugin.gd', 'plugin.gd.uid') {
             Copy-Item "examples/godot-gdscript/addons/gua/$file" $addon
           }
           foreach ($pattern in 'gua_godot.windows.*', 'gua_godot.linux.*', 'gua_godot.macos.*', 'gua_godot.web.*') {

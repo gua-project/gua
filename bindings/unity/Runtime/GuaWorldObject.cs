@@ -20,8 +20,24 @@ public sealed class GuaWorldObject : MonoBehaviour
     [SerializeField] private string domainId = string.Empty;
     [SerializeField] private string relatedUiNodeId = string.Empty;
     private readonly Dictionary<string, object?> state = new(StringComparer.Ordinal);
+    private GuaObserveOwner? observeOwner;
+    private readonly List<GuaObserveRegistration> observations = new();
 
-    public string Id { get => id; set => id = value ?? string.Empty; }
+    public string Id { get => id; set { if (id != value) DisposeObservations(); id = value ?? string.Empty; } }
+    /// <summary>Call after the first successful World frame. worldPosition is
+    /// already reflected; register only game-specific state such as phase.</summary>
+    public GuaObserveRegistration Observe(string name, Func<GuaValue> getter, bool allowPlayer = false, bool sensitive = false)
+    {
+        observeOwner ??= GuaUnityRuntime.CreateObserveOwner(GuaObserveSource.Object, Id);
+        var registration = observeOwner.Observe(name, getter, allowPlayer, sensitive);
+        observations.Add(registration); return registration;
+    }
+    public void DisposeObservations()
+    {
+        foreach (var observation in observations) observation.Dispose();
+        observations.Clear(); observeOwner?.Dispose(); observeOwner = null;
+    }
+    private void OnDestroy() => DisposeObservations();
     public string Kind { get => kind; set => kind = value ?? string.Empty; }
     public string Label { get => string.IsNullOrEmpty(label) ? gameObject.name : label; set => label = value ?? string.Empty; }
     public string Description { get => description; set => description = value ?? string.Empty; }

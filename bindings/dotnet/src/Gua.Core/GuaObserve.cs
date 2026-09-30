@@ -43,9 +43,19 @@ public sealed partial class GuaContext
     {
         lock (ObserveGate) {
             CheckObserve(Native.gua_observe_subscribe(ObserveHandle, (int)profile, out var id, out var result));
-            try { return new GuaObserveSubscription(this, id, ReadObserveResult(result)); }
+            try {
+                using var owned = new ObserveResultHandle(result);
+                return new GuaObserveSubscription(this, id, GuaValue.Copy(result, Native.gua_observe_result_copy_json),
+                    GuaValue.Copy(result, Native.gua_observe_result_copy_transport_json));
+            }
             catch { Native.gua_observe_unsubscribe(_handle, id); throw; }
         }
+    }
+    public string GetObserveSnapshotTransportJson(GuaObservationProfile profile = GuaObservationProfile.Debug)
+    {
+        lock (ObserveGate) { CheckObserve(Native.gua_observe_snapshot(ObserveHandle, (int)profile, out var result));
+            using var owned = new ObserveResultHandle(result);
+            return GuaValue.Copy(result, Native.gua_observe_result_copy_transport_json); }
     }
     public void SetObserveHistoryLimits(uint events = 1024, ulong bytes = 8 * 1024 * 1024)
     {
@@ -54,7 +64,7 @@ public sealed partial class GuaContext
     internal void AddObserveGetter(GuaObserveRegistration registration) => _observeGetters.Add(new(registration));
     internal void RemoveObserveGetter(GuaObserveRegistration registration) =>
         _observeGetters.RemoveAll(w => !w.TryGetTarget(out var r) || ReferenceEquals(r, registration));
-    private void SampleObservations(bool ui)
+    internal void SampleObservations(bool ui)
     {
         // A getter may explicitly dispose/register/reset; enumerate a copy.
         foreach (var weak in _observeGetters.ToArray())
@@ -141,7 +151,8 @@ public sealed class GuaObserveSubscription : IDisposable
     private readonly GuaContext _context;
     private ulong _id;
     public string SnapshotJson { get; }
-    internal GuaObserveSubscription(GuaContext context, ulong id, string snapshot) { _context = context; _id = id; SnapshotJson = snapshot; }
+    public string SnapshotTransportJson { get; }
+    internal GuaObserveSubscription(GuaContext context, ulong id, string snapshot, string transport) { _context = context; _id = id; SnapshotJson = snapshot; SnapshotTransportJson = transport; }
     /// <summary>Returns changes, a sticky gap, or stale_session. Resubscribe after a gap;
     /// the new Snapshot does not restore any missed intermediate history.</summary>
     public string PollJson()
@@ -150,6 +161,15 @@ public sealed class GuaObserveSubscription : IDisposable
             if (_id == 0) throw new ObjectDisposedException(nameof(GuaObserveSubscription));
             GuaContext.CheckObserve(Native.gua_observe_poll(_context.ObserveHandle, _id, out var result));
             return GuaContext.ReadObserveResult(result);
+        }
+    }
+    public string PollTransportJson()
+    {
+        lock (_context.ObserveGate) {
+            if (_id == 0) throw new ObjectDisposedException(nameof(GuaObserveSubscription));
+            GuaContext.CheckObserve(Native.gua_observe_poll(_context.ObserveHandle, _id, out var result));
+            using var owned = new ObserveResultHandle(result);
+            return GuaValue.Copy(result, Native.gua_observe_result_copy_transport_json);
         }
     }
     public void Dispose() { lock (_context.ObserveGate) { _context.ReleaseObserve(_id, 2); _id = 0; } }
@@ -171,4 +191,5 @@ internal static partial class Native
     [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_unsubscribe(nint c, ulong id);
     [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_result_copy_json(nint result, byte[]? buffer, int capacity);
     [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern void gua_observe_result_destroy(nint result);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_observe_result_copy_transport_json(nint result, byte[]? buffer, int capacity);
 }

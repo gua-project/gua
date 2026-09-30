@@ -128,7 +128,7 @@ var changes = subscription.PollJson(); // statusを必ず確認する
 
 共通fixtureは `protocol/fixtures/observe-v1.json`。native/C++と.NETが遷移例を実行し、
 Bun/Ajvが正常・異常documentを検証する。既存Value/UI/World/reset試験を維持する。
-Godot/Unity、Gua.Runtime/bridgeのObserve公開、MCP/WebMCP、Inspectorは未接続で#120。
+Godot/Unity、Gua.Runtime/bridge、MCP/WebMCP、Inspectorの接続は[Observe transport v1](observe-transport-v1.md)を参照。
 Trace writer/reader/Viewerと製品E2Eは#125ほか。GuaのCIからPlaytestを参照しない。
 検証実績は変更の引き渡し時に記載し、未実行のremote CIやengine E2Eを成功扱いしない。
 

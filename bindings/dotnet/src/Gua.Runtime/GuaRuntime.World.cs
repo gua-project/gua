@@ -32,7 +32,11 @@ public sealed partial class GuaRuntime
             throw new InvalidOperationException("Player screenshot policy cannot change while the Inspector bridge is running.");
     }
     public void BeginWorldFrame(string scene) { ThrowIfDisposed(); if (Native.gua_runtime_begin_world_frame(_handle, scene) == 0) throw new InvalidOperationException("Failed to begin the Gua world frame."); }
-    public void EndWorldFrame() { ThrowIfDisposed(); if (Native.gua_runtime_end_world_frame(_handle) == 0) throw new InvalidOperationException("The Gua world frame was rejected."); }
+    public void EndWorldFrame() {
+        var observations = Observations;
+        lock (observations.ObserveGate) { ThrowIfDisposed(); observations.SampleObservations(false);
+            if (_handle != 0 && Native.gua_runtime_end_world_frame(_handle) == 0) throw new InvalidOperationException("The Gua world frame was rejected."); }
+    }
     public void AbortWorldFrame() { ThrowIfDisposed(); if (Native.gua_runtime_abort_world_frame(_handle) == 0) throw new InvalidOperationException("There is no active Gua world frame to abort."); }
 
     public void RegisterWorldObject(GuaWorldObjectDescriptor source)

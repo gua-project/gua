@@ -1,3 +1,6 @@
+import { ObserveWireRejectionError, decodeObserveWireResponse, parseObserveTransport, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value";
+export type { ObserveTransport, ObserveSubscription } from "gua-value";
+
 export interface GuaBounds {
   x?: number;
   y?: number;
@@ -100,6 +103,10 @@ export interface InspectorState extends InspectorSnapshot {
 }
 
 export interface GuaInspectorClient {
+  getObserveSnapshot?(): Promise<ObserveTransport>;
+  subscribeObservations?(): Promise<ObserveSubscription>;
+  pollObservations?(subscriptionId: number): Promise<ObserveTransport>;
+  unsubscribeObservations?(subscriptionId: number): Promise<void>;
   getUiTree(): Promise<GuaUiTree>;
   getWorldObjectTree(): Promise<GuaWorldObjectTree>;
   getLogs(): Promise<GuaLogEntry[]>;
@@ -143,6 +150,9 @@ export type GuaInspectorCommand =
   | { id: number; type: "poll_game_input"; requestId: number };
 
 type GuaInspectorCommandInput =
+  | { type: "get_version" }
+  | { type: "get_observe_snapshot" | "subscribe_observations" }
+  | { type: "poll_observations" | "unsubscribe_observations"; subscriptionId: number }
   | { type: "get_ui_tree" }
   | { type: "get_world_object_tree" }
   | { type: "get_logs" }
@@ -476,6 +486,7 @@ function requiredNodeId(action: SemanticActionInput): string {
 }
 
 interface PendingRequest {
+  observeOperation?: string;
   resolve(value: unknown): void;
   reject(reason: Error): void;
   timeoutId: ReturnType<typeof setTimeout>;
@@ -528,6 +539,8 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
   private socket: WebSocket | null = null;
   private connectPromise: Promise<WebSocket> | null = null;
   private nextId = 1;
+  private nextObserveHandle = 1;
+  private observeSubscriptions = new Map<number, { socket: WebSocket; remoteId: number }>();
   private pending = new Map<number, PendingRequest>();
   private snapshotListeners = new Set<SnapshotListener>();
 
@@ -541,6 +554,32 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
     return this.request<GuaUiTree>({ type: "get_ui_tree" });
   }
   async getWorldObjectTree(): Promise<GuaWorldObjectTree> { return this.request({ type: "get_world_object_tree" }); }
+  private async requireObserve(): Promise<void> {
+    const version = await this.request<{ capabilities?: string[] }>({ type: "get_version" });
+    if (!version.capabilities?.includes("observe_v1")) throw new Error("The runtime does not support observe_v1.");
+  }
+  async getObserveSnapshot(): Promise<ObserveTransport> { await this.requireObserve(); return parseObserveTransport(await this.request({ type: "get_observe_snapshot" })); }
+  async subscribeObservations(): Promise<ObserveSubscription> {
+    await this.requireObserve();
+    const socket = await this.connect();
+    const result = await this.request<ObserveSubscription>({ type: "subscribe_observations" }, this.requestTimeoutMs, socket);
+    const remoteId = observeSubscriptionId(result.subscriptionId), snapshot = parseObserveTransport(result.snapshot);
+    if (socket !== this.socket || socket.readyState !== WebSocket.OPEN) throw new Error("Observe subscription belongs to an inactive connection.");
+    const subscriptionId = observeSubscriptionId(this.nextObserveHandle++);
+    this.observeSubscriptions.set(subscriptionId, { socket, remoteId });
+    return { subscriptionId, snapshot };
+  }
+  async pollObservations(subscriptionId: number): Promise<ObserveTransport> {
+    const owner = this.observeSubscriptions.get(observeSubscriptionId(subscriptionId));
+    if (!owner) throw new Error("Observe subscription belongs to an inactive connection.");
+    return parseObserveTransport(await this.request({ type: "poll_observations", subscriptionId: owner.remoteId }, this.requestTimeoutMs, owner.socket));
+  }
+  async unsubscribeObservations(subscriptionId: number): Promise<void> {
+    const owner = this.observeSubscriptions.get(observeSubscriptionId(subscriptionId));
+    if (!owner || owner.socket !== this.socket || owner.socket.readyState !== WebSocket.OPEN) { this.observeSubscriptions.delete(subscriptionId); return; }
+    await this.request({ type: "unsubscribe_observations", subscriptionId: owner.remoteId }, this.requestTimeoutMs, owner.socket);
+    this.observeSubscriptions.delete(subscriptionId);
+  }
 
   async getLogs(): Promise<GuaLogEntry[]> {
     return this.request<GuaLogEntry[]>({ type: "get_logs" });
@@ -623,6 +662,7 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
   }
 
   close(): void {
+    this.observeSubscriptions.clear();
     this.rejectAll(new Error("Gua Inspector WebSocket client closed."));
     this.socket?.close();
     this.socket = null;
@@ -640,8 +680,9 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
     };
   }
 
-  private async request<T>(command: GuaInspectorCommandInput, timeoutMs = this.requestTimeoutMs): Promise<T> {
-    const socket = await this.connect();
+  private async request<T>(command: GuaInspectorCommandInput, timeoutMs = this.requestTimeoutMs, ownerSocket?: WebSocket): Promise<T> {
+    const socket = ownerSocket ?? await this.connect();
+    if (ownerSocket && (socket !== this.socket || socket.readyState !== WebSocket.OPEN)) throw new Error("Observe subscription belongs to an inactive connection.");
     const id = this.nextId++;
     const payload = { ...command, id } as GuaInspectorCommand;
 
@@ -649,9 +690,11 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
       const timeoutId = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Timed out waiting for ${command.type}.`));
+        if (command.type === "subscribe_observations" || command.type === "poll_observations") socket.close();
       }, timeoutMs);
 
       this.pending.set(id, {
+        observeOperation: ["get_observe_snapshot", "subscribe_observations", "poll_observations", "unsubscribe_observations"].includes(command.type) ? command.type : undefined,
         resolve: (value) => resolve(value as T),
         reject,
         timeoutId,
@@ -670,37 +713,39 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
       return this.connectPromise;
     }
 
-    this.connectPromise = new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(this.url);
+    const socket = new WebSocket(this.url);
+    const attempt = new Promise<WebSocket>((resolve, reject) => {
 
       socket.addEventListener("open", () => {
+        if (this.connectPromise !== attempt) { socket.close(); reject(new Error("Gua Inspector connection attempt ended.")); return; }
         this.socket = socket;
         this.connectPromise = null;
         resolve(socket);
       });
 
       socket.addEventListener("message", (event) => {
-        this.handleMessage(event.data);
+        if (this.socket === socket) this.handleMessage(event.data, socket);
       });
 
       socket.addEventListener("close", () => {
-        this.socket = null;
-        this.connectPromise = null;
-        this.rejectAll(new Error("Gua Inspector WebSocket connection closed."));
+        for (const [id, owner] of this.observeSubscriptions) if (owner.socket === socket) this.observeSubscriptions.delete(id);
+        const error = new Error("Gua Inspector WebSocket connection closed.");
+        if (this.connectPromise === attempt) { this.connectPromise = null; reject(error); }
+        if (this.socket === socket) { this.socket = null; this.rejectAll(error); }
       });
 
       socket.addEventListener("error", () => {
         const error = new Error(`Failed to connect to Gua bridge at ${this.url}.`);
-        this.connectPromise = null;
-        reject(error);
-        this.rejectAll(error);
+        if (this.connectPromise === attempt) { this.connectPromise = null; reject(error); }
+        if (this.socket === socket) this.rejectAll(error);
       });
     });
 
-    return this.connectPromise;
+    this.connectPromise = attempt;
+    return attempt;
   }
 
-  private handleMessage(data: unknown): void {
+  private handleMessage(data: unknown, ownerSocket: WebSocket): void {
     if (typeof data !== "string") {
       return;
     }
@@ -728,7 +773,13 @@ export class WebSocketInspectorClient implements GuaInspectorClient {
     clearTimeout(pending.timeoutId);
     this.pending.delete(response.id);
 
-    if (response.ok) {
+    if (pending.observeOperation) {
+      try { pending.resolve(decodeObserveWireResponse(data, response.id, pending.observeOperation)); }
+      catch (error) {
+        pending.reject(error instanceof ObserveWireRejectionError ? error : new Error("Invalid Observe transport response."));
+        if ((pending.observeOperation === "subscribe_observations" || pending.observeOperation === "poll_observations") && !(error instanceof ObserveWireRejectionError)) ownerSocket.close();
+      }
+    } else if (response.ok) {
       pending.resolve(response.result);
     } else {
       pending.reject(new Error(response.error));

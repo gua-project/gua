@@ -181,4 +181,24 @@ static void cpp_stale_and_teardown() {
     auto invalidated=replacement.property("reset",[&]{replacement.reset();return gua::Value::integer(1);});
     invalidated.notify(); // Invalidation during the getter silently discards its result.
 }
-int main() { try { player_registration_authorization(); cpp_stale_and_teardown(); cpp_sampling_failure_preserves_callbacks(); cpp_move_in_getter(); shared_fixture(); lifetimes();publication();continuity();privacy();cpp_getters(); } catch(const std::exception& e) { std::cerr << e.what() << std::endl; return 1; } }
+static void transport_catalog_lifetime() {
+    gua::Context context; gua::ObserveOwner world(context,3);
+    auto value=[] {
+        gua::EnumCatalog catalog; catalog.register_enum("game.Phase",{"First","Second"});
+        return gua::Value::collection(GUA_VALUE_SET,GUA_VALUE_ENUM,{},"game.Phase",&catalog);
+    };
+    auto r=world.property("phase",value); r.notify();
+    gua::ObserveSubscription sub(context);
+    auto snapshot=parse(sub.snapshot_transport);
+    assert(snapshot.at("catalogs").items[0].at("value").at("enums").items[0].at("members").items.size()==2);
+    assert(snapshot.at("document").at("entries").items[0].at("value").at("elementType").text=="enum");
+    r.reset(); // Removed event owns candidate metadata after registration and catalog die.
+    auto changes=parse(sub.poll_transport());
+    assert(changes.at("catalogs").items[0].at("before").at("enums").items[0].at("enumType").text=="game.Phase");
+    gua_observe_result_t* result=nullptr; assert(!gua_observe_snapshot(context.native_handle(),0,&result));
+    auto json=gua::value_copy_json(result,gua_observe_result_copy_transport_json);
+    char short_buffer[2]={'x','x'};
+    assert(gua_observe_result_copy_transport_json(result,short_buffer,2)==static_cast<int>(json.size()+1));
+    assert(short_buffer[0]=='\0'); gua_observe_result_destroy(result);
+}
+int main() { try { transport_catalog_lifetime(); player_registration_authorization(); cpp_stale_and_teardown(); cpp_sampling_failure_preserves_callbacks(); cpp_move_in_getter(); shared_fixture(); lifetimes();publication();continuity();privacy();cpp_getters(); } catch(const std::exception& e) { std::cerr << e.what() << std::endl; return 1; } }

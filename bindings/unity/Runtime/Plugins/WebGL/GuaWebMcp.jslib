@@ -88,6 +88,7 @@ mergeInto(LibraryManager.library, {
       }
     };
     globalThis.__guaUnityWebPort = {
+      capabilities: ['observe_v1'],
       __guaOwnerId: ownerId,
       invoke(command, options) {
         if (state.disposed) return Promise.reject({ code: 'engine_unsupported', message: 'The Unity WebGL Gua runtime is unavailable.' });
