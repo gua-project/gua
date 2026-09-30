@@ -541,6 +541,35 @@ dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration R
 dotnet test examples/dotnet-nunit/GuaDotNetNUnitSample.csproj
 ```
 
+### Network mocks and test state preparation
+
+Gua does not provide its own network mock engine or automatically intercept
+arbitrary game traffic. You can use existing mock libraries, mock servers, or
+game-owned test implementations alongside Gua. Choose them for the game's
+language, runtime, and the dependency boundary you can replace.
+
+For C#/.NET, [Moq](https://github.com/devlooped/moq/wiki/Quickstart) is one option
+for substituting dependency objects through interfaces or overridable members.
+The game must use the substituted object; a mock in the test runner does not
+replace dependencies in a separate game process. Moq does not automatically
+capture native network traffic or arbitrary external processes. Check support
+for your target runtime rather than assuming it works in every engine or build.
+
+Preparing a starting state does not necessarily require a network mock. A test
+save, game initialization routine, or preparation API on a test server can set
+up the required inventory, progression, or test accounts. These are game-owned
+choices, not built-in Gua preparation APIs. Let the test fixture prepare that
+state, verify the prerequisites through observable game state before acting,
+and clean up the state and resources it owns afterward. The
+[NUnit sample](examples/dotnet-nunit/README.md) shows setup/teardown and Gua
+context isolation; resetting a Gua context does not restore saves, accounts,
+or backend data.
+
+Record which boundaries were mocked and which services were exercised for real.
+Checking client UI against a mock response verifies that client behavior; it
+does not verify the real backend or authentication. Use the real services in a
+separate integration test when those are the behavior under test.
+
 ### Unity 6 desktop Mono
 
 `Gua.Core`, `Gua.Testing`, `Gua.Testing.Visual`, and
