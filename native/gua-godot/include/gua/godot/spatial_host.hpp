@@ -23,6 +23,8 @@ public:
     Dictionary enqueue(uint64_t owner, const String& json);
     Dictionary begin(uint64_t provider, const String& json);
     Dictionary complete(uint64_t lease, const String& json);
+    Dictionary check_engine_bounds(uint64_t lease, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z);
+    Dictionary thread_cpu_time();
     Dictionary unregister_provider(uint64_t provider);
     Dictionary close_owner(uint64_t owner);
     Dictionary end(uint64_t lease);

@@ -141,3 +141,16 @@ No bridge, MCP, Inspector, WebMCP, Trace or engine advertises spatial execution
 through this change. Existing r1 offline consumers and runtime UI/World/input
 paths are unaffected. #133 must supply real engine evidence; #134 must preserve
 this ownership and authorization contract across transport correlations.
+
+## Trusted prepared engine bounds
+
+The additive C ABI `gua_spatial_host_check_engine_bounds` accepts a finite,
+ordered binary64 AABB after Take and before physics, at most once per item.
+The trusted adapter must conservatively include the original query and the
+actual prepared engine shape with its full translation. The host requires
+containment of its outward-rounded original bounds and the current owner and
+policy grants. Failure grants no additional authority. Accepted bounds remain
+bounded per batch and are reauthorized at completion, owner-policy revocation
+and public polling; complete coverage must contain them as well. Older adapters
+that do not call this function retain the original r1 behavior. This host-only
+API adds no wire document fields, transport exposure or backend precision claim.

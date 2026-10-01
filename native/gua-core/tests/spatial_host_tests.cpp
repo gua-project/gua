@@ -55,6 +55,27 @@ struct Fixture {
 };
 int main() {
     {
+        Fixture x; assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l);
+        gua_spatial_engine_bounds_v1_t b{sizeof(b),-9,-9,-9,9,9,9}; uint32_t loaded=99;
+        auto malformed=b; malformed.struct_size=0;
+        assert(gua_spatial_host_check_engine_bounds(x.h,l,&malformed,&loaded,&x.e)==GUA_SPATIAL_INVALID&&loaded==0);
+        malformed=b; malformed.min_x=std::numeric_limits<double>::quiet_NaN();
+        assert(gua_spatial_host_check_engine_bounds(x.h,l,&malformed,&loaded,&x.e)==GUA_SPATIAL_INVALID&&loaded==0);
+        malformed=b; malformed.max_x=11;
+        assert(gua_spatial_host_check_engine_bounds(x.h,l,&malformed,&loaded,&x.e)==GUA_SPATIAL_NOT_AUTHORIZED&&loaded==0);
+        malformed=b; malformed.min_z=1; malformed.max_z=1;
+        assert(gua_spatial_host_check_engine_bounds(x.h,l,&malformed,&loaded,&x.e)==GUA_SPATIAL_GEOMETRY&&loaded==0);
+        assert(gua_spatial_host_check_engine_bounds(x.h,l,&b,&loaded,&x.e)==0&&loaded==1);
+        assert(gua_spatial_host_check_engine_bounds(x.h,l,&b,&loaded,&x.e)==GUA_SPATIAL_NOT_READY);
+        assert(x.complete(l,q)==0); auto other=x.take(l); assert(x.complete(l,other)==0);
+        // Original request still fits; the retained engine volume no longer does.
+        auto grants=x.owner; grants.fields.at("region").fields.at("max").fields["x"]=parse("8"); x.set_owner(grants);
+        auto result=x.poll(); assert(result.at("items").items[0].at("reason").text=="not_authorized");
+        assert(!result.at("items").items[0].fields.contains("result"));
+        assert(result.at("items").items[1].at("state").text=="completed");
+        assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+    }
+    {
         Fixture x;
         for(const auto& c:x.f.at("valid").items) { gua::SpatialDocument d(std::stoi(c.at("type").text),wire(c.at("json"))); gua::SpatialDocument again(d.type(),d.to_json()); assert(d.to_json()==again.to_json()); }
         for(const auto& c:x.f.at("invalid").items) { bool rejected=false; try { gua::SpatialDocument d(std::stoi(c.at("type").text),wire(c.at("json"))); } catch(const gua::SpatialError&) { rejected=true; } assert(rejected); }

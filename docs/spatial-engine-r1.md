@@ -1,131 +1,173 @@
-# Spatial-03 engine prototype and real geometry evidence
+# Spatial-03 adapters and real geometry evidence
 
-This branch is a bounded, opt-in engine prototype for #133, not completion of
-the spatial feature. No runtime transport advertises spatial execution. Existing
-UI, World, Input, Observe, Trace and strict legacy spatial-r1 APIs are unchanged.
+`GuaUnitySpatial` reads its explicitly registered `PhysicsScene`;
+`GuaSpatialReader` reads its explicitly registered `World3D` direct state.
+Both are opt-in trusted host integrations over the native spatial-host-r1
+scheduler, with ordered take/complete and mandatory End. They expose no runtime
+transport capability. Existing strict spatial-r1 documents remain unchanged.
+Host-installed enabled Testing/Debug grants are required; Player and whole
+original shapes crossing a grant are rejected before dispatch.
 
-`GuaUnitySpatial` reads only its explicitly registered `PhysicsScene`.
-`GuaSpatialReader` reads only its explicitly registered `World3D` direct state.
-Both use the native spatial-host-r1 scheduler, ordered take/complete calls and
-mandatory lease End. The host creates enabled Testing/Debug grants independently;
-the reader cannot grant client authority. Player requests and entire shapes
-crossing an owner region are rejected by the native host before physics.
+Unity Pump requires its registering main thread and a host-approved synchronized
+read interval held throughout one bounded batch. It never calls SyncTransforms,
+Simulate, or changes physics globals. The geometry fixture syncs once after each
+host mutation. Its Editor boundary omits tick and World snapshot. The runtime
+profile uses normal FixedUpdate callbacks and likewise omits invented physics
+ticks. Godot uses the main thread within `_physics_process` and records the
+actual engine physics callback counter. Distinct sample IDs identify held read
+intervals, not simultaneous samples across different calls or engines.
 
-Unity requires the host to call Pump on the registering main thread in an
-approved synchronized interval. It never calls SyncTransforms or Simulate.
-The fixture calls SyncTransforms once after host obstacle creation/mutation,
-then holds the single-threaded read interval while Pump executes one batch.
-It omits tick and World snapshot because the Editor callback does not establish
-either. Godot requires the main thread inside a physics frame; its fixture uses
-`_physics_process`. It reports the actual engine physics callback counter, with
-no inferred World snapshot. Sample IDs identify each held read interval, not a
-claim that different intervals sharing a tick are simultaneous.
+## Geometry and authorization
 
-Unity filters with host layer masks and explicit Ignore/Collide trigger flags.
-Self colliders must occupy excluded layers; arbitrary post-query predicates
-are unsupported because the host contract requires prefiltering. Unity lacks a
-per-query backface flag: the reader checks that the explicitly selected host
-backface value equals the current global value and refuses mismatches without
-querying or changing global state. Godot uses explicit masks, bodies,
-areas, backfaces and bounded host RID exclusions before detection. Shape margin
-must be zero so it cannot enlarge the authorized volume. Three reusable Godot
-shape resources belong exclusively to each reader; no live collider is edited.
+The readers implement rays, sphere/capsule/oriented-box overlaps and fixed
+orientation translation sweeps, including diagonal motion and either box basis
+handedness. Godot capsule height is endpoint distance plus twice radius; equal
+endpoints use a sphere. Box full size is twice halfExtents. Three exclusively
+owned reusable shape resources avoid editing live colliders. Unity uses its
+corresponding PhysicsScene methods and finite reusable arrays (33..1024 slots).
+Each sweep checks initial overlap first. Zero delta is an overlap-only query.
+Godot preserves cast_motion native brackets with source and unknown error;
+it never substitutes rest_info from a different target.
 
-Overlap detection never establishes penetration or an exact contact normal.
-The prototype publishes anonymous hits with explicit missing reasons for all
-details. Godot sweep first performs overlap, then uses cast_motion fractions
-with source and unknown backend error; it never substitutes rest_info from a
-different collider. Capsule height is endpoint distance plus twice the radius,
-and equal endpoints use a sphere. Box sizes are twice halfExtents. Unity uses
-the corresponding overlap and cast APIs and a bounded reusable result array.
-Full buffers remain truncated; available hits never establish policyRegion
-nearest. No collision pointer/RID/instance ID becomes a public reference.
+Godot spatial document serialization explicitly enables full precision so the
+JSON writer cannot collapse tiny nonzero values before native validation.
+Binary64 requests are converted to binary32 engine parameters. Both readers
+compute a conservative union of original and prepared geometry, including the
+full motion, and add a parameter-encoding guard of 64 binary32 epsilons times
+max(1, maximum absolute bound). The additive trusted C ABI
+`gua_spatial_host_check_engine_bounds` requires this volume to contain the
+native outward-rounded original bounds, then checks current owner and policy
+regions before physics. It retains the volume for complete/poll revocation and
+coverage checks. Narrow grants are refused rather than expanded. This guard
+bounds parameter preparation; it does not certify collision-kernel accuracy.
+Coordinates/dimensions beyond 8192 units, nonfinite/collapsed parameters and
+nonzero margins remain unsupported. Backend absolute error remains unknown.
+Distinct capsule endpoints whose binary32 axis length underflows to zero are
+refused before a singular transform or engine capsule query can be prepared.
+Dimensions come from the request; inferred live-collider nonuniform scale is
+not supported. The small-endpoint capsule regression (y=1 and
+1.0000001192092896, radius=.25, owner min y=.74999998) must produce no geometry
+under its narrow grant even though the original volume is authorized.
 
-The loaded AABB is a trusted host declaration, never inferred from empty World
-metadata or empty queries. Readers conservatively classify containment with a
-0.001-unit inward slack; the native host repeats its authoritative outward
-containment check at publication. Outside/missing declarations remain unknown;
-an otherwise empty sweep then returns indeterminate, not clear. The slack is
-a conservative coverage classification rule, not measured collision precision.
-Provider precision is binary32 with unknown absolute backend error.
+Only an explicit trusted loaded AABB can establish complete coverage, and it
+must contain the entire prepared union. Missing/outside coverage is unknown;
+an empty sweep then returns indeterminate. Overlap never proves penetration.
+Anonymous hits retain missing reasons for position, distance, normal and public
+identity, with relation unknown. No pointer, RID or instance ID is published.
+Rays claim nearest only within returned hits. Buffer saturation and extra
+results beyond maxHits remain truncated.
 
-Exactly representable capsule endpoints are insufficient: derived midpoint,
-endpoint distance and total height must also retain their engine representation.
-The audit regression uses endpoints y=1 and y=1.0000001192092896, radius=0.25,
-and an owner minimum y=0.74999998. The native host accepts the original volume,
-whose minimum is 0.75, while a rounded Godot center/height would reach below
-the grant. Both readers now reject this query before physics; the real-engine
-fixtures assert a failed unsupported_shape item with no result geometry.
+## Policies and lifecycle
 
-Before destroying a scene or changing origin, the host must Dispose/unregister
-the reader and register the replacement with a fresh spaceEpoch. Unity also
-rejects invalid PhysicsScenes at Pump. Automatic origin-shift detection is not
-provided. Retaining a Godot World3D reference does not substitute for this host
-lifecycle obligation.
+Unity uses explicit layer masks and Ignore/Collide triggers. Self colliders must
+use excluded layers; arbitrary post-query predicates are unsupported. Unity has
+no per-query backface option: it verifies the selected policy against current
+Physics.queriesHitBackfaces and refuses mismatches without physics or changing
+settings. Godot uses explicit bodies/areas, masks, bounded host RID exclusions
+and ray hit_back_faces. Shape queries use host obstacle backface settings;
+hosts must install matching concave-shape settings as part of their registered
+policy. Per-query changes to those obstacle settings are unsupported.
 
-## Reproduction and acceptance limits
+Dispose/unregister before scene destruction or origin changes and register a
+fresh spaceEpoch afterward. Unity rejects invalid PhysicsScenes at Pump.
+Automatic origin-shift detection is not supplied. A retained World3D reference
+does not replace the host lifecycle obligation.
 
-Run `scripts/run-spatial-engine-fixtures.ps1` with the pinned Godot and Unity
-executables. Optional GodotCppSource points to the repository's pinned
-godot-cpp checkout for offline builds. The script builds current native and
-managed code, stages isolated projects under artifacts, then executes real
-Godot and Unity Play Mode fixtures. No external Playtest dependency is used.
-Engine versions, backend labels, OS, tick target, margin and tolerance are fixed
-in `protocol/fixtures/spatial-engine-r1.json` before execution. Occupancy
-expectations come from the fixed box geometry, not adapter output. Internal
-start rays and exact boundary floor contact intentionally have backend-specific
-detection, but must preserve unknown origin/normal/relation facts.
+## Reproduction and measured combinations
 
-The real Windows runs cover 20 shared scenarios plus the second state of one
-moving door, 16-query batches, independent loaded worlds/scenes, Player denial,
-whole-shape region denial, unregister and stale replacement epochs. Obstacles
-have no semantic World registrations, so anonymous walls remain eligible.
-Door transforms change only at approved host points; old/new results carry
-different physics sample IDs (and different Godot physics ticks).
+Run `scripts/run-spatial-engine-fixtures.ps1` with the pinned engine paths.
+Run again with `-GodotBackend 'Jolt Physics'` for Jolt. Optional GodotCppSource
+can reuse the pinned godot-cpp checkout offline. Fresh native and managed code
+is staged in isolated ignored artifacts projects. Previous evidence is deleted
+before execution; missing records or nonzero engine exits fail the runner.
+No Playtest dependency is used.
 
-| Combination | State |
+`protocol/fixtures/spatial-engine-r1.json` fixes versions, geometry dimensions,
+expected occupancy, .001-unit tolerance, tick target and policies. Expectations
+are analytical, not generated from adapter output. The triangular wall has
+front face toward negative Z; the Godot and Unity constructors use their
+respective front-face winding. Inside-start rays and exact floor contact are
+explicitly backend-specific; neither may certify normals or penetration.
+
+The Windows runs cover 33 shared scenarios, a second moving-door state, and
+16-query batches: 67 result records per engine. They also assert independent
+world/scene isolation, anonymous walls, Player denial, whole-shape grant denial,
+prepared-geometry refusal, explicit trigger/self filters, saturation, unloaded
+coverage, unregister and stale replacement epochs. Door old/new states have
+distinct samples and Godot ticks. The measured inside-start ray returns hit in
+both Godot backends and noHit in Unity, while originInside remains unknown.
+Exact floor contact reports detected in all three, without claiming penetration
+or a reliable normal.
+
+| Combination | Evidence/support |
 | --- | --- |
-| Godot 4.7 stable / GodotPhysics3D / Windows x64 / fixture primitive boxes | Real fixture evidence |
-| Unity 6000.5.3f1 / PhysX / Windows x64 / Play Mode / fixture primitive boxes | Real fixture evidence |
-| Exactly binary32-representable coordinates/dimensions, cardinal capsules and motion, signed cardinal box bases, coordinates/dimensions within 8192 units | Prototype subset |
-| General diagonal motion, arbitrary box/capsule orientations, silently rounded binary64 geometry | Unsupported in this prototype |
-| Godot nonzero margins; Unity mismatched global backfaces | Unsupported |
-| Mesh obstacles, one-way collision, Jolt, nonuniform inferred collider scale, other OS/patch versions | Unverified; no support claim |
-| Reliable normals, penetration depths, public collision/World IDs | Not supplied |
-| General geometry precision/authorization design and full game-impact profiling | Remaining #133 work |
+| Godot 4.7.stable.official.5b4e0cb0f / GodotPhysics3D / Windows x64 | Real primitive, general orientation/motion and static triangle front/back ray fixtures |
+| Same Godot patch / Jolt Physics / Windows x64 | Same fixed fixtures and actual callback profile |
+| Unity 6000.5.3f1 / PhysX / Windows x64 / Play Mode | Same fixed fixtures and runtime FixedUpdate profile |
+| Other patch versions/OS/backend combinations | Unverified; no support claim |
+| Static triangle overlap/sweep, arbitrary concave meshes and game-specific one-way logic | Unverified; no portable support claim; raw physics does not execute gameplay one-way callbacks |
+| Nonzero margin, inferred nonuniform collider scale, arbitrary Unity predicate self filtering | Unsupported |
+| Reliable normals, penetration depth, public collision/World IDs | Not supplied |
 
-Each fixture records pump wall time and enqueue-to-pump wall time for single
-and 16-query batches. Unity also records coarse **whole-process** CPU deltas;
-these include other Unity threads and may quantize to zero, so they are not
-per-query CPU precision. Godot per-query CPU and baseline-subtracted gameplay
-impact are not yet measured. A 60 Hz setting is not proof of sustained 60 fps.
-One synchronous engine query cannot be interrupted; deadlines are cooperative.
-Native host deadlines discard late evidence and stop remaining work; these
-budgets do not make engine calls hard real-time. Do not close #133 or merge this
-prototype as accepted until the remaining acceptance work is addressed.
+Godot concave shapes are hollow static triangle collections, not solid-volume
+penetration certificates; see [official ConcavePolygonShape3D documentation](https://docs.godotengine.org/en/stable/classes/class_concavepolygonshape3d.html).
+Measured triangle ray behavior does not certify all mesh or one-way combinations.
+No completion of parent #130 is claimed.
 
-## Measured Windows checkpoint (2026-10-01)
+## CPU, queue and game impact
 
-The current-source reproducible runner passed **41 records in each real
-engine**. Four native spatial suites passed, followed by **101 managed
-SpatialTests/SpatialHostTests** using GUA_NATIVE_DIR for the freshly built DLL.
-The raw engine results/logs remain in ignored artifacts; generated output is
-not committed. No fixture tolerance was relaxed after a failed geometry test.
+Each engine profile runs 150 actual physics callbacks in each phase (baseline,
+one query, 16 queries), discards the first 30 as warmup and retains 120 samples:
+360 records per run. Every callback performs the same 2000 sine accumulations
+as game work. Records include total callback wall time, pump wall time,
+enqueue-to-pump wall time and actual callback interval. Phase main-thread CPU
+and elapsed time are measured across the whole retained interval, including
+engine work between callbacks. Windows GetThreadTimes has a 100 ns numeric
+representation but coarse scheduler accounting; short deltas may be zero or
+attributed at a later call. Do not interpret individual deltas as precise
+per-query CPU. QueryThreadCycleTime also records actual thread CPU cycles for
+each callback; cycles are never converted to time using a guessed frequency.
+Phase CPU totals include engine and editor work between callbacks; compare them
+alongside callback cycle counts and wall time, not as isolated adapter CPU.
+This is a synthetic host workload, not a performance guarantee for another game.
 
-| Engine | Queries/batch | Timed records | Upper-median pump wall µs | Maximum pump wall µs | Upper-median enqueue-to-pump wall µs |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Godot 4.7 / GodotPhysics3D | 1 | 21 | 433 | 786 | 19628 |
-| Godot 4.7 / GodotPhysics3D | 16 | 20 | 2963 | 4158 | 897 |
-| Unity 6000.5.3f1 / PhysX | 1 | 20 | 340.7 | 4050.5 | 27.2 |
-| Unity 6000.5.3f1 / PhysX | 16 | 20 | 3303.5 | 5137 | 256.9 |
+The final full-precision serialization and capsule-underflow regression run
+passed 67 results plus 360 callback samples for each combination. Four native
+spatial suites and 102 managed spatial tests passed. The following callback
+wall times are microseconds; raw evidence/logs remain under ignored artifacts.
 
-These are one local fixture run; the preliminary unsupported-geometry regression
-now warms host serialization before the timed geometry queries. Unity's separately
-recorded door-open state has no timing entry. Queue measurement begins before
-enqueue authoring/validation and is an upper bound on core queue residence;
-Godot singletons intentionally wait for the next normal physics boundary.
-An earlier run before that warmup observed a 20071.4 µs Unity singleton maximum,
-above a nominal 60 Hz interval. These are synchronous cooperative calls and
-local timings, not a sustained frame-rate claim.
-Read the remaining profiling and geometry limitations above before treating
-this checkpoint as acceptance.
+| Engine/backend | Baseline median | Single median / p95 | Batch16 median / p95 |
+| --- | ---: | ---: | ---: |
+| GodotPhysics3D | 187 | 953.5 / 1214 | 6700 / 7808 |
+| Jolt Physics | 188 | 955.5 / 1184 | 6730.5 / 8056 |
+| Unity PhysX | 28.1 | 814.5 / 1295.5 | 6714.9 / 8628.5 |
+
+Godot single/batch p95 callback intervals reached about 29.9 ms with normal
+60 FPS render pacing; Unity reached about 16.7 ms. The configured 60 Hz target
+therefore does not establish uninterrupted 60 Hz delivery. Queue timing starts
+before enqueue serialization/validation and is an upper bound on core queue
+residence. Geometry Godot singletons deliberately wait for the next normal
+physics boundary. First-use/JIT and engine background work can change timings.
+
+Engine calls are synchronous and cannot be interrupted. The native host checks
+cooperative deadlines/work budgets between operations and discards late
+results; it cannot guarantee a maximum frame stall. Host limits bound queue,
+batch size, hits, retained results and dispatch work, not backend execution
+time. Budget checks, revocation, End and owner cleanup are covered by native
+and managed host suites; real engine fixtures preserve those boundaries.
+
+| Engine/backend | Mean callback CPU cycles: baseline / single / batch16 | Whole retained phase main-thread CPU ms: baseline / single / batch16 |
+| --- | ---: | ---: |
+| GodotPhysics3D | 649393 / 3675727 / 25416008 | 93.75 / 109.375 / 625 |
+| Jolt Physics | 663140 / 3624212 / 25865469 | 46.875 / 46.875 / 531.25 |
+| Unity PhysX | 95995 / 3437384 / 25254363 | 1953.125 / 1953.125 / 1953.125 |
+
+Each retained phase spans approximately 1.98 seconds. Unity batch-mode Editor
+work keeps the main thread busy between callbacks, so phase CPU totals do not
+isolate query costs. Jolt single and baseline phase times quantize equally;
+callback CPU cycles still distinguish the workload. Baseline-subtracted median
+callback wall overhead is about 0.77 ms for one query and 6.51 ms for batch16
+in GodotPhysics3D; 0.77/6.54 ms in Jolt; 0.79/6.69 ms in Unity. These measure
+adapter, serialization, enqueue and result consumption within the host workload.
+For full primitive/triangle scenario timings, use the single/batch records,
+not only this empty-space profiling scenario.

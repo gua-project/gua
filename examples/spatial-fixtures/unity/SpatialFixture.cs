@@ -23,8 +23,12 @@ public static class SpatialFixture
         go.transform.position = Vector(obstacle.GetProperty("center"));
         var category = obstacle.GetProperty("category").GetString();
         go.layer = category == "self" ? 9 : 8;
-        var collider = go.AddComponent<BoxCollider>();
-        collider.size = Vector(obstacle.GetProperty("size")); collider.isTrigger = category == "trigger";
+        if(obstacle.TryGetProperty("mesh",out var meshFlag) && meshFlag.GetBoolean())
+        {
+            var mesh=new Mesh {vertices=new[]{new Vector3(-2,-2,0),new Vector3(0,2,0),new Vector3(2,-2,0)},triangles=new[]{0,1,2}};
+            go.AddComponent<MeshCollider>().sharedMesh=mesh;
+        }
+        else { var collider = go.AddComponent<BoxCollider>(); collider.size=Vector(obstacle.GetProperty("size")); collider.isTrigger=category=="trigger"; }
     }
     static GuaSpatialRegistration Registration(bool loaded, long epoch)
     {
@@ -114,13 +118,18 @@ public static class SpatialFixture
                             using (var rounding=host.Poll(owner,10001))
                             { var item=rounding.ReadBatchResult().Items[0]; Check(item.State=="failed" && item.Reason=="unsupported_shape" && item.Result==null,"no expanded physics geometry"); }
                             host.SetOwner(owner,grants);
+                            roundingQuery.RequestId=10002;roundingQuery.QueryId="capsule-axis-underflow";
+                            roundingQuery.Shape.PointA=V(0,0,0);roundingQuery.Shape.PointB=V(1e-25,0,0);
+                            using(var underflow=GuaSpatialDocument.FromBatch(new GuaSpatialBatch {BatchId=10002,Consistency="samePhysicsSample",Queries=new[]{roundingQuery}})) host.Enqueue(owner,underflow);
+                            Check(adapter.Pump(),"underflow refusal pump");
+                            using(var underflow=host.Poll(owner,10002)) {var item=underflow.ReadBatchResult().Items[0];Check(item.State=="failed"&&item.Reason=="unsupported_shape"&&item.Result==null,"no collapsed capsule axis");}
                             using (var batch = GuaSpatialDocument.FromBatch(new GuaSpatialBatch { BatchId=batchId,Consistency="samePhysicsSample",Queries=new[]{currentQuery} }))
                             {
                                 var queued = Stopwatch.GetTimestamp(); host.Enqueue(owner,batch);
-                                var start = Stopwatch.GetTimestamp(); var cpu = Process.GetCurrentProcess().TotalProcessorTime;
+                                var start = Stopwatch.GetTimestamp(); var cpu = SpatialProfile.CpuUs();
                                 Check(adapter.Pump(),id+" pump");
                                 var wallUs = (Stopwatch.GetTimestamp()-start)*1000000.0/Stopwatch.Frequency;
-                                var cpuUs = (Process.GetCurrentProcess().TotalProcessorTime-cpu).TotalMilliseconds*1000;
+                                var cpuUs = SpatialProfile.CpuUs()-cpu;
                                 using (var result = host.Poll(owner,(ulong)batchId))
                                 {
                                     Check(result != null,id+" poll");
@@ -131,7 +140,7 @@ public static class SpatialFixture
                                     Check(item.Result.Truncated == test.GetProperty("truncated").GetBoolean(),id+" truncation");
                                     Check(item.Result.Sample.Tick == null,id+" no invented edit-mode physics tick");
                                     foreach (var hit in item.Result.Hits) Check(hit.Missing.ContainsKey("normal") && hit.Relation=="unknown",id+" unknown normal/relation");
-                                    evidence.Add(new { id, result=result.ToJson(),pumpWallUs=wallUs,processCpuUs=cpuUs,
+                                    evidence.Add(new { id, result=result.ToJson(),pumpWallUs=wallUs,threadCpuUs=cpuUs,
                                         queueWallUs=(start-queued)*1000000.0/Stopwatch.Frequency });
                                     if (id == "door-transition")
                                     {
@@ -157,10 +166,10 @@ public static class SpatialFixture
                             using (var batch = GuaSpatialDocument.FromBatch(new GuaSpatialBatch {BatchId=6000,Consistency="samePhysicsSample",Queries=queries}))
                             {
                                 var queued=Stopwatch.GetTimestamp(); host.Enqueue(owner,batch);
-                                var start=Stopwatch.GetTimestamp(); var cpu=Process.GetCurrentProcess().TotalProcessorTime;
+                                var start=Stopwatch.GetTimestamp(); var cpu=SpatialProfile.CpuUs();
                                 Check(adapter.Pump(),"batch pump");
                                 var wallUs=(Stopwatch.GetTimestamp()-start)*1000000.0/Stopwatch.Frequency;
-                                var cpuUs=(Process.GetCurrentProcess().TotalProcessorTime-cpu).TotalMilliseconds*1000;
+                                var cpuUs=SpatialProfile.CpuUs()-cpu;
                                 using (var result=host.Poll(owner,6000))
                                 {
                                     var items=result.ReadBatchResult().Items;
@@ -172,7 +181,7 @@ public static class SpatialFixture
                                         Check(expected=="engine-specific" || item.Result.Outcome==expected,"batch fixed expectation");
                                         Check(item.Result.Truncated==test.GetProperty("truncated").GetBoolean(),"batch truncation");
                                     }
-                                    evidence.Add(new {id,batchSize=16,result=result.ToJson(),pumpWallUs=wallUs,processCpuUs=cpuUs,queueWallUs=(start-queued)*1000000.0/Stopwatch.Frequency});
+                                    evidence.Add(new {id,batchSize=16,result=result.ToJson(),pumpWallUs=wallUs,threadCpuUs=cpuUs,queueWallUs=(start-queued)*1000000.0/Stopwatch.Frequency});
                                 }
                             }
                             adapter.Dispose();
@@ -191,10 +200,18 @@ public static class SpatialFixture
                     SceneManager.UnloadSceneAsync(scene);
                 }
                 SceneManager.UnloadSceneAsync(other);
-                File.WriteAllText("evidence.json",JsonSerializer.Serialize(new {configuration=fixture.RootElement.GetProperty("configuration"),results=evidence}));
+                var configuration=fixture.RootElement.GetProperty("configuration").Clone();
+                var profile=new GameObject("spatial-profile").AddComponent<SpatialProfile>();
+                profile.Completed=(records,error)=>
+                {
+                    if(error!=null) {UnityEngine.Debug.LogException(error);EditorApplication.Exit(1);return;}
+                    File.WriteAllText("evidence.json",JsonSerializer.Serialize(new {configuration,results=evidence,profile=records}));
+                    UnityEngine.Debug.Log("SPATIAL PROFILE PASS: "+records.Count+" real FixedUpdate samples");
+                    EditorApplication.Exit(0);
+                };
                 UnityEngine.Debug.Log("SPATIAL PASS: "+evidence.Count+" real Unity cases");
             }
-            exit = 0;
+            return; // Runtime profile completes across normal FixedUpdate callbacks.
         }
         catch (Exception e) { UnityEngine.Debug.LogException(e); }
         EditorApplication.Exit(exit);

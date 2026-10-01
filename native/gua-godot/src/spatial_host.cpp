@@ -2,6 +2,12 @@
 #include "gua/godot/copy_json.hpp"
 #include <godot_cpp/core/class_db.hpp>
 #include <limits>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 namespace godot {
 Dictionary GuaSpatialHost::reply(int status, uint64_t handle) {
     Dictionary result; result["status"] = status;
@@ -9,6 +15,20 @@ Dictionary GuaSpatialHost::reply(int status, uint64_t handle) {
     return result;
 }
 GuaSpatialHost::~GuaSpatialHost() { gua_spatial_host_destroy(host_); }
+Dictionary GuaSpatialHost::thread_cpu_time() {
+    auto result=reply(GUA_SPATIAL_UNSUPPORTED);
+#ifdef _WIN32
+    FILETIME created{},exited{},kernel{},user{};
+    if(GetThreadTimes(GetCurrentThread(),&created,&exited,&kernel,&user)) {
+        const uint64_t k=(uint64_t(kernel.dwHighDateTime)<<32)|kernel.dwLowDateTime;
+        const uint64_t u=(uint64_t(user.dwHighDateTime)<<32)|user.dwLowDateTime;
+        result["status"]=GUA_SPATIAL_OK; result["microseconds"]=double(k+u)/10.0;
+        ULONG64 cycles=0;
+        if(QueryThreadCycleTime(GetCurrentThread(),&cycles)&&cycles<=static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) result["cycles"]=static_cast<int64_t>(cycles);
+    }
+#endif
+    return result;
+}
 Dictionary GuaSpatialHost::configure(const String& clock, int providers, int owners, int queue,
     int queries, int hits, double deadline, double work) {
     if (host_ || providers <= 0 || owners <= 0 || queue <= 0 || queries <= 0 || hits <= 0) return reply(GUA_SPATIAL_INVALID);
@@ -45,6 +65,12 @@ Dictionary GuaSpatialHost::set_owner(uint64_t owner, const String& json) { retur
 Dictionary GuaSpatialHost::enqueue(uint64_t owner, const String& json) { return document_call(3, owner, json); }
 Dictionary GuaSpatialHost::begin(uint64_t provider, const String& json) { return document_call(4, provider, json); }
 Dictionary GuaSpatialHost::complete(uint64_t lease, const String& json) { return document_call(5, lease, json); }
+Dictionary GuaSpatialHost::check_engine_bounds(uint64_t lease, double min_x, double min_y, double min_z, double max_x, double max_y, double max_z) {
+    const gua_spatial_engine_bounds_v1_t bounds{sizeof(bounds), min_x, min_y, min_z, max_x, max_y, max_z};
+    gua_spatial_error_t error{}; uint32_t loaded=0;
+    auto result=reply(host_?gua_spatial_host_check_engine_bounds(host_,lease,&bounds,&loaded,&error):GUA_SPATIAL_STALE);
+    result["loaded_complete"]=loaded!=0; return result;
+}
 Dictionary GuaSpatialHost::unregister_provider(uint64_t p) { gua_spatial_error_t e{}; return reply(host_ ? gua_spatial_host_unregister(host_, p, &e) : GUA_SPATIAL_STALE); }
 Dictionary GuaSpatialHost::close_owner(uint64_t o) { gua_spatial_error_t e{}; return reply(host_ ? gua_spatial_host_close_owner(host_, o, &e) : GUA_SPATIAL_STALE); }
 Dictionary GuaSpatialHost::end(uint64_t l) { gua_spatial_error_t e{}; return reply(host_ ? gua_spatial_host_end(host_, l, &e) : GUA_SPATIAL_STALE); }
@@ -59,6 +85,7 @@ static Dictionary copied(int status, gua_spatial_document_t* doc) {
 Dictionary GuaSpatialHost::take(uint64_t l) { gua_spatial_error_t e{}; gua_spatial_document_t* d = nullptr; const int s = host_ ? gua_spatial_host_take(host_, l, &d, &e) : GUA_SPATIAL_STALE; return copied(s, d); }
 Dictionary GuaSpatialHost::poll(uint64_t o, uint64_t b) { gua_spatial_error_t e{}; gua_spatial_document_t* d = nullptr; const int s = host_ ? gua_spatial_host_poll(host_, o, b, &d, &e) : GUA_SPATIAL_STALE; return copied(s, d); }
 void GuaSpatialHost::_bind_methods() {
+    ClassDB::bind_method(D_METHOD("thread_cpu_time"), &GuaSpatialHost::thread_cpu_time);
     ClassDB::bind_method(D_METHOD("configure", "clock_id", "providers", "owners", "queue", "queries", "hits", "deadline_ms", "work_ms"), &GuaSpatialHost::configure);
     ClassDB::bind_method(D_METHOD("register_provider", "json"), &GuaSpatialHost::register_provider);
     ClassDB::bind_method(D_METHOD("open_owner", "json"), &GuaSpatialHost::open_owner);
@@ -66,6 +93,7 @@ void GuaSpatialHost::_bind_methods() {
     ClassDB::bind_method(D_METHOD("enqueue", "owner", "json"), &GuaSpatialHost::enqueue);
     ClassDB::bind_method(D_METHOD("begin", "provider", "json"), &GuaSpatialHost::begin);
     ClassDB::bind_method(D_METHOD("complete", "lease", "json"), &GuaSpatialHost::complete);
+    ClassDB::bind_method(D_METHOD("check_engine_bounds", "lease", "min_x", "min_y", "min_z", "max_x", "max_y", "max_z"), &GuaSpatialHost::check_engine_bounds);
     ClassDB::bind_method(D_METHOD("unregister_provider", "provider"), &GuaSpatialHost::unregister_provider);
     ClassDB::bind_method(D_METHOD("close_owner", "owner"), &GuaSpatialHost::close_owner);
     ClassDB::bind_method(D_METHOD("end", "lease"), &GuaSpatialHost::end);

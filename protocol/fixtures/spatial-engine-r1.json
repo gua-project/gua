@@ -8,7 +8,29 @@
     "tickHz": 60,
     "geometryTolerance": 0.001,
     "policyMargin": 0,
-    "expectations": "Fixed analytic occupancy for boxes; engine-specific internal-start ray and boundary contact do not certify normals or penetration."
+    "expectations": "Fixed analytic occupancy for boxes; engine-specific internal-start ray and boundary contact do not certify normals or penetration.",
+    "godotBackends": [
+      "GodotPhysics3D",
+      "Jolt Physics"
+    ],
+    "profiling": {
+      "framesPerPhase": 150,
+      "warmupFrames": 30,
+      "samplesPerPhase": 120,
+      "phases": [
+        0,
+        1,
+        16
+      ],
+      "gameWork": "2000 sine accumulations per normal physics callback",
+      "cpuClock": "Windows GetThreadTimes; 100 ns representation, coarser scheduler accounting",
+      "godotMaxRenderFps": 60
+    },
+    "policies": {
+      "solid": "layer 1 Godot/layer 8 Unity; bodies; trigger ignore; backfaces false; margin 0",
+      "triggers": "same eligible layer; trigger include; backfaces false; margin 0",
+      "self": "layer 2 Godot/layer 9 Unity excluded before detection"
+    }
   },
   "cases": [
     {
@@ -1510,6 +1532,676 @@
         "requestId": 20,
         "schemaVersion": "spatial-r1"
       }
+    },
+    {
+      "id": "diagonal-sphere-blocked",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 21,
+        "sessionEpoch": 1,
+        "queryId": "diagonal-sphere-blocked",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": -2,
+            "y": -2,
+            "z": 0
+          },
+          "radius": 0.2
+        },
+        "delta": {
+          "x": 4,
+          "y": 4,
+          "z": 0
+        }
+      },
+      "outcome": "blocked",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.5,
+            "y": 4,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "diagonal-sphere-clear",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 22,
+        "sessionEpoch": 1,
+        "queryId": "diagonal-sphere-clear",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": -2,
+            "y": -2,
+            "z": 0
+          },
+          "radius": 0.2
+        },
+        "delta": {
+          "x": 4,
+          "y": 4,
+          "z": 0
+        }
+      },
+      "outcome": "clear",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": []
+    },
+    {
+      "id": "diagonal-capsule-blocked",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 23,
+        "sessionEpoch": 1,
+        "queryId": "diagonal-capsule-blocked",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "capsule",
+          "pointA": {
+            "x": -2.25,
+            "y": -2.25,
+            "z": 0
+          },
+          "pointB": {
+            "x": -1.75,
+            "y": -1.75,
+            "z": 0
+          },
+          "radius": 0.2
+        },
+        "delta": {
+          "x": 4,
+          "y": 4,
+          "z": 0
+        }
+      },
+      "outcome": "blocked",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.5,
+            "y": 4,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "diagonal-capsule-clear",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 24,
+        "sessionEpoch": 1,
+        "queryId": "diagonal-capsule-clear",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "capsule",
+          "pointA": {
+            "x": -2.25,
+            "y": -2.25,
+            "z": 0
+          },
+          "pointB": {
+            "x": -1.75,
+            "y": -1.75,
+            "z": 0
+          },
+          "radius": 0.2
+        },
+        "delta": {
+          "x": 4,
+          "y": 4,
+          "z": 0
+        }
+      },
+      "outcome": "clear",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": []
+    },
+    {
+      "id": "diagonal-box-blocked",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 25,
+        "sessionEpoch": 1,
+        "queryId": "diagonal-box-blocked",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "box",
+          "center": {
+            "x": -2,
+            "y": -2,
+            "z": 0
+          },
+          "halfExtents": {
+            "x": 0.3,
+            "y": 0.1,
+            "z": 0.2
+          },
+          "basis": {
+            "x": {
+              "x": 0.7071067811865476,
+              "y": 0.7071067811865476,
+              "z": 0
+            },
+            "y": {
+              "x": -0.7071067811865476,
+              "y": 0.7071067811865476,
+              "z": 0
+            },
+            "z": {
+              "x": 0,
+              "y": 0,
+              "z": 1
+            }
+          }
+        },
+        "delta": {
+          "x": 4,
+          "y": 4,
+          "z": 0
+        }
+      },
+      "outcome": "blocked",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.5,
+            "y": 4,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "diagonal-box-clear",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 26,
+        "sessionEpoch": 1,
+        "queryId": "diagonal-box-clear",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "box",
+          "center": {
+            "x": -2,
+            "y": -2,
+            "z": 0
+          },
+          "halfExtents": {
+            "x": 0.3,
+            "y": 0.1,
+            "z": 0.2
+          },
+          "basis": {
+            "x": {
+              "x": 0.7071067811865476,
+              "y": 0.7071067811865476,
+              "z": 0
+            },
+            "y": {
+              "x": -0.7071067811865476,
+              "y": 0.7071067811865476,
+              "z": 0
+            },
+            "z": {
+              "x": 0,
+              "y": 0,
+              "z": 1
+            }
+          }
+        },
+        "delta": {
+          "x": 4,
+          "y": 4,
+          "z": 0
+        }
+      },
+      "outcome": "clear",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": []
+    },
+    {
+      "id": "diagonal-ray",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 27,
+        "sessionEpoch": 1,
+        "queryId": "diagonal-ray",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": -2,
+            "y": -2,
+            "z": 0
+          },
+          "to": {
+            "x": 2,
+            "y": 2,
+            "z": 0
+          }
+        }
+      },
+      "outcome": "hit",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.5,
+            "y": 4,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "capsule-diagonal-height",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 28,
+        "sessionEpoch": 1,
+        "queryId": "capsule-diagonal-height",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "capsule",
+          "pointA": {
+            "x": -0.5,
+            "y": -0.5,
+            "z": 0
+          },
+          "pointB": {
+            "x": 0.5,
+            "y": 0.5,
+            "z": 0
+          },
+          "radius": 0.25
+        }
+      },
+      "outcome": "detected",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0.55,
+            "y": 0.55,
+            "z": 0
+          },
+          "size": {
+            "x": 0.2,
+            "y": 0.2,
+            "z": 0.2
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "box-45-occupied",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 29,
+        "sessionEpoch": 1,
+        "queryId": "box-45-occupied",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "box",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "halfExtents": {
+            "x": 1,
+            "y": 0.1,
+            "z": 0.1
+          },
+          "basis": {
+            "x": {
+              "x": 0.7071067811865476,
+              "y": 0.7071067811865476,
+              "z": 0
+            },
+            "y": {
+              "x": -0.7071067811865476,
+              "y": 0.7071067811865476,
+              "z": 0
+            },
+            "z": {
+              "x": 0,
+              "y": 0,
+              "z": 1
+            }
+          }
+        }
+      },
+      "outcome": "detected",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0.65,
+            "y": 0.65,
+            "z": 0
+          },
+          "size": {
+            "x": 0.1,
+            "y": 0.1,
+            "z": 0.1
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "box-left-handed",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 30,
+        "sessionEpoch": 1,
+        "queryId": "box-left-handed",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "box",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "halfExtents": {
+            "x": 1,
+            "y": 0.1,
+            "z": 0.1
+          },
+          "basis": {
+            "x": {
+              "x": -0.7071067811865476,
+              "y": -0.7071067811865476,
+              "z": 0
+            },
+            "y": {
+              "x": -0.7071067811865476,
+              "y": 0.7071067811865476,
+              "z": 0
+            },
+            "z": {
+              "x": 0,
+              "y": 0,
+              "z": 1
+            }
+          }
+        }
+      },
+      "outcome": "detected",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0.65,
+            "y": 0.65,
+            "z": 0
+          },
+          "size": {
+            "x": 0.1,
+            "y": 0.1,
+            "z": 0.1
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "rounded-coordinates",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 31,
+        "sessionEpoch": 1,
+        "queryId": "rounded-coordinates",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0.1,
+            "y": 0.2,
+            "z": 0.3
+          },
+          "radius": 0.1
+        }
+      },
+      "outcome": "detected",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0.1,
+            "y": 0.2,
+            "z": 0.3
+          },
+          "size": {
+            "x": 0.1,
+            "y": 0.1,
+            "z": 0.1
+          },
+          "category": "solid"
+        }
+      ]
+    },
+    {
+      "id": "mesh-front-ray",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 32,
+        "sessionEpoch": 1,
+        "queryId": "mesh-front-ray",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": 2
+          }
+        }
+      },
+      "outcome": "hit",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0
+          },
+          "category": "solid",
+          "mesh": true
+        }
+      ]
+    },
+    {
+      "id": "mesh-back-ray",
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 33,
+        "sessionEpoch": 1,
+        "queryId": "mesh-back-ray",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": 2
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          }
+        }
+      },
+      "outcome": "noHit",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0
+          },
+          "category": "solid",
+          "mesh": true
+        }
+      ]
     }
   ]
 }

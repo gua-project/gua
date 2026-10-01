@@ -84,7 +84,7 @@ namespace Gua.Unity
                     {
                         if (request == null) break;
                         var query = request.ReadRequest();
-                        var result = Execute(query);
+                        var result = Execute(query, lease.Value);
                         using (var execution = GuaSpatialDocument.FromExecution(result)) host.Complete(lease.Value, execution);
                     }
                 }
@@ -100,7 +100,7 @@ namespace Gua.Unity
         static float F(double value)
         {
             var converted = (float)value;
-            if (float.IsInfinity(converted) || float.IsNaN(converted) || (double)converted != value || Math.Abs(value) > 8192)
+            if (float.IsInfinity(converted) || float.IsNaN(converted) || Math.Abs(value) > 8192)
                 throw new ArgumentOutOfRangeException(nameof(value));
             return converted;
         }
@@ -137,70 +137,46 @@ namespace Gua.Unity
             }
         }
 
-        GuaSpatialCoverage Coverage(GuaSpatialRequest q)
+        GuaSpatialEngineBounds PreparedBounds(GuaSpatialRequest q)
         {
-            var region = registration.LoadedRegion;
-            if (region != null && Contained(q, region))
-                return new GuaSpatialCoverage { State = "complete", LoadedRegion = region };
-            return new GuaSpatialCoverage { State = "unknown", Reason = "engine_coverage_unverified" };
-        }
-        static bool Cardinal(GuaSpatialVector v)
-            => (v.X == 0 ? 0 : 1) + (v.Y == 0 ? 0 : 1) + (v.Z == 0 ? 0 : 1) <= 1;
-        static bool Contained(GuaSpatialRequest q, GuaSpatialRegion region)
-        {
-            var lo = q.Kind == "raycast" ? V(q.Segment.From) : q.Shape.Type == "capsule" ? Vector3.Min(V(q.Shape.PointA), V(q.Shape.PointB)) : V(q.Shape.Center);
-            var hi = q.Kind == "raycast" ? V(q.Segment.To) : q.Shape.Type == "capsule" ? Vector3.Max(V(q.Shape.PointA), V(q.Shape.PointB)) : lo;
-            var min = Vector3.Min(lo, hi); var max = Vector3.Max(lo, hi);
-            if (q.Kind != "raycast")
+            var lo=new[]{double.PositiveInfinity,double.PositiveInfinity,double.PositiveInfinity};
+            var hi=new[]{double.NegativeInfinity,double.NegativeInfinity,double.NegativeInfinity};
+            Func<GuaSpatialVector,double[]> original=v=>new[]{v.X,v.Y,v.Z};
+            Func<Vector3,double[]> converted=v=>new[]{(double)v.x,(double)v.y,(double)v.z};
+            var delta=q.Kind=="raycast"?V(q.Segment.To)-V(q.Segment.From):q.Kind=="sweep"?V(q.Delta):Vector3.zero;
+            var length=delta.magnitude;
+            if((q.Kind=="raycast"||(q.Kind=="sweep"&&(q.Delta.X!=0||q.Delta.Y!=0||q.Delta.Z!=0)))&&(length==0||float.IsInfinity(length))) throw new ArgumentException("Collapsed motion");
+            var travel=length==0?Vector3.zero:(delta/length).normalized*length;
+            for(int pass=0;pass<2;++pass)
             {
-                Vector3 extents;
-                if (q.Shape.Type == "box")
+                bool engine=pass==1;
+                Func<GuaSpatialVector,double[]> v=n=>engine?converted(V(n)):original(n);
+                double[] a,b;
+                if(q.Kind=="raycast") { a=v(q.Segment.From); b=engine?converted(V(q.Segment.From)+travel):v(q.Segment.To); }
+                else
                 {
-                    var b = q.Shape.Basis; var h = V(q.Shape.HalfExtents);
-                    var x = V(b.X); var y = V(b.Y); var z = V(b.Z);
-                    extents = new Vector3(Mathf.Abs(x.x)*h.x+Mathf.Abs(y.x)*h.y+Mathf.Abs(z.x)*h.z,
-                        Mathf.Abs(x.y)*h.x+Mathf.Abs(y.y)*h.y+Mathf.Abs(z.y)*h.z,
-                        Mathf.Abs(x.z)*h.x+Mathf.Abs(y.z)*h.y+Mathf.Abs(z.z)*h.z);
+                    var s=q.Shape; a=v(s.Type=="capsule"?s.PointA:s.Center); b=v(s.Type=="capsule"?s.PointB:s.Center);
+                    if(engine && s.Type=="capsule" && (a[0]!=b[0] || a[1]!=b[1] || a[2]!=b[2]) && (V(s.PointB)-V(s.PointA)).sqrMagnitude==0) throw new ArgumentException("Collapsed capsule axis");
+                    var ext=new double[3];
+                    if(s.Type=="box")
+                    {
+                        var h=v(s.HalfExtents); if(h[0]<=0||h[1]<=0||h[2]<=0) throw new ArgumentException("Collapsed extents");
+                        var rotation=engine?Orientation(s.Basis):Quaternion.identity;
+                        var x=engine?converted(rotation*Vector3.right):original(s.Basis.X);
+                        var y=engine?converted(rotation*Vector3.up):original(s.Basis.Y);
+                        var z=engine?converted(rotation*Vector3.forward):original(s.Basis.Z);
+                        for(int i=0;i<3;++i) ext[i]=Math.Abs(x[i])*h[0]+Math.Abs(y[i])*h[1]+Math.Abs(z[i])*h[2];
+                    }
+                    else { var r=engine?F(s.Radius.Value):s.Radius.Value; if(r<=0) throw new ArgumentException("Collapsed radius"); for(int i=0;i<3;++i) ext[i]=r; }
+                    var d=q.Kind=="sweep"?(engine?converted(travel):original(q.Delta)):new double[3];
+                    for(int i=0;i<3;++i) { var min=Math.Min(a[i],b[i])-ext[i]; var max=Math.Max(a[i],b[i])+ext[i]; a[i]=min+Math.Min(0,d[i]); b[i]=max+Math.Max(0,d[i]); }
                 }
-                else extents = Vector3.one * F(q.Shape.Radius.Value);
-                min -= extents; max += extents;
-                if (q.Kind == "sweep") { var d = V(q.Delta); min = Vector3.Min(min, min + d); max = Vector3.Max(max, max + d); }
+                for(int i=0;i<3;++i) { lo[i]=Math.Min(lo[i],Math.Min(a[i],b[i])); hi[i]=Math.Max(hi[i],Math.Max(a[i],b[i])); }
             }
-            // Stay away from a rounded region boundary. Native host repeats the
-            // authoritative outward-rounded containment check at completion.
-            const double slack = 0.001;
-            return min.x > region.Min.X + slack && min.y > region.Min.Y + slack && min.z > region.Min.Z + slack
-                && max.x < region.Max.X - slack && max.y < region.Max.Y - slack && max.z < region.Max.Z - slack;
-        }
-        static bool ExactCardinal(GuaSpatialRequest q)
-        {
-            // An initial bounded subset avoids expanding an authorized binary64
-            // shape by silently rounding it into engine floats. Arbitrary
-            // orientations/diagonal motion require an explicit precision contract.
-            if (q.Kind == "raycast") return Cardinal(new GuaSpatialVector(q.Segment.To.X-q.Segment.From.X, q.Segment.To.Y-q.Segment.From.Y, q.Segment.To.Z-q.Segment.From.Z));
-            if (q.Kind == "sweep" && !Cardinal(q.Delta)) return false;
-            if (q.Shape.Type == "capsule" && !Cardinal(new GuaSpatialVector(q.Shape.PointB.X-q.Shape.PointA.X, q.Shape.PointB.Y-q.Shape.PointA.Y, q.Shape.PointB.Z-q.Shape.PointA.Z))) return false;
-            if (q.Shape.Type == "capsule")
-            {
-                var a=q.Shape.PointA; var b=q.Shape.PointB;
-                Func<double,bool> exact = n => Math.Abs(n)<=8192 && (double)(float)n==n;
-                if (!exact(a.X)||!exact(a.Y)||!exact(a.Z)||!exact(b.X)||!exact(b.Y)||!exact(b.Z)) return false;
-                var mid = new GuaSpatialVector((a.X+b.X)*0.5,(a.Y+b.Y)*0.5,(a.Z+b.Z)*0.5);
-                if (!exact(mid.X)||!exact(mid.Y)||!exact(mid.Z)) return false;
-                var engineMid=(V(a)+V(b))*0.5f;
-                if (engineMid.x!=mid.X || engineMid.y!=mid.Y || engineMid.z!=mid.Z) return false;
-                var length=Math.Abs(b.X-a.X)+Math.Abs(b.Y-a.Y)+Math.Abs(b.Z-a.Z);
-                if (Vector3.Distance(V(a),V(b))!=length || !exact(length+2*q.Shape.Radius.Value)) return false;
-            }
-            if (q.Shape.Type == "box")
-            {
-                var b = q.Shape.Basis;
-                return Cardinal(b.X) && Cardinal(b.Y) && Cardinal(b.Z)
-                    && b.X.X*b.X.X+b.X.Y*b.X.Y+b.X.Z*b.X.Z == 1
-                    && b.Y.X*b.Y.X+b.Y.Y*b.Y.Y+b.Y.Z*b.Y.Z == 1
-                    && b.Z.X*b.Z.X+b.Z.Y*b.Z.Y+b.Z.Z*b.Z.Z == 1;
-            }
-            return true;
+            double scale=1; for(int i=0;i<3;++i) scale=Math.Max(scale,Math.Max(Math.Abs(lo[i]),Math.Abs(hi[i])));
+            // Guard prepared parameter rounding; backend collision error remains unknown.
+            double guard=scale*64.0/8388608.0;
+            return new GuaSpatialEngineBounds {MinX=lo[0]-guard,MinY=lo[1]-guard,MinZ=lo[2]-guard,MaxX=hi[0]+guard,MaxY=hi[1]+guard,MaxZ=hi[2]+guard};
         }
         static GuaSpatialHit Anonymous()
         {
@@ -210,20 +186,19 @@ namespace Gua.Unity
                 ["collisionRef"] = "not_published", ["worldObjectId"] = "not_published"
             }};
         }
-        GuaSpatialHostQueryResult Execute(GuaSpatialRequest q)
+        GuaSpatialHostQueryResult Execute(GuaSpatialRequest q, ulong lease)
         {
             var r = new GuaSpatialHostQueryResult { RequestId = q.RequestId, SessionEpoch = q.SessionEpoch,
                 QueryId = q.QueryId, SpaceId = q.SpaceId, SpaceEpoch = q.SpaceEpoch, Kind = q.Kind };
             var policy = policies[q.QueryPolicyId];
-            if (!ExactCardinal(q))
-            { r.Status = "unsupported"; r.Error = new GuaSpatialFailure(q.Kind == "raycast" ? "unsupported_operation" : "unsupported_shape"); return r; }
             // Unity has no per-query backface flag. Refuse mismatched globals,
             // never silently inherit them or mutate game settings.
             if (Physics.queriesHitBackfaces != policy.Backfaces)
             { r.Status = "unsupported"; r.Error = new GuaSpatialFailure("unsupported_policy"); return r; }
             try
             {
-                r.Status = "completed"; r.Coverage = Coverage(q); r.Truncated = false; r.Hits = Array.Empty<GuaSpatialHit>();
+                var loaded = host.CheckEngineBounds(lease, PreparedBounds(q));
+                r.Status = "completed"; r.Coverage = loaded ? new GuaSpatialCoverage { State="complete", LoadedRegion=registration.LoadedRegion } : new GuaSpatialCoverage { State="unknown", Reason="engine_coverage_unverified" }; r.Truncated = false; r.Hits = Array.Empty<GuaSpatialHit>();
                 int count;
                 if (q.Kind != "raycast")
                 {
@@ -265,13 +240,16 @@ namespace Gua.Unity
                 }
                 return r;
             }
+            catch (GuaSpatialException e) when (e.Code == GuaSpatialErrorCode.NotAuthorized) { return Unsupported(q); }
             catch (ArgumentException)
             {
-                return new GuaSpatialHostQueryResult { RequestId = q.RequestId, SessionEpoch = q.SessionEpoch,
-                    QueryId = q.QueryId, SpaceId = q.SpaceId, SpaceEpoch = q.SpaceEpoch, Kind = q.Kind,
-                    Status = "unsupported", Error = new GuaSpatialFailure(q.Kind == "raycast" ? "unsupported_operation" : "unsupported_shape") };
+                return Unsupported(q);
             }
         }
+        static GuaSpatialHostQueryResult Unsupported(GuaSpatialRequest q) => new GuaSpatialHostQueryResult
+        { RequestId=q.RequestId,SessionEpoch=q.SessionEpoch,QueryId=q.QueryId,SpaceId=q.SpaceId,SpaceEpoch=q.SpaceEpoch,Kind=q.Kind,
+            Status="unsupported",Error=new GuaSpatialFailure(q.Kind=="raycast"?"unsupported_operation":"unsupported_shape") };
+
         public void Dispose()
         {
             if (disposed) return;

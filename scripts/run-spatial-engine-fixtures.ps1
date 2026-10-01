@@ -3,6 +3,7 @@ param(
     [string]$UnityExecutable = 'C:\Program Files\Unity\Hub\Editor\6000.5.3f1\Editor\Unity.exe',
     [string]$GeneratorInstance = 'C:/Program Files/Microsoft Visual Studio/18/Community,version=18.10.12217.157',
     [string]$GodotCppSource = '',
+    [string]$GodotBackend = "GodotPhysics3D",
     [int]$TimeoutSeconds = 180
 )
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,8 @@ try {
         if (Test-Path -LiteralPath $prior) { Remove-Item -LiteralPath $prior -Force }
     }
     Copy-Item examples/spatial-fixtures/godot/* $godot -Force
+    $project = Get-Content "$godot/project.godot" -Raw
+    $project.Replace('3d/physics_engine="GodotPhysics3D"', "3d/physics_engine=`"$GodotBackend`"") | Set-Content "$godot/project.godot"
     Copy-Item protocol/fixtures/spatial-engine-r1.json $godot -Force
     Copy-Item examples/godot-gdscript/addons/gua/gua_spatial.gd "$godot/addons/gua" -Force
     Copy-Item examples/godot-gdscript/addons/gua/gua.gdextension "$godot/addons/gua" -Force
@@ -36,6 +39,7 @@ try {
     # Headless editor import uses the debug descriptor, with the same release ABI.
     Copy-Item $library "$godot/addons/gua/bin/gua_godot.windows.debug.x86_64.dll" -Force
     Copy-Item bindings/unity/Runtime/GuaUnitySpatial.cs "$unity/Assets" -Force
+    Copy-Item examples/spatial-fixtures/unity/SpatialProfile.cs "$unity/Assets" -Force
     Copy-Item examples/spatial-fixtures/unity/SpatialFixture.cs "$unity/Assets/Editor" -Force
     Copy-Item protocol/fixtures/spatial-engine-r1.json $unity -Force
     Copy-Item bindings/dotnet/src/Gua.Core/bin/Release/netstandard2.1/Gua.Core.dll "$unity/Assets/Plugins" -Force
@@ -52,12 +56,13 @@ try {
         if ($engineProcess.ExitCode -ne 0) { throw "Engine failed ($($engineProcess.ExitCode)). See $Log" }
     }
     Invoke-Engine $GodotExecutable @('--headless','--path',"`"$godot`"",'--editor','--import','--quit','--log-file',"`"$root/artifacts/godot-import.log`"") "$root/artifacts/godot-import.log"
-    Invoke-Engine $GodotExecutable @('--headless','--path',"`"$godot`"",'--quit-after','300','--log-file',"`"$root/artifacts/godot-run.log`"") "$root/artifacts/godot-run.log"
+    Invoke-Engine $GodotExecutable @('--headless','--path',"`"$godot`"",'--max-fps','60','--quit-after','10000','--log-file',"`"$root/artifacts/godot-run.log`"") "$root/artifacts/godot-run.log"
     Invoke-Engine $UnityExecutable @('-batchmode','-nographics','-projectPath',"`"$unity`"",'-executeMethod','SpatialFixture.Run','-logFile',"`"$root/artifacts/unity-spatial.log`"") "$root/artifacts/unity-spatial.log"
     foreach ($output in "$godot/evidence.json", "$unity/evidence.json") {
         if (!(Test-Path -LiteralPath $output)) { throw "Missing real-engine evidence: $output" }
         $evidence = Get-Content -LiteralPath $output -Raw | ConvertFrom-Json
-        if ($evidence.results.Count -ne 41) { throw "Incomplete engine fixture evidence: $output" }
+        if ($evidence.results.Count -ne (2 * (Get-Content protocol/fixtures/spatial-engine-r1.json -Raw | ConvertFrom-Json).cases.Count + 1)) { throw "Incomplete engine fixture evidence: $output" }
+        if ($evidence.profile.Count -ne 360) { throw "Incomplete real physics-callback profile: $output" }
         Write-Host "Real engine evidence: $output"
     }
 } finally { Pop-Location }

@@ -24,7 +24,7 @@ func configure(host: GuaSpatialHost, world: World3D, registration: Dictionary, p
 	# from a query. RID exclusions are applied by physics before enumeration.
 	_registration = registration.duplicate(true)
 	_policies = policies.duplicate(true)
-	if registration.provider.engine.name != "Godot" or registration.provider.engine.version != Engine.get_version_info().string or registration.provider.engine.backend != "GodotPhysics3D" or ProjectSettings.get_setting("physics/3d/physics_engine") != "GodotPhysics3D":
+	if registration.provider.engine.name != "Godot" or registration.provider.engine.version != Engine.get_version_info().string or registration.provider.engine.backend != ProjectSettings.get_setting("physics/3d/physics_engine") or registration.provider.engine.backend not in ["GodotPhysics3D","Jolt Physics"]:
 		return 5
 	for policy in registration.policies:
 		if not _policies.has(policy.id):
@@ -43,7 +43,7 @@ func configure(host: GuaSpatialHost, world: World3D, registration: Dictionary, p
 			return 5 # Nonzero margin could expand the authorized query volume.
 	_host = host
 	_world = world
-	var result := host.register_provider(JSON.stringify(_registration))
+	var result := host.register_provider(JSON.stringify(_registration, "", true, true))
 	if result.status == 0:
 		provider = result.handle
 	return result.status
@@ -65,7 +65,7 @@ func pump() -> int:
 	# Real physics callback counter; no World snapshot inferred from it.
 	var boundary := {"schemaVersion":"spatial-host-r1", "documentType":"boundary",
 		"physicsSampleId":"godot:%s:%s" % [provider, _sample], "tick":Engine.get_physics_frames()}
-	var begin := _host.begin(provider, JSON.stringify(boundary))
+	var begin := _host.begin(provider, JSON.stringify(boundary, "", true, true))
 	if begin.status != 0:
 		return begin.status
 	_pumping = true
@@ -79,8 +79,8 @@ func pump() -> int:
 			status = taken.status
 			break
 		var query: Dictionary = JSON.parse_string(taken.json)
-		var execution := _execute(space, query)
-		var completed := _host.complete(begin.handle, JSON.stringify(execution))
+		var execution := _execute(space, query, begin.handle)
+		var completed := _host.complete(begin.handle, JSON.stringify(execution, "", true, true))
 		if completed.status != 0:
 			status = completed.status
 			break
@@ -94,70 +94,86 @@ static func _v(value: Dictionary) -> Vector3:
 
 static func _exact(value: Dictionary) -> bool:
 	var v := _v(value)
-	return v.x == value.x and v.y == value.y and v.z == value.z and v.is_finite() and maxf(absf(v.x), maxf(absf(v.y), absf(v.z))) <= 8192.0
-
-static func _cardinal(v: Vector3) -> bool:
-	return int(v.x != 0) + int(v.y != 0) + int(v.z != 0) <= 1
+	return v.is_finite() and maxf(absf(v.x),maxf(absf(v.y),absf(v.z))) <= 8192.0
 
 static func _supported(q: Dictionary) -> bool:
 	if q.kind == "raycast":
-		return _exact(q.segment.from) and _exact(q.segment.to) and _cardinal(_v(q.segment.to) - _v(q.segment.from))
-	var shape: Dictionary = q.shape
-	if q.kind == "sweep" and (not _exact(q.delta) or not _cardinal(_v(q.delta))):
+		return _exact(q.segment.from) and _exact(q.segment.to) and _v(q.segment.from) != _v(q.segment.to)
+	var s: Dictionary = q.shape
+	if q.kind == "sweep" and (not _exact(q.delta) or (_v(q.delta) == Vector3.ZERO and (q.delta.x != 0 or q.delta.y != 0 or q.delta.z != 0))):
 		return false
-	if shape.type == "box":
-		if not _exact(shape.center) or not _exact(shape.halfExtents):
-			return false
-		for axis in [shape.basis.x, shape.basis.y, shape.basis.z]:
-			if not _exact(axis) or not _cardinal(_v(axis)) or _v(axis).length_squared() != 1.0:
-				return false
-		return true
-	if Vector3(shape.radius, 0, 0).x != shape.radius or shape.radius > 8192.0:
+	if s.type == "box":
+		return _exact(s.center) and _exact(s.halfExtents) and _v(s.halfExtents).x > 0 and _v(s.halfExtents).y > 0 and _v(s.halfExtents).z > 0
+	if not is_finite(s.radius) or s.radius > 8192 or Vector3(s.radius,0,0).x <= 0:
 		return false
-	if shape.type == "sphere":
-		return _exact(shape.center)
-	if not _exact(shape.pointA) or not _exact(shape.pointB):
+	if s.type == "sphere":
+		return _exact(s.center)
+	if not _exact(s.pointA) or not _exact(s.pointB):
 		return false
-	var a := _v(shape.pointA)
-	var b := _v(shape.pointB)
-	if not _cardinal(b-a):
-		return false
-	if a == b:
-		return true
-	# Input representability does not imply representability of the derived
-	# engine center/height. Reject any expansion before touching physics.
-	var desired_center := {"x":(shape.pointA.x+shape.pointB.x)*0.5,
-		"y":(shape.pointA.y+shape.pointB.y)*0.5,"z":(shape.pointA.z+shape.pointB.z)*0.5}
-	if not _exact(desired_center) or (a+b)*0.5 != _v(desired_center):
-		return false
-	var length: float = absf(shape.pointB.x-shape.pointA.x) + absf(shape.pointB.y-shape.pointA.y) + absf(shape.pointB.z-shape.pointA.z)
-	var height: float = length + 2.0*shape.radius
-	return a.distance_to(b) == length and length > 0.0 and Vector3(height,0,0).x == height
+	var a := _v(s.pointA)
+	var b := _v(s.pointB)
+	return a == b or (a.distance_to(b) > 0.0 and (b-a).normalized().is_finite() and (b-a).normalized().length_squared() > 0.0)
 
-func _coverage(q: Dictionary) -> Dictionary:
-	if not _registration.has("loadedRegion"):
-		return {"state":"unknown", "reason":"loaded_region_unknown"}
-	var low: Vector3
-	var high: Vector3
-	if q.kind == "raycast":
-		low = _v(q.segment.from).min(_v(q.segment.to))
-		high = _v(q.segment.from).max(_v(q.segment.to))
-	else:
-		var s: Dictionary = q.shape
-		low = _v(s.pointA).min(_v(s.pointB)) if s.type == "capsule" else _v(s.center)
-		high = _v(s.pointA).max(_v(s.pointB)) if s.type == "capsule" else low
-		var extent: Vector3 = Vector3.ONE * float(s.radius) if s.type != "box" else _v(s.basis.x).abs() * s.halfExtents.x + _v(s.basis.y).abs() * s.halfExtents.y + _v(s.basis.z).abs() * s.halfExtents.z
-		low -= extent
-		high += extent
-		if q.kind == "sweep":
-			low = low.min(low + _v(q.delta))
-			high = high.max(high + _v(q.delta))
-	var region: Dictionary = _registration.loadedRegion
-	var min_bound := _v(region.min) + Vector3.ONE * 0.001
-	var max_bound := _v(region.max) - Vector3.ONE * 0.001
-	if low.x > min_bound.x and low.y > min_bound.y and low.z > min_bound.z and high.x < max_bound.x and high.y < max_bound.y and high.z < max_bound.z:
-		return {"state":"complete", "loadedRegion":region}
-	return {"state":"unknown", "reason":"outside_loaded_region"}
+func _prepared_bounds(q: Dictionary) -> Array:
+	var low := [INF,INF,INF]
+	var high := [-INF,-INF,-INF]
+	for encoded in range(2):
+		var a: Array
+		var b: Array
+		if q.kind == "raycast":
+			var from_v := _v(q.segment.from)
+			var to_v := _v(q.segment.to)
+			a = [from_v.x,from_v.y,from_v.z] if encoded else [q.segment.from.x,q.segment.from.y,q.segment.from.z]
+			b = [to_v.x,to_v.y,to_v.z] if encoded else [q.segment.to.x,q.segment.to.y,q.segment.to.z]
+		else:
+			var s: Dictionary = q.shape
+			var extent := [0.0,0.0,0.0]
+			if encoded:
+				var transform := _shape_query.transform
+				var center := transform.origin
+				var ends := Vector3.ZERO
+				if s.type == "capsule" and _shape_query.shape == _capsule:
+					ends = transform.basis.y * (_capsule.height * 0.5 - _capsule.radius)
+				var av := center - ends
+				var bv := center + ends
+				a = [av.x,av.y,av.z]
+				b = [bv.x,bv.y,bv.z]
+				if s.type == "box":
+					var h := _box.size * 0.5
+					for i in range(3):
+						extent[i] = absf(transform.basis.x[i])*h.x + absf(transform.basis.y[i])*h.y + absf(transform.basis.z[i])*h.z
+				else:
+					var radius: float = _sphere.radius if _shape_query.shape == _sphere else _capsule.radius
+					extent = [radius,radius,radius]
+			else:
+				var av: Dictionary = s.pointA if s.type == "capsule" else s.center
+				var bv: Dictionary = s.pointB if s.type == "capsule" else s.center
+				a = [av.x,av.y,av.z]
+				b = [bv.x,bv.y,bv.z]
+				if s.type == "box":
+					for i in range(3):
+						var axis: String = ["x","y","z"][i]
+						extent[i] = absf(s.basis.x[axis])*s.halfExtents.x + absf(s.basis.y[axis])*s.halfExtents.y + absf(s.basis.z[axis])*s.halfExtents.z
+				else:
+					extent = [s.radius,s.radius,s.radius]
+			var delta := [0.0,0.0,0.0]
+			if q.kind == "sweep":
+				var dv := _v(q.delta)
+				delta = [dv.x,dv.y,dv.z] if encoded else [q.delta.x,q.delta.y,q.delta.z]
+			for i in range(3):
+				var min_v: float = minf(a[i],b[i])-extent[i]+minf(0,delta[i])
+				var max_v: float = maxf(a[i],b[i])+extent[i]+maxf(0,delta[i])
+				a[i] = min_v
+				b[i] = max_v
+		for i in range(3):
+			low[i] = minf(low[i],minf(a[i],b[i]))
+			high[i] = maxf(high[i],maxf(a[i],b[i]))
+	var scale := 1.0
+	for i in range(3):
+		scale = maxf(scale,maxf(absf(low[i]),absf(high[i])))
+	# Guard parameter encoding, not collision-kernel numerical error.
+	var guard := scale * 64.0 / 8388608.0
+	return [low[0]-guard,low[1]-guard,low[2]-guard,high[0]+guard,high[1]+guard,high[2]+guard]
 
 func _prepare_shape(shape: Dictionary, policy: Dictionary) -> void:
 	var transform := Transform3D.IDENTITY
@@ -195,7 +211,7 @@ func _prepare_shape(shape: Dictionary, policy: Dictionary) -> void:
 	_shape_query.collide_with_areas = policy.areas
 	_shape_query.exclude = policy.exclude
 
-func _execute(space: PhysicsDirectSpaceState3D, q: Dictionary) -> Dictionary:
+func _execute(space: PhysicsDirectSpaceState3D, q: Dictionary, lease: int) -> Dictionary:
 	var r := {"schemaVersion":"spatial-host-r1", "documentType":"execution",
 		"requestId":q.requestId, "sessionEpoch":q.sessionEpoch, "queryId":q.queryId,
 		"spaceId":q.spaceId, "spaceEpoch":q.spaceEpoch, "kind":q.kind,
@@ -208,7 +224,17 @@ func _execute(space: PhysicsDirectSpaceState3D, q: Dictionary) -> Dictionary:
 		r.status = "unsupported"
 		r.error = {"code":"unsupported_operation" if q.kind == "raycast" else "unsupported_shape"}
 		return r
-	r.coverage = _coverage(q)
+	if q.kind != "raycast":
+		_prepare_shape(q.shape, policy)
+	var b := _prepared_bounds(q)
+	var checked := _host.check_engine_bounds(lease,b[0],b[1],b[2],b[3],b[4],b[5])
+	if checked.status != 0:
+		for key in ["coverage","truncated","hits"]:
+			r.erase(key)
+		r.status = "unsupported"
+		r.error = {"code":"unsupported_operation" if q.kind == "raycast" else "unsupported_shape"}
+		return r
+	r.coverage = {"state":"complete","loadedRegion":_registration.loadedRegion} if checked.loaded_complete else {"state":"unknown","reason":"outside_loaded_region"}
 	if q.kind == "raycast":
 		_ray_query.from = _v(q.segment.from)
 		_ray_query.to = _v(q.segment.to)
@@ -225,7 +251,6 @@ func _execute(space: PhysicsDirectSpaceState3D, q: Dictionary) -> Dictionary:
 		if not hit.is_empty():
 			r.hits.append(_anonymous())
 		return r
-	_prepare_shape(q.shape, policy)
 	# One extra result allows truthful enumeration truncation within <=33 slots.
 	var hits := space.intersect_shape(_shape_query, int(q.maxHits) + 1)
 	if not hits.is_empty():

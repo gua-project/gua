@@ -33,6 +33,27 @@ public sealed class SpatialHostTests
         Assert.That(Assert.Throws<GuaSpatialException>(()=>h.Poll(o,1))!.Code,Is.EqualTo(GuaSpatialErrorCode.Stale));
     }
     [Test]
+    public void PreparedEngineBoundsUseNativeGrantsAndRemainRevocable()
+    {
+        Assert.That(Marshal.SizeOf<GuaSpatialEngineBounds>(),Is.EqualTo(56));
+        using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var batch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var p=h.Register(registration); var o=h.OpenOwner(grants); h.Enqueue(o,batch); var l=h.Begin(p,boundary)!.Value;
+        try
+        {
+            using var q=h.Take(l)!;
+            var bounds=new GuaSpatialEngineBounds {MinX=-9,MinY=-9,MinZ=-9,MaxX=11,MaxY=9,MaxZ=9};
+            Assert.That(Assert.Throws<GuaSpatialException>(()=>h.CheckEngineBounds(l,bounds))!.Code,Is.EqualTo(GuaSpatialErrorCode.NotAuthorized));
+            bounds.MaxX=9; Assert.That(h.CheckEngineBounds(l,bounds),Is.True); h.Complete(l,execution);
+            h.End(l); l=0;
+            var narrowed=grants.ReadOwner(); narrowed.Region=narrowed.Region with {Max=new GuaSpatialVector(8,10,10)};
+            using var updated=GuaSpatialDocument.FromOwner(narrowed); h.SetOwner(o,updated);
+            using var result=h.Poll(o,1)!;
+            Assert.That(result.ReadBatchResult().Items[0].Reason,Is.EqualTo("not_authorized"));
+            Assert.That(result.ReadBatchResult().Items[0].Result,Is.Null);
+        }
+        finally {if(l!=0) h.End(l);}
+    }
+    [Test]
     public void RevocationAndLateCompletionCannotPublishGeometry()
     {
         using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var batch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);

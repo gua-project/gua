@@ -10,6 +10,13 @@ var phase := 0
 var spatial_owner: int
 var queued_at: int
 var evidence: Array = []
+var profile_records: Array = []
+var profile_frame := 0
+var profile_last := 0
+var profile_query: Dictionary
+var profile_sink := 0.0
+var profile_phase_cpu := 0.0
+var profile_phase_wall := 0
 var door_sample: Dictionary
 var region := {"min":{"x":-20,"y":-20,"z":-20},"max":{"x":20,"y":20,"z":20}}
 
@@ -37,9 +44,15 @@ func _obstacle(parent: Node, obstacle: Dictionary) -> void:
 	body.collision_layer = 2 if obstacle.category == "self" else 1
 	body.position = Vector3(obstacle.center.x, obstacle.center.y, obstacle.center.z)
 	var collision := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(obstacle.size.x, obstacle.size.y, obstacle.size.z)
-	collision.shape = box
+	if obstacle.get("mesh",false):
+		var mesh := ConcavePolygonShape3D.new()
+		mesh.set_faces(PackedVector3Array([Vector3(-2,-2,0),Vector3(2,-2,0),Vector3(0,2,0)]))
+		mesh.backface_collision = false
+		collision.shape = mesh
+	else:
+		var box := BoxShape3D.new()
+		box.size = Vector3(obstacle.size.x, obstacle.size.y, obstacle.size.z)
+		collision.shape = box
 	body.add_child(collision)
 	parent.add_child(body)
 
@@ -51,7 +64,7 @@ func _registration(loaded: bool) -> Dictionary:
 		"unit":{"label":"fixture-unit"}, "precision":{"representation":"binary32", "reason":"backend_error_unmeasured"},
 		"operations":["raycast","overlap","sweep"], "shapes":["sphere","capsule","box"],
 		"policies":["solid","triggers"], "consistencies":["bestEffort","samePhysicsSample"],
-		"engine":{"name":"Godot", "version":Engine.get_version_info().string, "backend":"GodotPhysics3D", "backendVersion":"unknown"},
+		"engine":{"name":"Godot", "version":Engine.get_version_info().string, "backend":ProjectSettings.get_setting("physics/3d/physics_engine"), "backendVersion":"unknown"},
 		"limits":{"maxQueriesPerBatch":64,"maxHitsPerQuery":2,"maxDeadlineMs":1000}},
 		"policies":[{"id":"solid","revision":1,"region":region},{"id":"triggers","revision":1,"region":region}]}
 	if loaded:
@@ -60,9 +73,11 @@ func _registration(loaded: bool) -> Dictionary:
 
 func _physics_process(_delta: float) -> void:
 	if index >= fixture.cases.size():
-		var output := {"configuration":fixture.configuration,"results":evidence,"physicsTick":Engine.get_physics_frames()}
+		if not _profile_frame():
+			return
+		var output := {"configuration":fixture.configuration,"backend":ProjectSettings.get_setting("physics/3d/physics_engine"),"results":evidence,"profile":profile_records,"physicsTick":Engine.get_physics_frames()}
 		var file := FileAccess.open("res://evidence.json", FileAccess.WRITE)
-		file.store_string(JSON.stringify(output, "\t"))
+		file.store_string(JSON.stringify(output, "\t", true, true))
 		print("SPATIAL PASS: ", evidence.size(), " real Godot cases")
 		get_tree().quit(0)
 		set_physics_process(false)
@@ -82,7 +97,7 @@ func _physics_process(_delta: float) -> void:
 			return
 		var grants := {"schemaVersion":"spatial-host-r1","documentType":"owner","sessionEpoch":1,
 			"profile":"Testing","enabled":true,"policies":["solid","triggers"],"region":region}
-		var opened := host.open_owner(JSON.stringify(grants))
+		var opened := host.open_owner(JSON.stringify(grants, "", true, true))
 		if not _check(opened.status == 0, "spatial_owner"):
 			return
 		spatial_owner = opened.handle
@@ -93,16 +108,16 @@ func _physics_process(_delta: float) -> void:
 		denied_query.shape = {"type":"sphere","center":{"x":19.75,"y":0,"z":0},"radius":0.5}
 		var denied_batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":9999,
 			"consistency":"samePhysicsSample","queries":[denied_query]}
-		_check(host.enqueue(spatial_owner, JSON.stringify(denied_batch)).status == 8, "whole-shape region denied")
+		_check(host.enqueue(spatial_owner, JSON.stringify(denied_batch, "", true, true)).status == 8, "whole-shape region denied")
 		grants.profile = "Player"
-		_check(host.set_owner(spatial_owner, JSON.stringify(grants)).status == 0, "player grants")
+		_check(host.set_owner(spatial_owner, JSON.stringify(grants, "", true, true)).status == 0, "player grants")
 		denied_batch.queries = [case.query]
-		_check(host.enqueue(spatial_owner, JSON.stringify(denied_batch)).status == 8, "Player denied before physics")
+		_check(host.enqueue(spatial_owner, JSON.stringify(denied_batch, "", true, true)).status == 8, "Player denied before physics")
 		grants.profile = "Testing"
-		_check(host.set_owner(spatial_owner, JSON.stringify(grants)).status == 0, "testing restore")
+		_check(host.set_owner(spatial_owner, JSON.stringify(grants, "", true, true)).status == 0, "testing restore")
 		var narrow_grants: Dictionary = grants.duplicate(true)
 		narrow_grants.region.min.y = 0.74999998
-		_check(host.set_owner(spatial_owner, JSON.stringify(narrow_grants)).status == 0, "derived geometry narrow grant")
+		_check(host.set_owner(spatial_owner, JSON.stringify(narrow_grants, "", true, true)).status == 0, "derived geometry narrow grant")
 		var rounding_query: Dictionary = case.query.duplicate(true)
 		rounding_query.requestId = 10001
 		rounding_query.queryId = "capsule-derived-rounding"
@@ -113,16 +128,26 @@ func _physics_process(_delta: float) -> void:
 			"pointB":{"x":0,"y":1.0000001192092896,"z":0},"radius":0.25}
 		var rounding_batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":10001,
 			"consistency":"samePhysicsSample","queries":[rounding_query]}
-		_check(host.enqueue(spatial_owner, JSON.stringify(rounding_batch)).status == 0, "original volume authorized")
+		_check(host.enqueue(spatial_owner, JSON.stringify(rounding_batch, "", true, true)).status == 0, "original volume authorized")
 		_check(reader.pump() == 0, "derived geometry refusal pump")
 		var rounding_result := host.poll(spatial_owner, 10001)
 		var rounding_doc: Dictionary = JSON.parse_string(rounding_result.json)
 		_check(rounding_doc.items[0].state == "failed" and rounding_doc.items[0].reason == "unsupported_shape" and not rounding_doc.items[0].has("result"), "no expanded physics geometry")
-		_check(host.set_owner(spatial_owner, JSON.stringify(grants)).status == 0, "normal grants restored")
+		_check(host.set_owner(spatial_owner, JSON.stringify(grants, "", true, true)).status == 0, "normal grants restored")
+		rounding_query.requestId = 10002
+		rounding_query.queryId = "capsule-axis-underflow"
+		rounding_query.shape.pointA = {"x":0,"y":0,"z":0}
+		rounding_query.shape.pointB = {"x":1e-25,"y":0,"z":0}
+		rounding_batch.batchId = 10002
+		_check(host.enqueue(spatial_owner,JSON.stringify(rounding_batch, "", true, true)).status==0,"underflow input valid")
+		_check(reader.pump()==0,"underflow refusal pump")
+		var underflow_result := host.poll(spatial_owner,10002)
+		var underflow_doc: Dictionary = JSON.parse_string(underflow_result.json)
+		_check(underflow_doc.items[0].state=="failed" and underflow_doc.items[0].reason=="unsupported_shape" and not underflow_doc.items[0].has("result"),"no singular capsule transform")
 		var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":index+1,
 			"consistency":"samePhysicsSample","queries":[case.query]}
 		queued_at = Time.get_ticks_usec()
-		_check(host.enqueue(spatial_owner, JSON.stringify(batch)).status == 0, case.id + " enqueue")
+		_check(host.enqueue(spatial_owner, JSON.stringify(batch, "", true, true)).status == 0, case.id + " enqueue")
 		phase = 1
 		return
 	# Engine has advanced a normal physics boundary after host-created colliders.
@@ -136,11 +161,11 @@ func _physics_process(_delta: float) -> void:
 		return
 	var result: Dictionary = JSON.parse_string(polled.json)
 	var item: Dictionary = result.items[0]
-	if not _check(item.state == "completed", case.id + " completion " + JSON.stringify(item)):
+	if not _check(item.state == "completed", case.id + " completion " + JSON.stringify(item, "", true, true)):
 		return
 	var expected: String = case.doorOpenOutcome if phase == 2 else case.outcome
 	if expected != "engine-specific":
-		if not _check(item.result.outcome == expected, case.id + " expected " + expected + " got " + JSON.stringify(item)):
+		if not _check(item.result.outcome == expected, case.id + " expected " + expected + " got " + JSON.stringify(item, "", true, true)):
 			return
 	_check(item.result.truncated == case.truncated, case.id + " truncation")
 	if case.id == "inside-ray":
@@ -156,7 +181,7 @@ func _physics_process(_delta: float) -> void:
 		var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":index+1,
 			"consistency":"samePhysicsSample","queries":[case.query]}
 		queued_at = Time.get_ticks_usec()
-		_check(host.enqueue(spatial_owner, JSON.stringify(batch)).status == 0, "door open enqueue")
+		_check(host.enqueue(spatial_owner, JSON.stringify(batch, "", true, true)).status == 0, "door open enqueue")
 		phase = 2
 		return
 	if phase == 2:
@@ -170,7 +195,7 @@ func _physics_process(_delta: float) -> void:
 	var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":6000,
 		"consistency":"samePhysicsSample","queries":queries}
 	var queue_start := Time.get_ticks_usec()
-	_check(host.enqueue(spatial_owner, JSON.stringify(batch)).status == 0, "batch enqueue")
+	_check(host.enqueue(spatial_owner, JSON.stringify(batch, "", true, true)).status == 0, "batch enqueue")
 	var batch_start := Time.get_ticks_usec()
 	_check(reader.pump() == 0, "batch pump")
 	var batch_wall := Time.get_ticks_usec()-batch_start
@@ -186,7 +211,7 @@ func _physics_process(_delta: float) -> void:
 	_check(reader.dispose() == 0, "dispose")
 	var stale_batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":9999,
 		"consistency":"samePhysicsSample","queries":[case.query]}
-	_check(host.enqueue(spatial_owner, JSON.stringify(stale_batch)).status != 0, "unregistered world rejected")
+	_check(host.enqueue(spatial_owner, JSON.stringify(stale_batch, "", true, true)).status != 0, "unregistered world rejected")
 	# Explicit host lifecycle: unregister before changing origin, then new epoch.
 	for obstacle in viewport.get_children():
 		obstacle.position.x += 100
@@ -194,9 +219,67 @@ func _physics_process(_delta: float) -> void:
 	new_registration.provider.spaceEpoch = index+1001
 	var replacement := Reader.new()
 	_check(replacement.configure(host, viewport.find_world_3d(), new_registration, {"solid":{"mask":1,"bodies":true,"areas":false,"backfaces":false,"margin":0.0,"exclude":[]},"triggers":{"mask":1,"bodies":true,"areas":true,"backfaces":false,"margin":0.0,"exclude":[]}}) == 0, "new origin epoch registration")
-	_check(host.enqueue(spatial_owner, JSON.stringify(stale_batch)).status != 0, "old origin epoch rejected")
+	_check(host.enqueue(spatial_owner, JSON.stringify(stale_batch, "", true, true)).status != 0, "old origin epoch rejected")
 	_check(replacement.dispose() == 0, "new epoch dispose")
 	_check(host.close_owner(spatial_owner).status == 0, "close")
 	viewport.queue_free()
 	phase = 0
 	index += 1
+
+# Actual normal physics callbacks, with identical deterministic game work in
+# baseline/single/batch phases. No simulation calls or inferred tick cadence.
+func _profile_frame() -> bool:
+	if profile_frame == 0:
+		viewport = SubViewport.new()
+		viewport.own_world_3d = true
+		add_child(viewport)
+		reader = Reader.new()
+		var policy := {"solid":{"mask":1,"bodies":true,"areas":false,"backfaces":false,"margin":0.0,"exclude":[]},"triggers":{"mask":1,"bodies":true,"areas":true,"backfaces":false,"margin":0.0,"exclude":[]}}
+		_check(reader.configure(host,viewport.find_world_3d(),_registration(true),policy)==0,"profile registration")
+		var opened := host.open_owner(JSON.stringify({"schemaVersion":"spatial-host-r1","documentType":"owner","sessionEpoch":1,"profile":"Testing","enabled":true,"policies":["solid","triggers"],"region":region}, "", true, true))
+		_check(opened.status==0,"profile owner")
+		spatial_owner = opened.handle
+		profile_query = fixture.cases[0].query.duplicate(true)
+		profile_query.spaceEpoch = index+1
+	var start := Time.get_ticks_usec()
+	var cpu: Dictionary = host.thread_cpu_time()
+	_check(cpu.status==0 and cpu.has("cycles"),"Windows thread CPU evidence")
+	if profile_frame%150 == 30:
+		profile_phase_cpu = cpu.microseconds
+		profile_phase_wall = start
+	var count: int = [0,1,16][mini(profile_frame/150,2)]
+	for n in range(2000):
+		profile_sink += sin(float(n)*0.01)*0.000001
+	var pump_wall := 0
+	var queue_wall := 0
+	if count > 0:
+		var queries: Array = []
+		for n in range(count):
+			var q := profile_query.duplicate(true)
+			q.requestId = 100000+profile_frame*16+n
+			q.queryId = "profile:%s:%s" % [profile_frame,n]
+			queries.append(q)
+		var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":100000+profile_frame,"consistency":"samePhysicsSample","queries":queries}
+		var queued := Time.get_ticks_usec()
+		_check(host.enqueue(spatial_owner,JSON.stringify(batch, "", true, true)).status==0,"profile enqueue")
+		var pump_start := Time.get_ticks_usec()
+		_check(reader.pump()==0,"profile pump")
+		pump_wall = Time.get_ticks_usec()-pump_start
+		queue_wall = pump_start-queued
+		var polled := host.poll(spatial_owner,100000+profile_frame)
+		_check(polled.status==0,"profile poll")
+		var result: Dictionary = JSON.parse_string(polled.json)
+		for item in result.items:
+			_check(item.state=="completed" and item.result.outcome=="clear","profile fixed geometry")
+	var end := Time.get_ticks_usec()
+	var cpu_end: Dictionary = host.thread_cpu_time()
+	if profile_frame%150 >= 30:
+		profile_records.append({"batchSize":count,"callbackWallUs":end-start,"threadCpuUs":cpu_end.microseconds-cpu.microseconds,"threadCpuCycles":cpu_end.cycles-cpu.cycles,"pumpWallUs":pump_wall,"queueWallUs":queue_wall,"callbackIntervalUs":start-profile_last,"tick":Engine.get_physics_frames(),"phaseMainThreadCpuUs":cpu_end.microseconds-profile_phase_cpu if profile_frame%150 == 149 else null,"phaseElapsedUs":end-profile_phase_wall if profile_frame%150 == 149 else null})
+	profile_last = start
+	profile_frame += 1
+	if profile_frame == 450:
+		_check(reader.dispose()==0,"profile dispose")
+		_check(host.close_owner(spatial_owner).status==0,"profile close")
+		viewport.queue_free()
+		return true
+	return false
