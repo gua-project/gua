@@ -363,7 +363,14 @@ jobs:
           GUA_RUNTIME_NATIVE_DIR: ""
 
       - name: Restore package-only external Trace runner
-        run: dotnet restore examples/dotnet-trace/Gua.TraceExample.csproj -p:TracePackageVersion=0.0.0-ci --source "${{ github.workspace }}/artifacts/packages" --source https://api.nuget.org/v3/index.json
+        shell: pwsh
+        run: |
+          # Passing multiple --source values makes the Windows SDK normalize the URL as a local path.
+          $localSource = [System.Security.SecurityElement]::Escape((Join-Path $env:GITHUB_WORKSPACE 'artifacts/packages'))
+          @"
+          <configuration><packageSources><clear /><add key="local" value="$localSource" /><add key="nuget" value="https://api.nuget.org/v3/index.json" /></packageSources></configuration>
+          "@ | Set-Content artifacts/trace-nuget.config -Encoding utf8
+          dotnet restore examples/dotnet-trace/Gua.TraceExample.csproj -p:TracePackageVersion=0.0.0-ci --configfile artifacts/trace-nuget.config
 
       - name: Verify framework-free external Trace runner
         run: dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj --configuration Release --no-restore -p:TracePackageVersion=0.0.0-ci -- artifacts/external-runner
