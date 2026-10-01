@@ -42,8 +42,10 @@ coverage checks. Narrow grants are refused rather than expanded. This guard
 bounds parameter preparation; it does not certify collision-kernel accuracy.
 Coordinates/dimensions beyond 8192 units, nonfinite/collapsed parameters and
 nonzero margins remain unsupported. Backend absolute error remains unknown.
-Distinct capsule endpoints whose binary32 axis length underflows to zero are
-refused before a singular transform or engine capsule query can be prepared.
+Distinct capsule endpoints whose binary32 squared axis length is zero or
+subnormal (below 1.1754943508222875e-38) are refused before physics. Godot also
+checks the normalized axis remains unit length within 1e-6, preventing a scaled
+capsule transform. Real-engine regressions use axis lengths 1e-25 and 1e-22.
 Dimensions come from the request; inferred live-collider nonuniform scale is
 not supported. The small-endpoint capsule regression (y=1 and
 1.0000001192092896, radius=.25, owner min y=.74999998) must produce no geometry
@@ -138,9 +140,9 @@ wall times are microseconds; raw evidence/logs remain under ignored artifacts.
 
 | Engine/backend | Baseline median | Single median / p95 | Batch16 median / p95 |
 | --- | ---: | ---: | ---: |
-| GodotPhysics3D | 187 | 953.5 / 1214 | 6700 / 7808 |
-| Jolt Physics | 188 | 955.5 / 1184 | 6730.5 / 8056 |
-| Unity PhysX | 28.1 | 814.5 / 1295.5 | 6714.9 / 8628.5 |
+| GodotPhysics3D | 186.5 | 988.5 / 1316 | 6786 / 7975 |
+| Jolt Physics | 186 | 970.5 / 1225 | 6841.5 / 7897 |
+| Unity PhysX | 28.3 | 916.7 / 1139.3 | 6264.1 / 8198 |
 
 Godot single/batch p95 callback intervals reached about 29.9 ms with normal
 60 FPS render pacing; Unity reached about 16.7 ms. The configured 60 Hz target
@@ -158,16 +160,17 @@ and managed host suites; real engine fixtures preserve those boundaries.
 
 | Engine/backend | Mean callback CPU cycles: baseline / single / batch16 | Whole retained phase main-thread CPU ms: baseline / single / batch16 |
 | --- | ---: | ---: |
-| GodotPhysics3D | 649393 / 3675727 / 25416008 | 93.75 / 109.375 / 625 |
-| Jolt Physics | 663140 / 3624212 / 25865469 | 46.875 / 46.875 / 531.25 |
-| Unity PhysX | 95995 / 3437384 / 25254363 | 1953.125 / 1953.125 / 1953.125 |
+| GodotPhysics3D | 646125 / 3755560 / 25994769 | 93.75 / 31.25 / 1000 |
+| Jolt Physics | 651599 / 3685939 / 25629250 | 62.5 / 62.5 / 546.875 |
+| Unity PhysX | 97196 / 3507393 / 24183972 | 1937.5 / 1953.125 / 2000 |
 
 Each retained phase spans approximately 1.98 seconds. Unity batch-mode Editor
 work keeps the main thread busy between callbacks, so phase CPU totals do not
-isolate query costs. Jolt single and baseline phase times quantize equally;
+isolate query costs. GodotPhysics3D single reports less phase CPU than baseline despite more callback
+work, and Jolt single and baseline phase times quantize equally;
 callback CPU cycles still distinguish the workload. Baseline-subtracted median
-callback wall overhead is about 0.77 ms for one query and 6.51 ms for batch16
-in GodotPhysics3D; 0.77/6.54 ms in Jolt; 0.79/6.69 ms in Unity. These measure
+callback wall overhead is about 0.80 ms for one query and 6.60 ms for batch16
+in GodotPhysics3D; 0.78/6.66 ms in Jolt; 0.89/6.24 ms in Unity. These measure
 adapter, serialization, enqueue and result consumption within the host workload.
 For full primitive/triangle scenario timings, use the single/batch records,
 not only this empty-space profiling scenario.

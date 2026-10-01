@@ -112,7 +112,15 @@ static func _supported(q: Dictionary) -> bool:
 		return false
 	var a := _v(s.pointA)
 	var b := _v(s.pointB)
-	return a == b or (a.distance_to(b) > 0.0 and (b-a).normalized().is_finite() and (b-a).normalized().length_squared() > 0.0)
+	if a == b:
+		return true
+	var delta := b-a
+	# Squared lengths in the subnormal range corrupt float normalization even
+	# when nonzero. Refuse before constructing a scaled capsule transform.
+	if delta.length_squared() < 1.1754943508222875e-38:
+		return false
+	var axis := delta.normalized()
+	return axis.is_finite() and absf(axis.length_squared()-1.0) <= 0.000001
 
 func _prepared_bounds(q: Dictionary) -> Array:
 	var low := [INF,INF,INF]

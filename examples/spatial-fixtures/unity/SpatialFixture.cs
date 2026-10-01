@@ -123,6 +123,10 @@ public static class SpatialFixture
                             using(var underflow=GuaSpatialDocument.FromBatch(new GuaSpatialBatch {BatchId=10002,Consistency="samePhysicsSample",Queries=new[]{roundingQuery}})) host.Enqueue(owner,underflow);
                             Check(adapter.Pump(),"underflow refusal pump");
                             using(var underflow=host.Poll(owner,10002)) {var item=underflow.ReadBatchResult().Items[0];Check(item.State=="failed"&&item.Reason=="unsupported_shape"&&item.Result==null,"no collapsed capsule axis");}
+                            roundingQuery.RequestId=10003;roundingQuery.QueryId="capsule-axis-subnormal";roundingQuery.Shape.PointB=V(1e-22,0,0);
+                            using(var subnormal=GuaSpatialDocument.FromBatch(new GuaSpatialBatch {BatchId=10003,Consistency="samePhysicsSample",Queries=new[]{roundingQuery}})) host.Enqueue(owner,subnormal);
+                            Check(adapter.Pump(),"subnormal refusal pump");
+                            using(var subnormal=host.Poll(owner,10003)) {var item=subnormal.ReadBatchResult().Items[0];Check(item.State=="failed"&&item.Reason=="unsupported_shape"&&item.Result==null,"no subnormal capsule axis");}
                             using (var batch = GuaSpatialDocument.FromBatch(new GuaSpatialBatch { BatchId=batchId,Consistency="samePhysicsSample",Queries=new[]{currentQuery} }))
                             {
                                 var queued = Stopwatch.GetTimestamp(); host.Enqueue(owner,batch);

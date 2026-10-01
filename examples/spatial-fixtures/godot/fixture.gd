@@ -144,6 +144,15 @@ func _physics_process(_delta: float) -> void:
 		var underflow_result := host.poll(spatial_owner,10002)
 		var underflow_doc: Dictionary = JSON.parse_string(underflow_result.json)
 		_check(underflow_doc.items[0].state=="failed" and underflow_doc.items[0].reason=="unsupported_shape" and not underflow_doc.items[0].has("result"),"no singular capsule transform")
+		rounding_query.requestId = 10003
+		rounding_query.queryId = "capsule-axis-subnormal"
+		rounding_query.shape.pointB.x = 1e-22
+		rounding_batch.batchId = 10003
+		_check(host.enqueue(spatial_owner,JSON.stringify(rounding_batch,"",true,true)).status==0,"subnormal input valid")
+		_check(reader.pump()==0,"subnormal refusal pump")
+		var subnormal_result := host.poll(spatial_owner,10003)
+		var subnormal_doc: Dictionary = JSON.parse_string(subnormal_result.json)
+		_check(subnormal_doc.items[0].state=="failed" and subnormal_doc.items[0].reason=="unsupported_shape" and not subnormal_doc.items[0].has("result"),"no scaled capsule axis")
 		var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":index+1,
 			"consistency":"samePhysicsSample","queries":[case.query]}
 		queued_at = Time.get_ticks_usec()

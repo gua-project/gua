@@ -156,7 +156,7 @@ namespace Gua.Unity
                 else
                 {
                     var s=q.Shape; a=v(s.Type=="capsule"?s.PointA:s.Center); b=v(s.Type=="capsule"?s.PointB:s.Center);
-                    if(engine && s.Type=="capsule" && (a[0]!=b[0] || a[1]!=b[1] || a[2]!=b[2]) && (V(s.PointB)-V(s.PointA)).sqrMagnitude==0) throw new ArgumentException("Collapsed capsule axis");
+                    if(engine && s.Type=="capsule" && (a[0]!=b[0] || a[1]!=b[1] || a[2]!=b[2]) && (double)(V(s.PointB)-V(s.PointA)).sqrMagnitude<1.1754943508222875e-38) throw new ArgumentException("Collapsed capsule axis");
                     var ext=new double[3];
                     if(s.Type=="box")
                     {
