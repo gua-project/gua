@@ -73,6 +73,17 @@
         }
       },
       "allOf": [
+        { "properties": { "catalogs": { "not": { "required": ["value"] } } } },
+        {
+          "if": { "properties": { "received": { "required": ["before"], "properties": { "before": { "required": ["enumType"] } } } } },
+          "then": { "properties": { "catalogs": { "required": ["before"] } } },
+          "else": { "properties": { "catalogs": { "not": { "required": ["before"] } } } }
+        },
+        {
+          "if": { "properties": { "received": { "required": ["after"], "properties": { "after": { "required": ["enumType"] } } } } },
+          "then": { "properties": { "catalogs": { "required": ["after"] } } },
+          "else": { "properties": { "catalogs": { "not": { "required": ["after"] } } } }
+        },
         { "if": { "properties": { "change": { "const": "added" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "added" } } } } } },
         { "if": { "properties": { "change": { "const": "changed" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "changed" } } } } } },
         { "if": { "properties": { "change": { "const": "removed" } } }, "then": { "properties": { "received": { "properties": { "kind": { "const": "removed" } } } } } },

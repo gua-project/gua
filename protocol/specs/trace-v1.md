@@ -96,7 +96,7 @@ hostの認可は既存経路の責務であり、Traceのprofileで昇格しな�
   汎用`Observe`でもpartial/gap/stale/failed/outsideRetentionを品質issueへ記録し、
   正常不在のabsentとは分けて、成功した主結果のTraceを保持する。
 - `Snapshot(stepId, reason)` は最新公開値の新しい読取時点。cursorを進めず、連続性はunverified。
-  古い購読epochとは別epochのSnapshotはstale。`Resubscribe`は新しいintervalIdと
+  古い購読epochとは別epoch、またはcursorより古いsequenceのSnapshotはstale。`Resubscribe`は新しいintervalIdと
   Snapshot+cursorから始めるが、過去の欠損は残る。background pollingや自動再購読は行わない。
 - `Dispose`は専用購読だけ解放する。他のObserve購読やaction completion queueに触らない。
 
@@ -117,7 +117,8 @@ getter例外本文は保存しない。検索partial/truncatedは汎用`Observe(
 PollとSnapshotを呼ぶ。主結果決定時とcleanup後は別Observation Recordであり上書きしない。
 schemaVersion 1の追加event dataとして旧readerも汎用JSON表示できる。
 `observation.change`の`change`と`received.kind`は一致が必須であり、`catalogs`は
-Observe transportと共通のbefore/after/value別single-enum catalog契約で検証する。
+Observe transportと共通のsingle-enum catalog契約で検証する。ChangeではenumTypeを持つ
+before/after Valueに対応するcatalogが必須であり、非enum・欠けたValueのcatalogとvalue catalogは不可。
 受信ChangeのsessionEpoch・ownerId・registrationIdは正の十進文字列で、
 sequence・revision・UI/World frame等のカウンターは0を許す。
 十進uint64はUInt64.MaxValue以下に限り、外側hostもsourceId・epoch・revisionの型を検証する。

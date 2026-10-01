@@ -92,8 +92,27 @@ test("Trace rejects conflicting duplicated change kinds for every transition", (
 });
 test("Trace catalogs follow the Observe transport single-enum contract", () => {
   const catalog = { schemaVersion: 1, enums: [{ enumType: "game.Phase", members: ["First", "Second"] }] };
-  const withCatalogs = (catalogs: unknown) => event("observation.change", { ...transition(fixture.transitions[1]!), catalogs });
-  for (const side of ["before", "after", "value"]) expect(validate(withCatalogs({ [side]: catalog }))).toBe(true);
+  const original = transition(fixture.transitions[1]!);
+  const withCatalogs = (catalogs: unknown) => event("observation.change", { ...original, catalogs });
+  for (const side of ["before", "after", "value"]) expect(validate(withCatalogs({ [side]: catalog }))).toBe(false);
+  for (const side of ["before", "after"] as const) {
+    for (const typed of [
+      { type: "enum", enumType: "game.Phase", value: "First" },
+      { type: "list", elementType: "enum", enumType: "game.Phase", value: [] },
+      { type: "set", elementType: "enum", enumType: "game.Phase", value: [] },
+    ]) {
+      const data = structuredClone(original); data.received[side] = typed;
+      expect(validate(event("observation.change", data))).toBe(false);
+      expect(validate(event("observation.change", { ...data, catalogs: { [side]: catalog } }))).toBe(true);
+      expect(validate(event("observation.change", { ...data, catalogs: { [side]: catalog, value: catalog } }))).toBe(false);
+    }
+  }
+  for (const received of fixture.transitions) {
+    const data = transition(received);
+    for (const side of ["before", "after", "value"])
+      expect(validate(event("observation.change", { ...data, catalogs: { [side]: catalog } }))).toBe(false);
+  }
+  original.received.after = { type: "enum", enumType: "game.Phase", value: "First" };
   for (const catalogs of [
     { extra: catalog }, { after: {} }, { after: { ...catalog, schemaVersion: 2 } },
     { after: { ...catalog, enums: [] } }, { after: { ...catalog, enums: [...catalog.enums, ...catalog.enums] } },

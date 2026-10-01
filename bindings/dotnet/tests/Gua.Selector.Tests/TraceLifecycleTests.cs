@@ -87,21 +87,25 @@ public sealed class TraceLifecycleTests
         using var context = Context(); var slow = new SlowDiagnostics(context);
         await using var trace = new GuaTraceSession(new() { OutputDirectory = Path.Combine(TestContext.CurrentContext.WorkDirectory,
             "trace-lifecycle", Guid.NewGuid().ToString("N")), FlushTimeout = TimeSpan.FromMilliseconds(30), SavePolicy = GuaTraceSavePolicy.Always });
-        trace.Mark("main"); trace.Watch(slow, TimeSpan.FromMilliseconds(1));
+        trace.Mark("main"); var watcher = trace.Watch(slow, TimeSpan.FromHours(1));
+        // Establish the in-flight diagnostic read independently of shared pool scheduling.
+        var reading = Task.Factory.StartNew(() => watcher.Capture(), CancellationToken.None,
+            TaskCreationOptions.LongRunning, TaskScheduler.Default);
         try
         {
-            Assert.That(slow.Entered.Wait(TimeSpan.FromSeconds(1)), Is.True);
+            Assert.That(slow.Entered.Wait(TimeSpan.FromSeconds(1)), Is.True,
+                "Diagnostic read must enter; capture completed=" + reading.IsCompleted + "; issues=" + string.Join(",", trace.Status.Issues));
             var completion = trace.CompleteAsync(GuaTraceOutcome.Failed);
             Assert.That(await Task.WhenAny(completion, Task.Delay(TimeSpan.FromSeconds(1))), Is.SameAs(completion));
             await completion;
             Assert.That(trace.Status.Issues, Does.Contain("native-stop-timeout"));
             var dropped = trace.Status.DroppedEvents;
             context.EnqueueAction(new(GuaActionType.Click, "button"), out var id); Complete(context, id);
-            slow.Release.Set(); await Task.Delay(50);
+            slow.Release.Set(); await reading.WaitAsync(TimeSpan.FromSeconds(1));
             Assert.That(trace.Status.DroppedEvents, Is.EqualTo(dropped));
             Assert.That(context.TryPollActionEvent(id, out _), Is.True);
         }
-        finally { slow.Release.Set(); }
+        finally { slow.Release.Set(); await reading; }
     }
 
     [Test]

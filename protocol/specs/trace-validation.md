@@ -2,6 +2,15 @@
 
 ## #125 review追加検証（2026-10-01）
 
+main `f8726e5`（#152のLifecycle/Web修正）取り込み後、Snapshotのcursorより古い公開sequenceを
+staleとして拒否し、同一/先行Snapshotがcursorを進めないことを検証した。Trace schemaは
+before/afterのenum Valueにだけ対応catalogを要求し、非enum・欠けた側・value catalogを拒否する。
+Observe 25/25、schema 9/9、全Selector 341/341、Visual 100/100、Inspector/Value 236/236、
+MSVC CTest 13/13、workspace型検査、両.NET targetのpack、NuGet offline schema検証が成功。
+全Selectorの初回では遅い診断読取の開始待ちが失敗した。診断読取を専用スレッドで確実に
+開始し、停止後の固定50ms待機を読取完了待機へ変更して再検証した。元の1秒期限と30ms
+停止期限、遅延記録拒否・completion queueを消費しないassertionは維持している。
+
 独立checkoutでmainとの文書競合を解消し、MSVC Debug nativeを再ビルドした。
 Observeの不正なentry/change/catalog、enum Valueとcatalogの型・member対応、空enum collection、
 enum member/構造語に一致する既知秘密文字列、unsubscribe拒否/timeout/不正成功応答を検証した。

@@ -151,7 +151,8 @@ public sealed class GuaTraceObservations : IDisposable
             {
                 using var parsed = JsonDocument.Parse(_snapshot());
                 var (document, catalogs) = Envelope(parsed.RootElement, "snapshot");
-                if (document.GetProperty("sourceId").GetString() != _source || Decimal(document, "sessionEpoch") != _epoch)
+                if (document.GetProperty("sourceId").GetString() != _source || Decimal(document, "sessionEpoch") != _epoch ||
+                    document.GetProperty("sequence").GetUInt64() < _sequence)
                     return Missing(stepId, reason, "stale", document);
                 return SaveSnapshot(stepId, reason, document, catalogs, "unverified");
             }

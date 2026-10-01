@@ -21,6 +21,29 @@ public sealed class TraceObserveTests
     private static int Port() { var l = new TcpListener(IPAddress.Loopback, 0); l.Start(); var p = ((IPEndPoint)l.LocalEndpoint).Port; l.Stop(); return p; }
     private static JsonElement Received(GuaTraceEvent e) => e.Data.GetProperty("received");
 
+    [Test]
+    public async Task SnapshotRejectsOlderPublicationWithoutAdvancingIndependentCursor()
+    {
+        using var context = new GuaContext(); using var owner = context.CreateObserveOwner(GuaObserveSource.World);
+        int number = 1; using var value = owner.Property("count", () => GuaValue.Integer(number)); value.Notify();
+        string snapshot = context.GetObserveSnapshotTransportJson();
+        await using var trace = new GuaTraceSession(Options()); var step = trace.BeginStep(GuaTraceStepKind.Mark, "snapshot-sequence");
+        using var capture = GuaTraceObservations.Subscribe(trace, step, () => context.SubscribeObservations(), () => snapshot);
+        number = 2; value.Notify(); Assert.That(capture.Poll(step), Is.True);
+        Assert.That(capture.Snapshot(step, "old-publication"), Is.False);
+        snapshot = context.GetObserveSnapshotTransportJson();
+        Assert.That(capture.Snapshot(step, "same-publication"), Is.True);
+        number = 3; value.Notify(); snapshot = context.GetObserveSnapshotTransportJson();
+        Assert.That(capture.Snapshot(step, "ahead-publication"), Is.True);
+        Assert.That(capture.Poll(step), Is.True);
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        var stale = read.Events.Single(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "old-publication");
+        Assert.That(stale.Data.GetProperty("availability").GetString(), Is.EqualTo("stale"));
+        Assert.That(stale.Data.TryGetProperty("blob", out _), Is.False);
+        Assert.That(read.Events.Count(e => e.Type == "observation.change"), Is.EqualTo(2));
+    }
+
     [TestCase("snapshot-entry")]
     [TestCase("snapshot-catalog")]
     [TestCase("change-kind")]
