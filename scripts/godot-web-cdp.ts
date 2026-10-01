@@ -1,8 +1,12 @@
-export async function waitForDefaultExecutionContext(client: Pick<ReturnType<typeof createCdpClient>, "send">, timeoutMs: number) {
+export async function waitForDefaultExecutionContext(client: Pick<ReturnType<typeof createCdpClient>, "send">, timeoutMs: number, expectedUrl: string) {
   const deadline = performance.now() + timeoutMs;
+  // A target may advertise its navigation URL while its default context is still
+  // about:blank (already "complete"). Check the executing document in the same
+  // probe; never rerun the later smoke, which performs real host actions.
+  const expression = `location.href === ${JSON.stringify(expectedUrl)} ? document.readyState : 'loading'`;
   while (performance.now() < deadline) {
     try {
-      const response = await client.send("Runtime.evaluate", {expression: "document.readyState", returnByValue: true},
+      const response = await client.send("Runtime.evaluate", {expression, returnByValue: true},
         Math.max(1, Math.min(1_000, deadline - performance.now()))) as {result?: {value?: string}};
       if (response.result?.value === "interactive" || response.result?.value === "complete") return;
     } catch (error) {

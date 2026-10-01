@@ -62,7 +62,7 @@ try {
     console.log("Godot Web smoke phase: enable Runtime");
     await client.send("Runtime.enable", {}, 5_000);
     console.log("Godot Web smoke phase: document readiness (10s total, 1s probes)");
-    await waitForDefaultExecutionContext(client, 10_000);
+    await waitForDefaultExecutionContext(client, 10_000, pageUrl);
     console.log("Godot Web smoke phase: bridge assertions (30s)");
     const response = await client.send("Runtime.evaluate", {
       expression: `(${runSmoke.toString()})()`,
