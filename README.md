@@ -155,6 +155,7 @@ for installation and verification details.
 - **Gua.Testing.Visual:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Visual)](https://www.nuget.org/packages/Gua.Testing.Visual) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Visual)<br>
   Adds opt-in PNG baseline comparison for rendering regressions that semantic assertions cannot detect, such as clipping, misplaced controls, incorrect assets, and unexpected overlays. Failures retain expected, actual, diff, and machine-readable comparison artifacts.
   `gua-tester` can combine those artifacts with its prebuilt Astro viewer for workflow artifacts and GitHub Pages.
+- **[Gua.Testing.Snapshots](bindings/dotnet/src/Gua.Testing.Snapshots/README.md):** Opt-in deterministic UI and optional World JSON baselines with semantic differences, explicit approval and caller-configured masking.
 - **Gua.Testing.Recording:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Recording)](https://www.nuget.org/packages/Gua.Testing.Recording) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Recording)<br>
   Records repeatable user journeys as semantic operations and replays every step with correlated host completion. Use it for regression flows, bug reproduction, and sharing a scenario without storing fragile coordinates or plaintext secrets.
 
@@ -503,6 +504,7 @@ dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration R
 dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release
+dotnet pack bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release
 ```
 
@@ -540,6 +542,35 @@ dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration Release
 dotnet test examples/dotnet-nunit/GuaDotNetNUnitSample.csproj
 ```
+
+### Network mocks and test state preparation
+
+Gua does not provide its own network mock engine or automatically intercept
+arbitrary game traffic. You can use existing mock libraries, mock servers, or
+game-owned test implementations alongside Gua. Choose them for the game's
+language, runtime, and the dependency boundary you can replace.
+
+For C#/.NET, [Moq](https://github.com/devlooped/moq/wiki/Quickstart) is one option
+for substituting dependency objects through interfaces or overridable members.
+The game must use the substituted object; a mock in the test runner does not
+replace dependencies in a separate game process. Moq does not automatically
+capture native network traffic or arbitrary external processes. Check support
+for your target runtime rather than assuming it works in every engine or build.
+
+Preparing a starting state does not necessarily require a network mock. A test
+save, game initialization routine, or preparation API on a test server can set
+up the required inventory, progression, or test accounts. These are game-owned
+choices, not built-in Gua preparation APIs. Let the test fixture prepare that
+state, verify the prerequisites through observable game state before acting,
+and clean up the state and resources it owns afterward. The
+[NUnit sample](examples/dotnet-nunit/README.md) shows setup/teardown and Gua
+context isolation; resetting a Gua context does not restore saves, accounts,
+or backend data.
+
+Record which boundaries were mocked and which services were exercised for real.
+Checking client UI against a mock response verifies that client behavior; it
+does not verify the real backend or authentication. Use the real services in a
+separate integration test when those are the behavior under test.
 
 ### Unity 6 desktop Mono
 

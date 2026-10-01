@@ -1,5 +1,17 @@
 # Gua Protocol Draft
 
+## Spatial-r1 contracts
+
+[Spatial-r1](spatial-r1.md) defines independent versioned 3D query, result and
+provider DTOs, offline native/.NET validation, and additive capability negotiation.
+Spatial-01 does not execute physics or advertise an initialized spatial provider.
+
+## Explicit Semantic Lint
+
+[Semantic Lint v1](semantic-lint-v1.md) inspects published UI/World snapshots on
+request and returns a versioned report. The native core owns the rules;
+publication behavior is unchanged.
+
 ## Common Value v1
 
 Additional observations use the independent [Value v1 contract](value-v1.md).
@@ -126,6 +138,9 @@ completion 後の UI/World postcondition は既存の状態 wait で明示する
 The opt-in [Gua Trace v1](trace-v1.md) recorder adds a bounded, versioned timeline
 and offline viewer without replacing diagnostics or Recording. It separates
 caller outcome, capture quality, observation times and host completion.
+Native Debug diagnostics also expose the bounded, non-destructive
+`traceLifecycle` journal described in [Trace v1](trace-v1.md). It records UI,
+game input and cleanup host phases without consuming completion queues.
 
 `diagnostics.schema.json` is the source of truth for a best-effort failure
 snapshot. The additive C ABI copy-JSON API and WebSocket `get_diagnostics`

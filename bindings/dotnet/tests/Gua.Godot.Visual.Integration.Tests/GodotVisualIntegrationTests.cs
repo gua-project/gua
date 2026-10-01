@@ -66,6 +66,8 @@ public sealed class GodotVisualIntegrationTests
             await normal.WaitForScreenshotAsync(TimeSpan.FromSeconds(15));
             var matched = await GuaVisualAssertions.ExpectScreenshotAsync(normal.Context, "title", options);
             Assert.That(matched.Matched, Is.True);
+            Assert.That(Directory.GetFiles(matched.ArtifactPath!).Select(Path.GetFileName),
+                Is.EquivalentTo(new[] { "actual.png", "comparison.json" }));
 
             var recording = new GuaRecording(1,
             [
@@ -103,7 +105,13 @@ public sealed class GodotVisualIntegrationTests
             Assert.That(error!.Message, Does.Not.Contain(Secret));
         }
 
-        var failureDirectory = Directory.GetDirectories(failures).Single();
+        var comparisonDirectories = Directory.GetDirectories(failures);
+        Assert.That(comparisonDirectories, Has.Length.EqualTo(2), "Both successful and failed comparisons retain artifacts.");
+        var failureDirectory = comparisonDirectories.Single(path =>
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(path, "comparison.json")));
+            return !document.RootElement.GetProperty("matched").GetBoolean();
+        });
         var artifactNames = Directory.GetFiles(failureDirectory).Select(Path.GetFileName).ToArray();
         Assert.That(artifactNames, Is.EquivalentTo(new[] { "expected.png", "actual.png", "diff.png", "comparison.json" }));
         foreach (var path in Directory.GetFiles(failureDirectory))

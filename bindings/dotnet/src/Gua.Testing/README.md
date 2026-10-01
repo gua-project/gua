@@ -334,3 +334,21 @@ dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj -- artifacts/
 
 完全な契約、上限と親 #109 の未完了条件は
 [Trace v1](../../../../protocol/specs/trace-v1.md) を参照。
+
+native lifecycleを記録する場合は、raw操作前に `var lifecycle = trace.Watch(context);`
+を呼ぶ。UI completion/Locator helperでは自動接続される。WatchはDebug diagnosticsの
+独立した有限履歴だけを読み、既存completion queueを消費しない。Timeout後も遅い結果を
+記録するため、cleanup/遅い結果の待機後にTraceをfinalizeする。
+
+明示Stepと自動操作を同じStepにする場合:
+
+```csharp
+var step = trace.BeginStep(GuaTraceStepKind.Action, "メニューを開く");
+using (trace.UseStep(step))
+    await GuaAssertions.Query(context).ByRole("button", "Menu").ClickAsync();
+trace.Assert("メニュー表示", () => GuaAssertions.GetById(context, "menu").ToBeVisible());
+```
+
+native側のホスト成功とAssertionの期待状態成立は別の事実である。未対応contextでは
+native-lifecycle-not-provided、履歴切り詰めではnative-lifecycle-gapを品質に残す。
+source/epoch/domain/owner/request単位で相関し、source locationなしのraw操作も記録する。

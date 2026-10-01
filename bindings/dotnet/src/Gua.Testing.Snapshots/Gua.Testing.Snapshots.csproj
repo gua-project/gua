@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>Gua.Testing.Snapshots</PackageId>
+    <Version>$(GuaPackageVersion)</Version>
+    <Authors>Gua contributors</Authors>
+    <Title>Gua Testing Snapshots</Title>
+    <Description>Deterministic semantic UI and optional World snapshot baselines for Gua tests.</Description>
+    <PackageTags>gua;game-ui;automation;testing;semantic-regression;snapshot</PackageTags>
+    <PackageProjectUrl>https://github.com/link1345/gua</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/link1345/gua</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageOutputPath>$(GuaPackageOutputPath)</PackageOutputPath>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Gua.Testing\Gua.Testing.csproj" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <PackageReference Include="System.Text.Json" Version="10.0.0" />
+  </ItemGroup>
+</Project>

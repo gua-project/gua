@@ -188,6 +188,7 @@ Gua v1.0.4以降には、Linux／macOS platformで必要なcross-platform UPM na
   エンジンアダプター開発者向けの共有マネージドラッパーと、同じ4つのdesktop RID用ネイティブランタイムです。P/Invokeを重複実装せず、Semantic frameの公開、actionの処理、スクリーンショット要求の完了、Inspectorブリッジのホストに利用できます。通常のゲームテストでは各エンジン向けパッケージを使用します。
 - **Gua.Testing.Visual:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Visual)](https://www.nuget.org/packages/Gua.Testing.Visual) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Visual)<br>
   Semantic assertionでは検出できないclipping、Controlの位置ずれ、asset間違い、予期しないoverlayなどの描画regressionをPNG baseline比較で検出します。失敗時はexpected、actual、diff、機械可読な比較結果を保存します。
+- **[Gua.Testing.Snapshots](bindings/dotnet/src/Gua.Testing.Snapshots/README.md):** UI と任意の World の deterministic JSON baseline を比較。意味構造の差分、明示更新、利用者が指定する mask/ignore に対応します。
 - **Gua.Testing.Recording:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Recording)](https://www.nuget.org/packages/Gua.Testing.Recording) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Recording)<br>
   再現可能なユーザーフローをSemantic操作として記録し、各stepをホスト側の完了と相関確認しながら再生します。壊れやすい座標や秘密値の平文を保存せず、regression flow、bug再現、scenario共有に利用できます。
 
@@ -363,6 +364,7 @@ dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration R
 dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release
+dotnet pack bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release
 dotnet pack bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release
 ```
 
@@ -371,6 +373,34 @@ NUnitサンプルは次のコマンドで実行できます。
 ```powershell
 dotnet test examples/dotnet-nunit/GuaDotNetNUnitSample.csproj
 ```
+
+### ネットワークモックとテスト開始状態の準備
+
+Guaは独自のネットワークモックエンジンを提供せず、任意のゲーム通信を自動的に
+捕捉・差し替えません。既存のモックライブラリ、モックサーバー、ゲーム側の
+テスト実装はGuaと併用できます。ゲームの言語、実行環境、差し替え可能な依存の
+境界に適した手段を選んでください。
+
+C#/.NETでは、インターフェースやオーバーライド可能なメンバーを通じて依存
+オブジェクトを差し替える[Moq](https://github.com/devlooped/moq/wiki/Quickstart)が
+選択肢の一つです。ゲーム自身が差し替えたオブジェクトを使う必要があり、テスト
+ランナー内のモックだけでは別プロセスのゲームの依存は置き換わりません。
+Moqはネイティブ通信や任意の外部プロセスを自動捕捉するツールではありません。
+全エンジン・全ビルドで使えると想定せず、対象実行環境への対応を確認してください。
+
+開始状態を準備するだけなら、必ずしも通信モックは必要ありません。テスト用
+セーブ、ゲームの初期化処理、テストサーバーの準備APIなどで、必要な所持品、
+進行状況、テストアカウントを用意できます。これらはゲーム側で選ぶ方法であり、
+Guaに組み込まれた準備APIではありません。テストfixtureで状態を準備し、操作前に
+観測可能なゲーム状態から前提条件の成立を確認し、終了後にfixtureが管理する状態と
+リソースを片付けてください。[NUnitサンプル](examples/dotnet-nunit/README.md)は
+setup／teardownとGuaコンテキストの分離を示しています。Guaコンテキストのresetは、
+セーブ、アカウント、バックエンドのデータを復元するものではありません。
+
+モックした境界と、本物のサービスを使って試験した範囲を記録してください。
+モック応答に対するクライアントUIの確認は、そのクライアントの振る舞いの検証であり、
+実バックエンドや実認証の検証にはなりません。それらを試験対象にする場合は、
+本物のサービスを使う統合テストを別途行ってください。
 
 ### Unity 6 desktop Mono
 

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GuaTraceFileViewer } from "./TraceViewer";
 import { ObservePanel } from "./ObservePanel";
+import { SemanticLintPanel } from "./SemanticLintPanel";
+import { NodeCodePanel } from "./NodeCodePanel";
 
 import {
   type GuaInspectorClient,
@@ -285,7 +287,11 @@ export function GuaInspectorApp({ client }: GuaInspectorAppProps) {
         />
         <WorldTreePanel objects={state.worldObjectTree.objects} scene={state.worldObjectTree.scene} />
         <ObservePanel client={inspectorClient} />
+        <SemanticLintPanel client={inspectorClient}
+          ui={{ sessionEpoch: state.uiTree.sessionEpoch ?? 0, frameSequence: state.uiTree.frameSequence, revision: state.uiTree.revision }}
+          world={state.worldObjectTree} />
         <NodeDetailPanel
+          key={JSON.stringify([selectedNode?.id, selectedNode?.actions.includes("set_value")])}
           node={selectedNode}
           onClick={() => void clickSelected()}
           onFocus={() => void focusSelected()}
@@ -505,6 +511,7 @@ function NodeDetailPanel({ node, onClick, onFocus, onAction }: NodeDetailPanelPr
   return (
     <section className="gua-panel gua-detail-panel">
       <PanelHeader title="Node Detail" detail={node.id} />
+      <NodeCodePanel key={`${node.id}:${sensitive}`} node={node} sensitive={sensitive} />
       <div className="gua-command-row">
         <button type="button" onClick={onClick} disabled={!node.actions.includes("click")}>
           Click

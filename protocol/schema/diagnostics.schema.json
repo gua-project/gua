@@ -19,6 +19,7 @@
     "pendingRequests": { "type": "array", "items": { "$ref": "#/$defs/request" } },
     "operations": { "type": "array", "items": { "$ref": "#/$defs/history" } },
     "events": { "type": "array", "items": { "$ref": "#/$defs/history" } },
+    "traceLifecycle": { "$ref": "trace-lifecycle.schema.json" },
     "logs": { "$ref": "logs.schema.json" },
     "screenshot": { "oneOf": [{ "type": "null" }, { "$ref": "screenshot.schema.json" }] }
   },

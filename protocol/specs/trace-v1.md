@@ -184,6 +184,64 @@ Viewer は文字列を React の text として表示し、Trace 内コード・
 
 ## 現在の実装境界と親 Issue の未完了条件
 
+### T-02 native lifecycle と client Step（#124）
+
+native core の Debug `get_diagnostics` / C ABI diagnostics JSON は
+`traceLifecycle` を追加する。[journal schema](../schema/trace-lifecycle.schema.json)
+に従い、runtime context 固有の sourceId、単調 sequence、最大256件の独立した
+非破壊履歴を返す。UI と Game Input の requestId 空間は domain で分け、Input は
+ownerId も source に含める。同じ runtime を別接続から読む場合は同じ要求として
+関連付ける。Player diagnostics はこの Debug 履歴を返さない。
+
+UI の enqueue/consume/completion/cancelled、Semantic/Raw Input の enqueue、
+consume、completion、hold-pending、hold-started、lease-expired、release-requested、
+release-confirmed、owner-disconnected を実際の処理地点で収集する。
+completion はホスト結果であって期待状態の成立ではない。hold-pending は消費時の
+保持準備で、成功完了の hold-started と区別する。lease-expired は解除を要求する
+契機であり、release-confirmed は解除要求に対するホスト成功報告だけで記録する。
+reset/owner-disconnect/lease-expired の cleanup 要求は trigger を持つ。
+ホストが失敗を報告した解除には release-confirmed を付けない。
+
+sessionEpoch は要求受付時の epoch。hostSessionEpoch/frame/revision は記録地点の
+実測値で、部分 reset によって要求と host の epoch が異なる場合も保つ。
+hostElapsedMilliseconds と hostClockId は context 生存期間の独立した単調時計で、
+diagnostics history reset や仮想時計とは連動しない。collector 時計との同期、実際の
+入力適用時刻、ゲーム状態への因果は保証しない。
+
+履歴は256件かつ1件の詳細は8 KiBまで。大きな詳細は omitted=size-limit にする。
+入力値とtext payloadはnative履歴に保持しない。sensitive targetも保持前に伏せる。
+履歴の作成にはファイルI/O、callback、既存結果queueのpoll、入力/clock操作がない。
+coreの既存diagnostics C ABIとruntime/bridgeの既存diagnostics転送を利用するので、
+外部ABIのstruct sizeやcompletion所有権を変更しない。
+
+`.NET trace.Watch(context)` はraw contextの操作前に呼ぶ。20ms間隔のbackground
+reader、または返されたwatcherの `Capture()` で履歴を読む。収集開始より前の履歴は
+baselineとして読み飛ばす。最大64 context/sourceを保持する。native sequenceの
+重複はsession内で除き、別接続からの同じnative要求を二重操作として数えない。
+履歴欠損は native-lifecycle-gap、保持窓外の遅いphaseは
+native-request-outside-correlation-window、取得失敗/未提供は
+native-capture-failed/native-lifecycle-not-provided として品質に残す。
+native履歴未対応のcontext（GDScript-only addon等）ではclient側の記録は継続するが、
+consume/host完了の自動収集を保証しない。
+
+GuaActionCompletion/Locator操作はopt-in TraceからWatchへ自動接続する。Selector、
+今回の解決ID、送信、受付、結果受信をclientの同じAction Stepに保存する。
+`using (trace.UseStep(explicitStepId))` は明示Stepと自動記録を関連付ける。
+raw入力の明示Stepは `watcher.Request(observedEpoch, requestId, inputOwnerId)` を
+BeginStepへ渡して同じnative要求に結び付ける。epochを推定して渡してはいけない。
+`trace.Assert(label, assertion)` は検証処理をAssertion Stepに記録し、失敗は元例外を
+rethrowする。詳細なexpected/actualは既存Evaluateで明示する。
+
+Timeout/中断後もWatchは完了まで独立して読む。clientがcompletion未受信で
+Unknown/Interruptedとして終了したStepへのホスト結果はlate-completionで追記する。
+正常に結果を受信済みのStepは、collectorが後から読んでもcompletionのままにする。
+Step終了や主結果を書き換えない。TraceのCompleteAsyncは
+Watchを停止・最後に取得してからfinalizeする。必要な遅い結果/cleanupはその前に
+待つ。終了後の結果や未対応hostのphaseを捏造しない。contextを先にdisposeした場合は
+取得失敗を品質に残す。remote取得はcontext自身の有限request timeoutに従う。
+Watch停止と保存は共通のFlushTimeout予算を使う。応答しない同期readは強制中断せず、
+native-stop-timeoutを残してreaderの追記を停止する。期限後の取得結果は記録へ混入しない。
+
 この変更は T-01 の保存基盤、T-04 の汎用記録口、T-05 の共通 offline Viewer を提供する。
 `.NET GuaActionCompletion` は opt-in 自動記録に接続済み。取得できない epoch は
 unconfirmed として扱い、completion が返した epoch でのみ確定相関する。
@@ -194,7 +252,7 @@ unconfirmed として扱い、completion が返した epoch でのみ確定相�
 | 子 Issue | この変更 | 残る受け入れ条件 |
 | --- | --- | --- |
 | #123 T-01 | schema、writer/reader、有限上限、4 保存組合せ、部分末尾、redaction、容量/中断の故障 fixture | 強制終了時の未flush/メモリのみの保存は保証対象外 |
-| #124 T-02 | 要求キー/Step 相関、completion helper、自動 queue 非干渉 | #107 の selector/phase 接続、raw context/native と Semantic/Raw Input の自動 lifecycle、遅い結果の自動取得 |
+| #124 T-02 | Selector/解決ID、明示/自動Step、native UI/Input/cleanup lifecycle、遅い結果、非破壊履歴 | native履歴未提供hostのphaseは未提供と表示。ゲーム画面でのGodot/Unity E2Eは別途 |
 | #125 T-03 | Snapshot/観測の分離、Observeの実native/実WebSocket購読、Value/カタログ、中間Change、欠損、独立UI/World読取 | ゲーム内部の未公開変化、失われた履歴の復元は保証対象外。各Runnerが取得契機を明示する |
 | #126 T-04 | 外部 Runner API、共通 Value、注釈/添付、評価/主結果分離、サンプル | 上記 native/Observe 統合後の横断受け入れ |
 | #127 T-05 | 共通 React、静的 HTML、timeline/状態/JSON/区間差分、配布 | Screenshot pixel policy と bounds overlay、全端点の可視化 |

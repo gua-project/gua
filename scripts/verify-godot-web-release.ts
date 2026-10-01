@@ -1,3 +1,4 @@
+import { createCdpClient, waitForDefaultExecutionContext } from "./godot-web-cdp";
 import { mkdtemp, rm } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -57,8 +58,12 @@ try {
   const client = createCdpClient(target.webSocketDebuggerUrl);
   await client.open();
   try {
+    console.log(`Chrome DevTools browser: ${JSON.stringify(await client.send("Browser.getVersion"))}`);
+    console.log("Godot Web smoke phase: enable Runtime");
     await client.send("Runtime.enable", {}, 5_000);
+    console.log("Godot Web smoke phase: document readiness (10s total, 1s probes)");
     await waitForDefaultExecutionContext(client, 10_000);
+    console.log("Godot Web smoke phase: bridge assertions (30s)");
     const response = await client.send("Runtime.evaluate", {
       expression: `(${runSmoke.toString()})()`,
       awaitPromise: true,
@@ -149,21 +154,6 @@ async function runSmoke() {
 
 type PageTarget = { url: string; type: string; webSocketDebuggerUrl: string };
 
-async function waitForDefaultExecutionContext(client: ReturnType<typeof createCdpClient>, timeoutMs: number) {
-  const deadline = performance.now() + timeoutMs;
-  while (performance.now() < deadline) {
-    try {
-      const response = await client.send("Runtime.evaluate", {expression: "document.readyState", returnByValue: true},
-        Math.max(1, Math.min(1_000, deadline - performance.now()))) as {result?: {value?: string}};
-      if (response.result?.value === "interactive" || response.result?.value === "complete") return;
-    } catch (error) {
-      if (!(error instanceof Error) || !["Cannot find default execution context", "Execution context was destroyed."].includes(error.message)) throw error;
-    }
-    await Bun.sleep(25);
-  }
-  throw new Error("Timed out waiting for the browser document execution context.");
-}
-
 async function waitForPageTarget(port: number, expectedUrl: string, timeoutMs: number): Promise<PageTarget> {
   const deadline = performance.now() + timeoutMs;
   while (performance.now() < deadline) {
@@ -180,61 +170,4 @@ async function waitForPageTarget(port: number, expectedUrl: string, timeoutMs: n
     await Bun.sleep(100);
   }
   throw new Error("Timed out waiting for the headless Chrome Godot page.");
-}
-
-function createCdpClient(url: string) {
-  const socket = new WebSocket(url);
-  let nextId = 1;
-  const pending = new Map<number, {
-    resolve(value: unknown): void;
-    reject(error: Error): void;
-    timer: ReturnType<typeof setTimeout>;
-  }>();
-  socket.addEventListener("message", (event) => {
-      const message = JSON.parse(String(event.data)) as { id?: number; result?: unknown; error?: { message: string } };
-      if (message.id === undefined) return;
-      const call = pending.get(message.id);
-      if (!call) return;
-      pending.delete(message.id);
-      clearTimeout(call.timer);
-      if (message.error) call.reject(new Error(message.error.message));
-      else call.resolve(message.result);
-  });
-  socket.addEventListener("close", () => {
-    for (const call of pending.values()) {
-      clearTimeout(call.timer);
-      call.reject(new Error("Chrome DevTools connection closed."));
-    }
-    pending.clear();
-  });
-  return {
-    open(timeoutMs = 10_000): Promise<void> {
-      if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Timed out connecting to Chrome DevTools.")), timeoutMs);
-        socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
-        socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("Could not connect to Chrome DevTools.")); }, { once: true });
-      });
-    },
-    send(method: string, params: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<unknown> {
-      const id = nextId++;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          pending.delete(id);
-          reject(new Error(`Timed out waiting for Chrome DevTools method ${method}.`));
-        }, timeoutMs);
-        pending.set(id, { resolve, reject, timer });
-        try {
-          socket.send(JSON.stringify({ id, method, params }));
-        } catch (error) {
-          clearTimeout(timer);
-          pending.delete(id);
-          reject(error instanceof Error ? error : new Error(`Could not send Chrome DevTools method ${method}.`));
-        }
-      });
-    },
-    close(): void {
-      socket.close();
-    },
-  };
 }

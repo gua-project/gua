@@ -382,7 +382,8 @@ public sealed class TraceTests
         await using var trace = new GuaTraceSession(Options());
         using var scope = GuaAssertionScope.Use(new() { Trace = trace });
         var context = new FakeContext();
-        context.Events.Enqueue(new(7, GuaActionType.SetValue, true, GuaActionError.None, "n", "secret-marker", true, 1, 2, 3));
+        // Caller-known sensitive input remains protected even if a legacy host omits the marker.
+        context.Events.Enqueue(new(7, GuaActionType.SetValue, true, GuaActionError.None, "n", "secret-marker", false, 1, 2, 3));
         var result = await GuaActionCompletion.EnqueueAndWaitAsync(context, new(GuaActionType.SetValue, "n", "secret-marker", Sensitive: true));
         Assert.That(result.Succeeded, Is.True); Assert.That(context.Polls, Is.EqualTo(1));
         var original = new InvalidOperationException("original"); context.Error = original;

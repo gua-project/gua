@@ -117,14 +117,18 @@ button:disabled {
   grid-template-areas:
     "tree detail screenshot"
     "world world clock"
+    "lint lint lint"
     "logs logs logs"
     "automation automation automation";
-  grid-template-rows: minmax(360px, calc(100vh - 230px)) minmax(220px, auto) 181px auto;
+  grid-template-rows: minmax(360px, calc(100vh - 230px)) minmax(220px, auto) auto 181px auto;
   min-height: calc(100vh - 48px);
 }
 
 .gua-tree-panel { grid-area: tree; }
 .gua-world-panel { grid-area: world; }
+.gua-lint-panel { grid-area: lint; }
+.gua-lint-panel header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gua-lint-panel td { overflow-wrap: anywhere; }
 .gua-detail-panel { grid-area: detail; }
 .gua-screenshot-panel { grid-area: screenshot; }
 .gua-clock-panel { grid-area: clock; }
@@ -434,3 +438,7 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+:root .gua-code-panel { padding: 12px; overflow: hidden; }
+.gua-code-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.gua-code-panel textarea { width: 100%; box-sizing: border-box; font-family: monospace; }
+.gua-code-panel select { max-width: 100%; }

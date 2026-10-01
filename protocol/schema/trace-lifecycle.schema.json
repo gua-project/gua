@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/trace-lifecycle.schema.json",
+  "title": "Native Trace lifecycle journal v1 (Debug diagnostics extension)",
+  "type": "object",
+  "required": ["schemaVersion", "sourceId", "lastSequence", "events"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sourceId": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "lastSequence": { "$ref": "#/$defs/uint64" },
+    "events": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/fact" } }
+  },
+  "$defs": {
+    "uint64": { "type": "string", "pattern": "^[0-9]{1,20}$" },
+    "fact": {
+      "type": "object",
+      "required": ["sequence", "domain", "ownerId", "requestId", "sessionEpoch", "phase", "hostSessionEpoch", "hostElapsedMilliseconds", "hostFrame", "hostRevision", "hostClockId", "result"],
+      "properties": {
+        "sequence": { "$ref": "#/$defs/uint64" },
+        "domain": { "enum": ["ui", "input"] },
+        "ownerId": { "$ref": "#/$defs/uint64" },
+        "requestId": { "$ref": "#/$defs/uint64" },
+        "sessionEpoch": { "$ref": "#/$defs/uint64" },
+        "phase": { "type": "string", "minLength": 1 },
+        "hostSessionEpoch": { "$ref": "#/$defs/uint64" },
+        "hostElapsedMilliseconds": { "type": "integer", "minimum": 0 },
+        "hostFrame": { "$ref": "#/$defs/uint64" },
+        "hostRevision": { "$ref": "#/$defs/uint64" },
+        "hostClockId": { "type": "string", "minLength": 1 },
+        "result": { "type": "object" }
+      }
+    }
+  }
+}

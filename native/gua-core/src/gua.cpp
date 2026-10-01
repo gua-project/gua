@@ -1,6 +1,8 @@
 #include "gua/gua.h"
+#include "gua/semantic_lint.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cstddef>
@@ -32,6 +34,7 @@ std::string json_number(double value);
 double quantize(double value, double quantum);
 constexpr double default_clock_step_ms = 1000.0 / 60.0;
 constexpr int event_observation_profile_neutral = -1;
+std::atomic<unsigned long long> next_trace_source { 1 };
 
 #ifndef GUA_VERSION
 #define GUA_VERSION "0.0.0-development"
@@ -48,7 +51,7 @@ std::string build_version_json(const char* godot_plugin_version = nullptr)
     return "{\"protocolSchemaVersion\":\"2\",\"coreVersion\":\"" GUA_VERSION
         "\",\"runtimeVersion\":\"" GUA_VERSION "\",\"godotPluginVersion\":" + plugin + ",\"adapterVersions\":{}" +
         ",\"abiVersion\":1,\"buildId\":\"" GUA_BUILD_ID
-        "\",\"capabilities\":[\"semantic_ui_tree_v2\",\"detailed_semantic_state_v1\",\"semantic_actions_v2\",\"context_reset_v1\",\"diagnostics_v1\",\"version_v1\",\"capture_screenshot_v1\",\"virtual_clock_v1\",\"semantic_game_input_v1\",\"semantic_game_input_search_v1\",\"raw_keyboard_input_v1\",\"raw_pointer_input_v1\",\"raw_gamepad_input_v1\",\"text_input_v1\",\"game_input_lease_v1\",\"world_object_tree_v1\",\"agent_projection_v1\",\"observe_v1\"]}";
+        "\",\"capabilities\":[\"semantic_ui_tree_v2\",\"detailed_semantic_state_v1\",\"semantic_actions_v2\",\"context_reset_v1\",\"diagnostics_v1\",\"version_v1\",\"capture_screenshot_v1\",\"virtual_clock_v1\",\"semantic_game_input_v1\",\"semantic_game_input_search_v1\",\"raw_keyboard_input_v1\",\"raw_pointer_input_v1\",\"raw_gamepad_input_v1\",\"text_input_v1\",\"game_input_lease_v1\",\"world_object_tree_v1\",\"agent_projection_v1\",\"semantic_lint_v1\",\"observe_v1\"]}";
 }
 
 struct AgentFieldRule {
@@ -147,6 +150,7 @@ struct ActionRequest {
     int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG;
     AgentPolicy agent_policy;
     std::string role;
+    unsigned long long trace_epoch = 0;
 };
 
 struct LogEntry {
@@ -218,6 +222,7 @@ struct GameInputRequest {
     bool suppress_result = false;
     double remaining_lease_ms = 0.0;
     int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG;
+    unsigned long long trace_epoch = 0;
 };
 
 struct HeldGameInput {
@@ -230,6 +235,7 @@ struct HeldGameInput {
     bool sensitive = false;
     unsigned long long request_id = 0;
     bool completed = false;
+    unsigned long long trace_epoch = 0;
 };
 
 struct GameInputResult {
@@ -1136,6 +1142,11 @@ const char* action_name(int action)
 #include "observe_state.hpp"
 
 struct gua_context_t {
+    const std::chrono::steady_clock::time_point trace_started_at = std::chrono::steady_clock::now();
+    const std::string trace_source = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) +
+        "-" + std::to_string(next_trace_source.fetch_add(1));
+    std::deque<std::string> trace_lifecycle;
+    unsigned long long trace_sequence = 0;
     ObserveState observe;
     mutable std::mutex mutex;
     std::string screen = "unknown";
@@ -1220,6 +1231,52 @@ struct gua_context_t {
 };
 
 namespace {
+
+// Independent bounded facts: no completion polling, callbacks, clock control or I/O.
+void trace_phase(gua_context_t& ctx, const char* domain, unsigned long long owner,
+    unsigned long long request, unsigned long long epoch, const char* phase,
+    const std::string& details = "{}")
+{
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - ctx.trace_started_at).count();
+    ctx.trace_lifecycle.push_back("{\"sequence\":\"" + std::to_string(++ctx.trace_sequence) +
+        "\",\"domain\":\"" + domain + "\",\"ownerId\":\"" + std::to_string(owner) +
+        "\",\"requestId\":\"" + std::to_string(request) + "\",\"sessionEpoch\":\"" + std::to_string(epoch) +
+        "\",\"phase\":\"" + phase + "\",\"hostSessionEpoch\":\"" + std::to_string(ctx.session_epoch) +
+        "\",\"hostElapsedMilliseconds\":" + std::to_string(elapsed) +
+        ",\"hostFrame\":\"" + std::to_string(ctx.frame_sequence) + "\",\"hostRevision\":\"" +
+        std::to_string(ctx.revision) + "\",\"hostClockId\":\"" + ctx.trace_source + "-steady\",\"result\":" +
+        (details.size() <= 8192 ? details : "{\"omitted\":\"size-limit\"}") + "}");
+    while (ctx.trace_lifecycle.size() > 256) ctx.trace_lifecycle.pop_front();
+    ctx.diagnostics_json_cache.clear();
+}
+
+void trace_input(gua_context_t& ctx, const GameInputRequest& request, const char* phase,
+    int succeeded = -1, int error = 0, const char* trigger = "caller")
+{
+    // Payloads and text targets are deliberately excluded before journal retention.
+    trace_phase(ctx, "input", request.owner_id, request.request_id, request.trace_epoch, phase,
+        "{\"kind\":" + std::to_string(request.kind) + ",\"operation\":" + std::to_string(request.operation) +
+        ",\"target\":\"" + escape_json(request.sensitive || request.kind == GUA_GAME_INPUT_TEXT_INPUT ? "[redacted]" : request.target) +
+        "\",\"leaseMs\":" + std::to_string(request.lease_ms) + ",\"deviceIndex\":" + std::to_string(request.device_index) +
+        ",\"succeeded\":" + (succeeded < 0 ? "null" : succeeded ? "true" : "false") +
+        ",\"errorCode\":" + std::to_string(error) + ",\"trigger\":\"" + trigger + "\"}");
+}
+
+void enqueue_trace_cleanup(gua_context_t& ctx, GameInputRequest request, const char* trigger = "cleanup")
+{
+    request.trace_epoch = ctx.session_epoch;
+    trace_input(ctx, request, "release-requested", -1, 0, trigger);
+    ctx.game_input_cleanup_requests.push_back(std::move(request));
+}
+
+std::string trace_lifecycle_json(const gua_context_t& ctx)
+{
+    std::string json = "{\"schemaVersion\":1,\"sourceId\":\"" + ctx.trace_source + "\",\"lastSequence\":\"" + std::to_string(ctx.trace_sequence) + "\",\"events\":[";
+    bool comma = false;
+    for (const auto& event : ctx.trace_lifecycle) { if (comma) json += ','; json += event; comma = true; }
+    return json + "]}";
+}
 
 void append_game_input_result(gua_context_t& ctx, GameInputResult result)
 {
@@ -1932,6 +1989,7 @@ std::string build_diagnostics_json(const gua_context_t& ctx)
         ",\"unconsumedEventCount\":" + std::to_string(ctx.events.size()) +
         ",\"environment\":" + ctx.diagnostics_environment_json + ",\"version\":" + build_version_json() +
         ",\"uiTree\":" + build_ui_tree_json(ctx) + ",\"pendingRequests\":" + pending +
+        ",\"traceLifecycle\":" + trace_lifecycle_json(ctx) +
         ",\"operations\":" + build_history_json(ctx.operation_history) +
         ",\"events\":" + build_history_json(ctx.event_history) +
         ",\"logs\":" + build_logs_json(ctx) + ",\"screenshot\":" +
@@ -2199,6 +2257,24 @@ extern "C" int gua_copy_ui_tree_json_for_profile(gua_context_t* ctx, int observa
     if (ctx == nullptr || (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 0;
     const std::lock_guard lock(ctx->mutex);
     return copy_json_string(build_ui_tree_json(*ctx, observation_profile), out_json, out_json_size);
+}
+
+extern "C" int gua_semantic_lint_analyze(gua_context_t* ctx, const gua_semantic_lint_options_v1_t* options,
+    gua_semantic_lint_report_t** out_report)
+{
+    if (!out_report) return 1;
+    *out_report = nullptr;
+    if (!ctx || !options || options->struct_size < sizeof(*options) ||
+        (options->include_world != 0 && options->include_world != 1) ||
+        (options->observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && options->observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 1;
+    try {
+        const std::lock_guard lock(ctx->mutex);
+        const auto profile = options->observation_profile;
+        const auto ui = build_ui_tree_json(*ctx, profile);
+        const auto world = options->include_world ? build_world_tree_json(ctx->world_scene, ctx->world_objects, ctx->session_epoch,
+            ctx->world_frame_sequence, profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_world_revision : ctx->world_revision, profile) : "";
+        return gua_semantic_lint_analyze_snapshots(ui.c_str(), options->include_world ? world.c_str() : nullptr, profile, out_report);
+    } catch (...) { return 2; }
 }
 
 extern "C" void gua_add_log(gua_context_t* ctx, int level, const char* message)
@@ -2995,8 +3071,10 @@ extern "C" int gua_enqueue_action_for_profile(gua_context_t* ctx, const gua_acti
     ctx->action_requests.push_back(ActionRequest {
         request_id, descriptor->action, node_id, value, descriptor->delta_x, descriptor->delta_y,
         descriptor->bool_value, key, descriptor->modifiers, descriptor->sensitive != 0, descriptor->scroll_unit,
-        observation_profile, request_policy, request_role
+        observation_profile, request_policy, request_role, ctx->session_epoch
     });
+    trace_phase(*ctx, "ui", 0, request_id, ctx->session_epoch, "enqueue",
+        "{\"action\":\"" + std::string(action_name(descriptor->action)) + "\",\"resolvedId\":\"" + escape_json(node_id) + "\"}");
     append_history(*ctx, ctx->operation_history, "enqueued", request_id, descriptor->action, node_id,
         GUA_ACTION_ACCEPTED, 0, value, descriptor->sensitive != 0, descriptor->delta_x, descriptor->delta_y,
         descriptor->bool_value, key, descriptor->modifiers, descriptor->scroll_unit, observation_profile,
@@ -3017,6 +3095,7 @@ extern "C" int gua_cancel_action_request(gua_context_t* ctx, uint64_t request_id
     const auto pending = std::find_if(ctx->action_requests.begin(), ctx->action_requests.end(),
         [&](const ActionRequest& request) { return request.request_id == request_id; });
     if (pending != ctx->action_requests.end()) {
+        trace_phase(*ctx, "ui", 0, pending->request_id, pending->trace_epoch, "cancelled");
         ctx->action_requests.erase(pending);
         return GUA_ACTION_CANCELLED;
     }
@@ -3051,6 +3130,8 @@ extern "C" int gua_consume_action_request(gua_context_t* ctx, int action, const 
         const int error_code = action_authorization_error(
             ctx->nodes, value.node_id, value.action, value.observation_profile);
         if (error_code != GUA_ACTION_ACCEPTED) {
+            trace_phase(*ctx, "ui", 0, value.request_id, value.trace_epoch, "completion",
+                "{\"succeeded\":false,\"errorCode\":" + std::to_string(error_code) + "}");
             ctx->action_requests.erase(request);
             ctx->events.push_back(Event { value.action, value.node_id, value.request_id, GUA_ACTION_STATUS_FAILED,
                 error_code, "", value.sensitive, ctx->session_epoch, ctx->frame_sequence,
@@ -3065,6 +3146,7 @@ extern "C" int gua_consume_action_request(gua_context_t* ctx, int action, const 
     }
     ctx->action_requests.erase(request);
     ctx->consumed_requests.push_back(value);
+    trace_phase(*ctx, "ui", 0, value.request_id, value.trace_epoch, "consume");
     append_history(*ctx, ctx->operation_history, "consumed", value.request_id, value.action, value.node_id,
         GUA_ACTION_ACCEPTED, 0, value.value, value.sensitive, value.delta_x, value.delta_y,
         value.bool_value, value.key, value.modifiers, value.scroll_unit, value.observation_profile,
@@ -3141,6 +3223,8 @@ extern "C" int gua_emit_action_result(gua_context_t* ctx, const gua_action_resul
         result->node_id != nullptr ? result->node_id : "", result->status, result->error_code,
         result->value != nullptr ? result->value : "", event_sensitive,
         0, 0, 0, {}, 0, 0, event_profile, event_policy, event_role);
+    trace_phase(*ctx, "ui", 0, result->request_id, consumed != ctx->consumed_requests.end() ? consumed->trace_epoch : ctx->session_epoch, "completion",
+        "{\"succeeded\":" + std::string(result->status == GUA_ACTION_STATUS_SUCCEEDED ? "true" : "false") + ",\"errorCode\":" + std::to_string(result->error_code) + "}");
     if (consumed != ctx->consumed_requests.end()) ctx->consumed_requests.erase(consumed);
     return 1;
 }
@@ -3418,9 +3502,9 @@ extern "C" int gua_reset_context(gua_context_t* ctx, const gua_reset_options_t* 
             ctx->released_game_input_cleanup_pending.insert(request.owner_id);
     }
     for (const auto owner_id : game_input_cleanup_owners) {
-        ctx->game_input_cleanup_requests.push_back(GameInputRequest {
+        enqueue_trace_cleanup(*ctx, GameInputRequest {
             ctx->next_game_input_request_id++, owner_id, GUA_GAME_INPUT_CLEANUP, GUA_GAME_INPUT_RELEASE_ALL,
-            "all", "null", 0.0, 0.0, 0, 0, false });
+            "all", "null", 0.0, 0.0, 0, 0, false }, "reset");
     }
     ctx->held_game_inputs.clear();
     ctx->game_input_results.clear();
@@ -3622,6 +3706,7 @@ extern "C" int gua_release_game_input_owner(gua_context_t* ctx, uint64_t owner_i
     if (ctx == nullptr || owner_id == 0) return 0;
     const std::lock_guard lock(ctx->mutex);
     if (ctx->game_input_owners.erase(owner_id) == 0) return 0;
+    trace_phase(*ctx, "input", owner_id, 0, ctx->session_epoch, "owner-disconnected");
     const bool cleanup_required = owner_requires_game_input_cleanup(*ctx, owner_id);
     ctx->game_input_requests.erase(std::remove_if(ctx->game_input_requests.begin(), ctx->game_input_requests.end(),
         [&](const auto& request) { return request.owner_id == owner_id; }), ctx->game_input_requests.end());
@@ -3633,8 +3718,8 @@ extern "C" int gua_release_game_input_owner(gua_context_t* ctx, uint64_t owner_i
         const bool in_flight = std::any_of(ctx->consumed_game_input_requests.begin(), ctx->consumed_game_input_requests.end(),
             [&](const auto& request) { return request.owner_id == owner_id && request.kind != GUA_GAME_INPUT_CLEANUP; });
         if (in_flight) ctx->released_game_input_cleanup_pending.insert(owner_id);
-        ctx->game_input_cleanup_requests.push_back(GameInputRequest { ctx->next_game_input_request_id++, owner_id,
-            GUA_GAME_INPUT_CLEANUP, GUA_GAME_INPUT_RELEASE_ALL, "all", "null", 0, 0, 0, 0, false });
+        enqueue_trace_cleanup(*ctx, GameInputRequest { ctx->next_game_input_request_id++, owner_id,
+            GUA_GAME_INPUT_CLEANUP, GUA_GAME_INPUT_RELEASE_ALL, "all", "null", 0, 0, 0, 0, false }, "owner-disconnect");
     }
     ctx->held_game_inputs.erase(std::remove_if(ctx->held_game_inputs.begin(), ctx->held_game_inputs.end(),
         [&](const auto& held) { return held.owner_id == owner_id; }), ctx->held_game_inputs.end());
@@ -3729,6 +3814,8 @@ extern "C" int gua_enqueue_game_input_for_profile_v2(gua_context_t* ctx,
         descriptor->operation, target, value, descriptor->x, descriptor->y,
         lease, descriptor->device_index, descriptor->sensitive != 0, false, descriptor->confirmed != 0 };
     request.observation_profile = observation_profile;
+    request.trace_epoch = ctx->session_epoch;
+    trace_input(*ctx, request, request_releases_hold(request) || request.operation == GUA_GAME_INPUT_RELEASE_ALL ? "release-requested" : "enqueue");
     ctx->game_input_requests.push_back(std::move(request));
     if (out_request_id != nullptr) *out_request_id = request_id;
     return GUA_GAME_INPUT_OK;
@@ -3744,6 +3831,7 @@ extern "C" int gua_consume_game_input_request(gua_context_t* ctx, gua_game_input
         const int validation = validate_semantic_game_input(ctx->game_input_actions, request.operation,
             request.target, request.value_json, request.confirmed, request.observation_profile);
         if (validation == GUA_GAME_INPUT_OK) break;
+        trace_input(*ctx, request, "completion", 0, validation);
         append_game_input_result(*ctx, GameInputResult { request.request_id, request.owner_id, false, validation });
         ctx->game_input_requests.pop_front();
     }
@@ -3756,8 +3844,10 @@ extern "C" int gua_consume_game_input_request(gua_context_t* ctx, gua_game_input
     if (request.creates_hold) {
         ctx->held_game_inputs.push_back(HeldGameInput {
             request.owner_id, request.kind, request.target, request.device_index, request.value_json,
-            static_cast<double>(request.lease_ms), request.sensitive, request.request_id, false });
+            static_cast<double>(request.lease_ms), request.sensitive, request.request_id, false, request.trace_epoch });
     }
+    trace_input(*ctx, request, "consume");
+    if (request.creates_hold) trace_input(*ctx, request, "hold-pending");
     ctx->consumed_game_input_requests.push_back(request);
     *out_request = gua_game_input_request_v1_t { sizeof(*out_request) };
     out_request->request_id = request.request_id; out_request->owner_id = request.owner_id;
@@ -3777,6 +3867,11 @@ extern "C" int gua_complete_game_input_request(gua_context_t* ctx, uint64_t requ
         [&](const auto& request) { return request.request_id == request_id; });
     if (iterator == ctx->consumed_game_input_requests.end()) return 0;
     const GameInputRequest request = *iterator;
+    trace_input(*ctx, request, "completion", succeeded, error_code);
+    if (succeeded != 0 && request.creates_hold) trace_input(*ctx, request, "hold-started");
+    if (succeeded != 0 && (request_releases_hold(request) || request.operation == GUA_GAME_INPUT_RELEASE_ALL ||
+        (request.kind == GUA_GAME_INPUT_GAMEPAD && request.operation == GUA_GAME_INPUT_RESET)))
+        trace_input(*ctx, request, "release-confirmed");
     ctx->consumed_game_input_requests.erase(iterator);
     const bool owner_active = ctx->game_input_owners.contains(request.owner_id);
     if (succeeded == 0 && request.creates_hold) {
@@ -3829,7 +3924,7 @@ extern "C" int gua_complete_game_input_request(gua_context_t* ctx, uint64_t requ
                     cleanup.device_index == request.device_index;
             });
         if (!newer_live_hold && !release_still_queued)
-            ctx->game_input_cleanup_requests.push_back(GameInputRequest { ctx->next_game_input_request_id++, request.owner_id,
+            enqueue_trace_cleanup(*ctx, GameInputRequest { ctx->next_game_input_request_id++, request.owner_id,
                 request.kind, GUA_GAME_INPUT_RELEASE, request.target, "null", 0, 0, 0, request.device_index, false });
     }
     if (request.kind != GUA_GAME_INPUT_CLEANUP &&
@@ -3840,7 +3935,7 @@ extern "C" int gua_complete_game_input_request(gua_context_t* ctx, uint64_t requ
         const bool cleanup_still_queued = std::any_of(ctx->game_input_cleanup_requests.begin(), ctx->game_input_cleanup_requests.end(),
             [&](const auto& cleanup) { return cleanup.owner_id == request.owner_id; });
         if (!cleanup_still_queued)
-            ctx->game_input_cleanup_requests.push_back(GameInputRequest { ctx->next_game_input_request_id++, request.owner_id,
+            enqueue_trace_cleanup(*ctx, GameInputRequest { ctx->next_game_input_request_id++, request.owner_id,
                 GUA_GAME_INPUT_CLEANUP, GUA_GAME_INPUT_RELEASE_ALL, "all", "null", 0, 0, 0, 0, false });
     }
     return 1;
@@ -3871,8 +3966,8 @@ extern "C" int gua_tick_game_input_leases(gua_context_t* ctx, double elapsed_ms)
     };
     const auto enqueue_release = [&](const ExpiredKey& key) {
         if (!release_queued(key))
-            ctx->game_input_cleanup_requests.push_back(GameInputRequest { ctx->next_game_input_request_id++, key.owner_id,
-                key.kind, GUA_GAME_INPUT_RELEASE, key.target, "null", 0, 0, 0, key.device_index, false });
+            enqueue_trace_cleanup(*ctx, GameInputRequest { ctx->next_game_input_request_id++, key.owner_id,
+                key.kind, GUA_GAME_INPUT_RELEASE, key.target, "null", 0, 0, 0, key.device_index, false }, "lease-expired");
     };
     const auto newer_live_hold = [&](const ExpiredKey& key, unsigned long long request_id) {
         return std::any_of(ctx->held_game_inputs.begin(), ctx->held_game_inputs.end(), [&](const auto& held) {
@@ -3884,7 +3979,7 @@ extern "C" int gua_tick_game_input_leases(gua_context_t* ctx, double elapsed_ms)
         for (auto& request : ctx->consumed_game_input_requests) {
             if (request.creates_hold && request.owner_id == key.owner_id && request.kind == key.kind &&
                 request.target == key.target && request.device_index == key.device_index)
-                request.lease_expired = true;
+                { trace_input(*ctx, request, "lease-expired"); request.lease_expired = true; }
         }
         ctx->held_game_inputs.erase(std::remove_if(ctx->held_game_inputs.begin(), ctx->held_game_inputs.end(),
             [&](const auto& held) { return held_key_matches(held, key.owner_id, key.kind, key.target, key.device_index); }),
@@ -3920,6 +4015,7 @@ extern "C" int gua_tick_game_input_leases(gua_context_t* ctx, double elapsed_ms)
     for (const auto& held : expired_completed) {
         const ExpiredKey key { held.owner_id, held.kind, held.target, held.device_index };
         if (newer_live_hold(key, held.request_id)) continue;
+        trace_phase(*ctx, "input", held.owner_id, held.request_id, held.trace_epoch, "lease-expired");
         expire_key(key);
         ++expired_count;
     }
