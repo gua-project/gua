@@ -7,10 +7,12 @@ import transportSchema from "../../../protocol/schema/observe-transport-v1.schem
 import enumSchema from "../../../protocol/schema/enum-catalog-v1.schema.json";
 import observe from "../../../protocol/fixtures/observe-v1.json";
 import fixture from "../../../protocol/fixtures/trace-observations.json";
+import { validateTraceObserveSemantics } from "../../../protocol/schema/trace-observe-semantics.mjs";
 
 const ajv = new Ajv({ strict: false });
 ajv.addSchema(value); ajv.addSchema(observeSchema); ajv.addSchema(enumSchema); ajv.addSchema(transportSchema);
-const validate = ajv.compile(trace);
+const structure = ajv.compile(trace);
+const validate = (record: unknown) => structure(record) && validateTraceObserveSemantics(record);
 test("decimal uint64 limits match native range including every boundary prefix", () => {
   const check = ajv.compile({ $ref: `${trace.$id}#/$defs/uint64` });
   const maximum = 18446744073709551615n;
@@ -100,10 +102,20 @@ test("Trace catalogs follow the Observe transport single-enum contract", () => {
       { type: "enum", enumType: "game.Phase", value: "First" },
       { type: "list", elementType: "enum", enumType: "game.Phase", value: [] },
       { type: "set", elementType: "enum", enumType: "game.Phase", value: [] },
+      { type: "list", elementType: "enum", enumType: "game.Phase", value: ["First", "Second"] },
+      { type: "set", elementType: "enum", enumType: "game.Phase", value: ["First", "Second"] },
     ]) {
       const data = structuredClone(original); data.received[side] = typed;
       expect(validate(event("observation.change", data))).toBe(false);
       expect(validate(event("observation.change", { ...data, catalogs: { [side]: catalog } }))).toBe(true);
+      for (const definition of [
+        { enumType: "game.Other", members: ["First", "Second"] },
+        ...(typed.value.length ? [{ enumType: "game.Phase", members: ["Second"] }] : []),
+      ]) {
+        const mismatched = event("observation.change", { ...data, catalogs: { [side]: { schemaVersion: 1, enums: [definition] } } });
+        expect(structure(mismatched)).toBe(true); // instance associations require the semantic pass
+        expect(validate(mismatched)).toBe(false);
+      }
       expect(validate(event("observation.change", { ...data, catalogs: { [side]: catalog, value: catalog } }))).toBe(false);
     }
   }

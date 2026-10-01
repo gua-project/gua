@@ -2,6 +2,12 @@
 
 ## #125 review追加検証（2026-10-01）
 
+追加の接続世代reviewではsubscribeの送信前に世代を保持し、失敗cleanupがその世代だけを
+閉じるよう修正した。失われた返信・不正成功返信の閉鎖2/2とObserve/transport 38/38が成功。
+catalogの動的enumType/member照合はschema後の配布同梱意味validatorで検証し、scalar・
+list・setと空collectionの対応を確認した。schema+意味検証9/9、抽出NuGetだけからの
+オフライン検証（不一致型・欠けたmember拒否を含む）、両.NET target pack、型検査が成功。
+
 main `f8726e5`（#152のLifecycle/Web修正）取り込み後、Snapshotのcursorより古い公開sequenceを
 staleとして拒否し、同一/先行Snapshotがcursorを進めないことを検証した。Trace schemaは
 before/afterのenum Valueにだけ対応catalogを要求し、非enum・欠けた側・value catalogを拒否する。

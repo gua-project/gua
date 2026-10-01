@@ -335,6 +335,11 @@ dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj -- artifacts/
 完全な契約、上限と親 #109 の未完了条件は
 [Trace v1](../../../../protocol/specs/trace-v1.md) を参照。
 
+外部writerのObserve Changeは、配布`trace/trace.schema.json`の構造検証後に同梱の
+`trace/trace-observe-semantics.mjs`から`validateTraceObserveSemantics(record)`を呼ぶ。
+enumType一致と全memberのcatalog所属は標準JSON Schemaのinstance間比較では表現できない
+意味制約であり、別言語validatorも同じ照合を行う。両段階の成功が必要である。
+
 native lifecycleを記録する場合は、raw操作前に `var lifecycle = trace.Watch(context);`
 を呼ぶ。UI completion/Locator helperでは自動接続される。WatchはDebug diagnosticsの
 独立した有限履歴だけを読み、既存completion queueを消費しない。Timeout後も遅い結果を

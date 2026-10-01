@@ -10,6 +10,7 @@
     "outcome": { "enum": ["unknown", "passed", "failed", "interrupted"] },
     "blob": { "type": "string", "pattern": "^(snapshots|attachments)/[a-f0-9]{64}\\.json$" },
     "observeChange": {
+      "$comment": "After structural schema validation, apply trace-observe-semantics.mjs: each enum Value's catalog must define the same enumType and contain every member. Standard JSON Schema cannot compare separate instance paths.",
       "type": "object", "required": ["channel", "reason", "intervalId", "continuity", "change", "host", "received", "catalogs"],
       "properties": {
         "channel": { "const": "observe" }, "reason": { "type": "string" }, "intervalId": { "$ref": "#/$defs/id" },

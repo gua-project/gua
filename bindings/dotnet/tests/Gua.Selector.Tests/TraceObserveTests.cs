@@ -21,6 +21,33 @@ public sealed class TraceObserveTests
     private static int Port() { var l = new TcpListener(IPAddress.Loopback, 0); l.Start(); var p = ((IPEndPoint)l.LocalEndpoint).Port; l.Stop(); return p; }
     private static JsonElement Received(GuaTraceEvent e) => e.Data.GetProperty("received");
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FailedSubscribeClosesItsOwningConnection(bool lostReply)
+    {
+        using var runtime = new GuaRuntime(); int port = Port();
+        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var host = Task.Run(async () => {
+            using var socket = (await (await listener.GetContextAsync()).AcceptWebSocketAsync(null)).WebSocket;
+            try {
+                while (true) {
+                    byte[] bytes = new byte[65536]; var frame = await socket.ReceiveAsync(bytes.AsMemory(), timeout.Token);
+                    if (frame.MessageType == WebSocketMessageType.Close) break;
+                    using var request = JsonDocument.Parse(bytes.AsMemory(0, frame.Count));
+                    bool subscribe = request.RootElement.GetProperty("type").GetString() == "subscribe_observations";
+                    if (subscribe && lostReply) continue;
+                    var reply = $"{{\"id\":{request.RootElement.GetProperty("id")},\"ok\":true,\"result\":{(subscribe ? "{}" : runtime.GetVersionJson())}}}";
+                    await socket.SendAsync(Encoding.UTF8.GetBytes(reply).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+                }
+            } catch (WebSocketException) { }
+        });
+        using var remote = new GuaWebSocketContext($"ws://127.0.0.1:{port}/", TimeSpan.FromMilliseconds(200));
+        Assert.Catch(() => remote.SubscribeObservations());
+        // The context is still live; a failed request must already release its host cursor owner.
+        await host.WaitAsync(TimeSpan.FromSeconds(3));
+    }
+
     [Test]
     public async Task SnapshotRejectsOlderPublicationWithoutAdvancingIndependentCursor()
     {

@@ -119,6 +119,10 @@ schemaVersion 1の追加event dataとして旧readerも汎用JSON表示できる
 `observation.change`の`change`と`received.kind`は一致が必須であり、`catalogs`は
 Observe transportと共通のsingle-enum catalog契約で検証する。ChangeではenumTypeを持つ
 before/after Valueに対応するcatalogが必須であり、非enum・欠けたValueのcatalogとvalue catalogは不可。
+catalogの単一定義はValueと同じenumTypeを持ち、scalarまたはcollectionの全memberを含むことが必須。
+標準JSON Schemaは異なるinstance pathの値を比較できないため、schemaは構造制約を検証し、
+続けて配布同梱の`trace-observe-semantics.mjs`の`validateTraceObserveSemantics(record)`を適用する。
+別言語のvalidatorも同じ意味制約を実装する。schemaだけの成功はこの対応の検証完了を意味しない。
 受信ChangeのsessionEpoch・ownerId・registrationIdは正の十進文字列で、
 sequence・revision・UI/World frame等のカウンターは0を許す。
 十進uint64はUInt64.MaxValue以下に限り、外側hostもsourceId・epoch・revisionの型を検証する。
