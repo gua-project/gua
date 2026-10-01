@@ -331,6 +331,11 @@ Screenshot は別の pixel mask 方針が必要なので自動収集しない。
 `sensitive: true`/`mask: true`、または API の sensitive 引数を明示する。
 
 NuGet 配布には版固定の Viewer を同梱するため、利用者側に Web ビルドは不要。
+`trace/index.html`と`trace/version.json`、必要なschema一式を含む。
+`GuaTraceCapture.Screenshot`は取得済み・mask済みPNGに対する明示pixel認可を要求する。
+`pixelsAuthorized: false`や不正PNGではpixelを保持せず、欠損を表示する。
+UI観測IDに関連付いた完全なphysical-pixel boundsだけをoverlayする。
+表示・配布・browser検証は[共通Trace Viewer](../../../../protocol/specs/trace-viewer.md)を参照。
 ソースからの開発・pack 時には先に以下を実行する:
 
 ```powershell

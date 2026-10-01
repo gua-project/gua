@@ -23,7 +23,7 @@ public static class GuaTraceReport
             // Default JSON encoder escapes '<', so data cannot terminate the inert script element.
             var data = JsonSerializer.Serialize(trace, GuaTraceJson.Options);
             var html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-                "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'sha256-" + hash + "'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'\">" +
+                "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'sha256-" + hash + "'; style-src 'unsafe-inline'; connect-src 'none'; img-src data:; base-uri 'none'; form-action 'none'\">" +
                 "<title>Gua Trace Viewer v1</title></head><body style=\"background:#121926;color:#e7eaf1;font-family:system-ui\"><div id=\"root\"></div>" +
                 "<script type=\"application/json\" id=\"gua-trace-data\">" + data + "</script><script>" + script + "</script></body></html>";
             var full = Path.GetFullPath(outputPath); GuaTraceReader.CheckNoLinks(full);

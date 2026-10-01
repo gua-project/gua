@@ -95,7 +95,7 @@ internal sealed class GuaTraceAction
     private static void Safe(Action action) { try { action(); } catch { /* Secondary capture never replaces the operation. */ } }
 }
 
-public static class GuaTraceCapture
+public static partial class GuaTraceCapture
 {
     private static readonly Lazy<JsonSchema> UiSchema = new(() => LoadSchema("UiTree"));
     private static readonly Lazy<JsonSchema> WorldSchema = new(() => LoadSchema("WorldTree"));

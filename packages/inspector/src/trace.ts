@@ -76,10 +76,17 @@ export async function readTraceFiles(files: File[]): Promise<TraceDocument> {
     throw new Error("Trace reader limit");
   const manifest = files.filter(f => f.name === "manifest.json"), events = files.filter(f => f.name === "events.jsonl");
   if (manifest.length !== 1 || events.length !== 1) throw new Error("Select one Trace directory with manifest.json and events.jsonl");
+  const root = (manifest[0]!.webkitRelativePath || manifest[0]!.name).replace(/manifest\.json$/, "");
+  if ((events[0]!.webkitRelativePath || events[0]!.name) !== root + "events.jsonl") throw new Error("Mixed Trace roots");
   const blobs: Record<string, unknown> = Object.create(null);
+  const seen = new Set<string>();
   for (const file of files) {
-    const relative = (file.webkitRelativePath || file.name).split("/").slice(-2).join("/");
+    const path = file.webkitRelativePath || file.name;
+    if (!path.startsWith(root)) continue;
+    const relative = path.slice(root.length);
     if (!blobPattern.test(relative)) continue;
+    if (seen.has(relative)) throw new Error("Duplicate Trace blob");
+    seen.add(relative);
     if (file.size > 4 * 1024 * 1024) continue;
     const bytes = await file.arrayBuffer();
     const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(b => b.toString(16).padStart(2, "0")).join("");
@@ -128,4 +135,52 @@ export function snapshotDiff(before: unknown, after: unknown): { path: string; b
     } else differences.push({ path, ...(a === undefined ? {} : { before: a }), ...(b === undefined ? {} : { after: b }) });
   }
   visit(before, after, "", 0); return differences;
+}
+
+/** No URLs or SVG: only a bounded PNG data URI with dimensions matching its IHDR. */
+export function traceScreenshot(value: unknown, profile: string) {
+  const attachment = object(value), image = object(attachment.screenshot);
+  if (attachment.schemaVersion !== 1 || attachment.profile !== profile || attachment.pixelPolicy !== "caller-authorized" ||
+      typeof attachment.observationId !== "string" || !attachment.observationId ||
+      !Number.isInteger(image.width) || !Number.isInteger(image.height) || Number(image.width) < 1 || Number(image.height) < 1 ||
+      Number(image.width) > 8192 || Number(image.height) > 8192 || Number(image.width) * Number(image.height) > 16777216 ||
+      typeof image.dataUri !== "string" || image.dataUri.length > 4 * 1024 * 1024 ||
+      !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(image.dataUri)) return null;
+  try {
+    const bytes = atob(image.dataUri.slice(22));
+    if (bytes.length < 33 || ![137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82].every((b, i) => bytes.charCodeAt(i) === b)) return null;
+    const size = (offset: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + bytes.charCodeAt(offset + i), 0);
+    if (size(16) !== image.width || size(20) !== image.height) return null;
+    return { dataUri: image.dataUri, width: Number(image.width), height: Number(image.height), observationId: attachment.observationId };
+  } catch { return null; }
+}
+
+/** Null means ambiguous: a duplicate observation ID cannot select one snapshot. */
+export function indexObservations(events: TraceEvent[]) {
+  const index = new Map<string, TraceEvent | null>();
+  for (const event of events) {
+    if (event.type !== "observation") continue;
+    const id = object(event.data).observationId;
+    if (typeof id === "string" && id) index.set(id, index.has(id) ? null : event);
+  }
+  return index;
+}
+export function confirmedEpoch(value: unknown): value is string {
+  return typeof value === "string" && /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 18446744073709551615n;
+}
+
+export function pendingRequests(events: TraceEvent[]) {
+  const pending = new Map<string, string>();
+  for (const e of events) {
+    const d = object(e.data), request = object(d.request);
+    // Native identity includes domain/owner in sourceId; never pair by requestId alone.
+    const source = request.sourceId ?? d.sourceId, id = request.requestId ?? d.requestId, epoch = request.sessionEpoch ?? d.sessionEpoch;
+    if (typeof source !== "string" || typeof id !== "string") continue;
+    const key = JSON.stringify([source, epoch ?? "unconfirmed", id]);
+    if ((e.type === "request.enqueue" && d.accepted === true) || (e.type === "request.phase" && d.phase === "enqueue"))
+      pending.set(key, `${source} / epoch ${epoch ?? "unconfirmed"} / request ${id}`);
+    if (e.type === "request.completion" || (e.type === "request.phase" && ["completion", "late-completion", "cancelled"].includes(text(d.phase))))
+      { pending.delete(key); if (e.type === "request.completion") pending.delete(JSON.stringify([source, "unconfirmed", id])); }
+  }
+  return [...pending.values()];
 }
