@@ -11,8 +11,11 @@ collision filtering, and publication. A fake provider tests dispatch only.
 The independent C ABI host has finite configured provider, owner, retained-batch,
 query, hit, deadline and work limits. Every accepted batch occupies one slot until
 its owner consumes its result or closes. Registration and owner handles are
-monotonically allocated and never reused. Provider unregister and owner close
-invalidate outstanding leases and terminate outstanding work. Hosts synchronize
+monotonically allocated and never reused. Provider unregister invalidates leases.
+Owner close disables polling and authorization immediately, but retains consumed
+request correlation internally until completion/end; its backend completion is
+acknowledged without publishing geometry. Closed-owner records occupy bounded
+retention slots until the adapter ends its lease. Hosts synchronize
 destruction with C callers; managed SafeHandle references protect concurrent
 calls. No callback is invoked and no mutex is held while a host calls physics.
 
@@ -64,6 +67,8 @@ ID and monotonic observation interval; a missing tick remains absent. The
 adapter holds the physics read state until ending the lease. A lease is consumed
 once, without crossing physics boundaries or resuming unfinished queries on
 another tick. Reentrant begin is denied while a provider has a live lease.
+Taking from an exhausted live lease returns NotReady (managed null), including
+after its result has been polled; only an ended or invalidated lease is stale.
 
 The adapter takes one ordered request, executes its engine API outside the core
 mutex, and completes that request before taking another. Completion must match

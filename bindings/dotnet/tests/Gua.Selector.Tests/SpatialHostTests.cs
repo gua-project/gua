@@ -73,4 +73,28 @@ public sealed class SpatialHostTests
         Assert.That(ad.ReadAdvertisement().Budgets.MaxQueueDepth,Is.EqualTo(2));
         h.Enqueue(o,batchCopy); var l=h.Begin(p,boundaryCopy)!.Value; using var q=h.Take(l); h.Complete(l,executionCopy); h.End(l); using var r=h.Poll(o,1); Assert.That(r!.ReadBatchResult().Items[1].State,Is.EqualTo("notExecuted"));
     }
+    [Test]
+    public void NormalManagedPumpEndsAtNullAfterLastCompletion()
+    {
+        using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var batch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var p=h.Register(registration); var o=h.OpenOwner(grants); h.Enqueue(o,batch); var l=h.Begin(p,boundary)!.Value; int count=0;
+        try {
+            while(true) {
+                using var q=h.Take(l); if(q is null) break;
+                var request=q.ReadRequest(); var completed=execution.ReadExecution(); completed.RequestId=request.RequestId; completed.QueryId=request.QueryId;
+                using var owned=GuaSpatialDocument.FromExecution(completed); h.Complete(l,owned); ++count;
+            }
+            using var result=h.Poll(o,1); Assert.That(result!.ReadBatchResult().Items.All(i=>i.State=="completed"),Is.True);
+            Assert.That(h.Take(l),Is.Null); Assert.That(count,Is.EqualTo(2));
+        } finally { h.End(l); }
+    }
+    [Test]
+    public void ClosedOwnerRetainsConsumedCompletionButCannotPoll()
+    {
+        using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var batch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var p=h.Register(registration); var o=h.OpenOwner(grants); h.Enqueue(o,batch); var l=h.Begin(p,boundary)!.Value; using var q=h.Take(l);
+        h.CloseOwner(o); Assert.That(Assert.Throws<GuaSpatialException>(()=>h.Poll(o,1))!.Code,Is.EqualTo(GuaSpatialErrorCode.Stale));
+        Assert.DoesNotThrow(()=>h.Complete(l,execution)); Assert.That(h.Take(l),Is.Null); h.End(l);
+        Assert.That(Assert.Throws<GuaSpatialException>(()=>h.Complete(l,execution))!.Code,Is.EqualTo(GuaSpatialErrorCode.Stale));
+    }
 }

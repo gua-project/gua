@@ -56,9 +56,11 @@ int main() {
         auto advertisement=parse(copy(advertised)); assert(advertisement.at("budgets").at("maxQueueDepth").text=="4");
         assert(gua_spatial_host_describe(x.h,x.o,999,&advertised,&x.e)==GUA_SPATIAL_NOT_AUTHORIZED&&advertised==nullptr);
         auto a=x.take(l); assert(x.complete(l,a)==0); auto b=x.take(l); assert(x.complete(l,b)==0);
+        gua_spatial_document_t* exhausted=reinterpret_cast<gua_spatial_document_t*>(1); assert(gua_spatial_host_take(x.h,l,&exhausted,&x.e)==GUA_SPATIAL_NOT_READY&&exhausted==nullptr);
         gua::SpatialDocument bd(9,wire(x.boundary)); uint64_t other=77;
         assert(gua_spatial_host_begin(x.h,x.p,bd.get(),&other,&x.e)==GUA_SPATIAL_NOT_READY&&other==0);
         auto r=x.poll(); assert(r.at("items").items.size()==2);
+        assert(gua_spatial_host_take(x.h,l,&exhausted,&x.e)==GUA_SPATIAL_NOT_READY&&exhausted==nullptr);
         for(const auto& it:r.at("items").items) {
             const auto& s=it.at("result").at("sample"); assert(!s.fields.contains("tick")); assert(s.at("physicsSampleId").text=="sample"); assert(s.at("clockId").text=="clock"); assert(s.at("queryPolicyRevision").text=="7");
             assert(it.at("result").at("coverage").at("state").text=="unknown");
@@ -105,12 +107,26 @@ int main() {
         assert(x.complete(l,q)==GUA_SPATIAL_STALE); auto r=x.poll(); assert(!r.at("items").items[0].fields.contains("result")); assert(gua_spatial_host_end(x.h,l,&x.e)==GUA_SPATIAL_STALE);
     }
     {
-        Fixture x; assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); assert(gua_spatial_host_close_owner(x.h,x.o,&x.e)==0);
+        Fixture x(1000,1000,1); assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); assert(gua_spatial_host_close_owner(x.h,x.o,&x.e)==0);
+        assert(gua_spatial_host_cancel(x.h,x.o,1,&x.e)==GUA_SPATIAL_STALE);
+        gua::SpatialDocument grants(8,wire(x.owner)); uint64_t new_owner=0; assert(gua_spatial_host_open_owner(x.h,grants.get(),&new_owner,&x.e)==0);
+        gua::SpatialDocument batch(5,wire(x.batch)); assert(gua_spatial_host_enqueue(x.h,new_owner,batch.get(),&x.e)==GUA_SPATIAL_CAPACITY);
+        assert(x.complete(l,q)==0);
+        gua_spatial_document_t* result=nullptr; assert(gua_spatial_host_poll(x.h,x.o,1,&result,&x.e)==GUA_SPATIAL_STALE&&result==nullptr);
         assert(x.complete(l,q)==GUA_SPATIAL_STALE); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+        assert(gua_spatial_host_enqueue(x.h,new_owner,batch.get(),&x.e)==0);
     }
     {
         Fixture x(1000,5); assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); std::this_thread::sleep_for(std::chrono::milliseconds(15));
         assert(x.complete(l,q)==GUA_SPATIAL_NOT_READY); auto r=x.poll(); assert(r.at("items").items[0].at("reason").text=="work_budget"); assert(r.at("items").items[1].at("state").text=="notExecuted"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+    }
+    {
+        Fixture x(1000,1000,1); assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l);
+        assert(gua_spatial_host_close_owner(x.h,x.o,&x.e)==0); assert(gua_spatial_host_unregister(x.h,x.p,&x.e)==0);
+        assert(x.complete(l,q)==GUA_SPATIAL_STALE); assert(gua_spatial_host_end(x.h,l,&x.e)==GUA_SPATIAL_STALE);
+        x.reg.fields.at("provider").fields["spaceEpoch"]=parse("2"); for(auto& query:x.batch.fields.at("queries").items) query.fields["spaceEpoch"]=parse("2");
+        gua::SpatialDocument registration(7,wire(x.reg)),grants(8,wire(x.owner));
+        assert(gua_spatial_host_register(x.h,registration.get(),&x.p,&x.e)==0); assert(gua_spatial_host_open_owner(x.h,grants.get(),&x.o,&x.e)==0); assert(x.enqueue()==0);
     }
     {
         Fixture x(5); for(auto& q:x.batch.fields.at("queries").items) q.fields["deadlineMs"]=parse("5"); assert(x.enqueue()==0); std::this_thread::sleep_for(std::chrono::milliseconds(15));
@@ -134,6 +150,6 @@ int main() {
     for(int i=0;i<50;++i) {
         Fixture x; assert(x.enqueue()==0); auto l=x.begin(); std::atomic<bool> go=false;
         std::thread t([&] { while(!go.load()) std::this_thread::yield(); gua_spatial_error_t e{}; assert(gua_spatial_host_cancel(x.h,x.o,1,&e)==0); });
-        go=true; gua_spatial_document_t* d=nullptr; auto code=gua_spatial_host_take(x.h,l,&d,&x.e); assert(code==0||code==GUA_SPATIAL_STALE); gua_spatial_destroy(d); t.join(); auto r=x.poll(); assert(r.at("items").items[1].at("state").text=="notExecuted"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+        go=true; gua_spatial_document_t* d=nullptr; auto code=gua_spatial_host_take(x.h,l,&d,&x.e); assert(code==0||code==GUA_SPATIAL_NOT_READY); gua_spatial_destroy(d); t.join(); auto r=x.poll(); assert(r.at("items").items[1].at("state").text=="notExecuted"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
     }
 }

@@ -121,7 +121,7 @@ struct host_batch {
     uint64_t owner=0,provider=0,id=0,lease=0,order=0;
     json input,boundary; std::vector<json> items;
     std::vector<bool> dispatched;
-    size_t next=0; bool inflight=false,done=false,cancelled=false;
+    size_t next=0; bool inflight=false,done=false,cancelled=false,owner_closed=false;
     double accepted=0,started=0; uint64_t revision=0;
     size_t retained_bytes=512;
 };
@@ -210,7 +210,15 @@ int gua_spatial_host_register(gua_spatial_host_t* h,const gua_spatial_document_t
     });
 }
 int gua_spatial_host_unregister(gua_spatial_host_t* h,uint64_t p,gua_spatial_error_t* e) {
-    return boundary(e,[&] { host(h); std::lock_guard lock(h->mutex); require(h->providers.erase(p)!=0,GUA_SPATIAL_STALE); for(auto& [k,b]:h->batches) { (void)k; if(b.provider==p) { if(!b.done) finish(*h,b,"provider_unregistered"); } } for(auto it=h->leases.begin();it!=h->leases.end();) { if(it->second==p) it=h->leases.erase(it); else ++it; } });
+    return boundary(e,[&] {
+        host(h); std::lock_guard lock(h->mutex); require(h->providers.erase(p)!=0,GUA_SPATIAL_STALE);
+        for(auto it=h->batches.begin();it!=h->batches.end();) {
+            auto& b=it->second;
+            if(b.provider==p) { if(!b.done) finish(*h,b,"provider_unregistered"); if(b.owner_closed) { it=h->batches.erase(it); continue; } }
+            ++it;
+        }
+        for(auto it=h->leases.begin();it!=h->leases.end();) { if(it->second==p) it=h->leases.erase(it); else ++it; }
+    });
 }
 int gua_spatial_host_open_owner(gua_spatial_host_t* h,const gua_spatial_document_t* d,uint64_t* out,gua_spatial_error_t* e) {
     if(out) *out=0;
@@ -220,7 +228,20 @@ int gua_spatial_host_set_owner(gua_spatial_host_t* h,uint64_t o,const gua_spatia
     return boundary(e,[&] { host(h); document(d,8); std::lock_guard lock(h->mutex); auto it=h->owners.find(o); require(it!=h->owners.end(),GUA_SPATIAL_STALE); it->second.grants=d->value; for(auto& [k,b]:h->batches) { (void)k; if(b.owner==o) { for(const auto& q:b.input.at("queries").items) if(!authorized(*h,b,q)) { revoke(*h,b); break; } } } });
 }
 int gua_spatial_host_close_owner(gua_spatial_host_t* h,uint64_t o,gua_spatial_error_t* e) {
-    return boundary(e,[&] { host(h); std::lock_guard lock(h->mutex); require(h->owners.erase(o)!=0,GUA_SPATIAL_STALE); for(auto it=h->batches.begin();it!=h->batches.end();) { if(it->second.owner==o) it=h->batches.erase(it); else ++it; } });
+    return boundary(e,[&] {
+        host(h); std::lock_guard lock(h->mutex); require(h->owners.erase(o)!=0,GUA_SPATIAL_STALE);
+        for(auto it=h->batches.begin();it!=h->batches.end();) {
+            auto& b=it->second;
+            if(b.owner!=o) { ++it; continue; }
+            if(b.lease&&h->leases.contains(b.lease)) {
+                const bool running=b.inflight;
+                b.owner_closed=true; revoke(*h,b);
+                // Retain consumed correlation until completion/end, with no
+                // publishable geometry or closed-owner polling authority.
+                b.inflight=running; b.done=!running; ++it;
+            } else it=h->batches.erase(it);
+        }
+    });
 }
 int gua_spatial_host_enqueue(gua_spatial_host_t* h,uint64_t o,const gua_spatial_document_t* d,gua_spatial_error_t* e) {
     return boundary(e,[&] {
@@ -260,7 +281,7 @@ int gua_spatial_host_describe(gua_spatial_host_t* h,uint64_t o,uint64_t p,gua_sp
     });
 }
 int gua_spatial_host_cancel(gua_spatial_host_t* h,uint64_t o,uint64_t id,gua_spatial_error_t* e) {
-    return boundary(e,[&] { host(h); std::lock_guard lock(h->mutex); auto it=h->batches.find({o,id}); require(it!=h->batches.end(),GUA_SPATIAL_STALE); auto& b=it->second; if(!b.done) { b.cancelled=true; finish(*h,b,"cancelled"); } });
+    return boundary(e,[&] { host(h); std::lock_guard lock(h->mutex); require(h->owners.contains(o),GUA_SPATIAL_STALE); auto it=h->batches.find({o,id}); require(it!=h->batches.end(),GUA_SPATIAL_STALE); auto& b=it->second; if(!b.done) { b.cancelled=true; finish(*h,b,"cancelled"); } });
 }
 int gua_spatial_host_begin(gua_spatial_host_t* h,uint64_t p,const gua_spatial_document_t* d,uint64_t* out,gua_spatial_error_t* e) {
     if(out) *out=0;
@@ -276,7 +297,11 @@ int gua_spatial_host_begin(gua_spatial_host_t* h,uint64_t p,const gua_spatial_do
 int gua_spatial_host_take(gua_spatial_host_t* h,uint64_t lease,gua_spatial_document_t** out,gua_spatial_error_t* e) {
     if(out) *out=nullptr;
     return boundary(e,[&] {
-        host(h); require(out); std::lock_guard lock(h->mutex); auto& b=leased(*h,lease); require(!b.inflight,GUA_SPATIAL_NOT_READY);
+        host(h); require(out); std::lock_guard lock(h->mutex);
+        require(h->leases.contains(lease),GUA_SPATIAL_STALE);
+        host_batch* pending=nullptr;
+        for(auto& [key,candidate]:h->batches) { (void)key; if(candidate.lease==lease&&!candidate.done) pending=&candidate; }
+        require(pending,GUA_SPATIAL_NOT_READY); auto& b=*pending; require(!b.inflight,GUA_SPATIAL_NOT_READY);
         if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
         require(b.next<b.items.size(),GUA_SPATIAL_NOT_READY);
         const auto& q=b.input.at("queries").items[b.next]; auto pol=authorized(*h,b,q); require(pol,GUA_SPATIAL_NOT_AUTHORIZED);
@@ -286,9 +311,10 @@ int gua_spatial_host_take(gua_spatial_host_t* h,uint64_t lease,gua_spatial_docum
 int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spatial_document_t* d,gua_spatial_error_t* e) {
     return boundary(e,[&] {
         host(h); document(d,10); std::lock_guard lock(h->mutex); auto& b=leased(*h,lease); require(b.inflight,GUA_SPATIAL_NOT_READY);
-        if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
         const auto& q=b.input.at("queries").items[b.next]; gua_spatial_document_t qd{1,q,{}}; gua_spatial_error_t error{};
         if(gua_spatial_check_result(&qd,d,&error)!=0) { finish(*h,b,"internal"); fail(error.code); }
+        if(b.owner_closed) { b.inflight=false; b.done=true; return; }
+        if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
         if(text(d->value,"status")!="completed") {
             auto code=text(d->value.at("error"),"code"); if(code=="invalid_request"||code=="unsupported_policy") code="internal";
             b.items[b.next]=item(q,"failed",code.c_str());
@@ -311,12 +337,22 @@ int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spa
     });
 }
 int gua_spatial_host_end(gua_spatial_host_t* h,uint64_t lease,gua_spatial_error_t* e) {
-    return boundary(e,[&] { host(h); std::lock_guard lock(h->mutex); auto li=h->leases.find(lease); require(li!=h->leases.end(),GUA_SPATIAL_STALE); for(auto& [k,b]:h->batches) { (void)k; if(b.lease==lease) { if(!b.done) { if(auto reason=stopped(*h,b)) finish(*h,b,reason); else finish(*h,b,"boundary_ended"); } b.lease=0; } } auto p=h->providers.find(li->second); if(p!=h->providers.end()&&p->second.lease==lease) p->second.lease=0; h->leases.erase(li); });
+    return boundary(e,[&] {
+        host(h); std::lock_guard lock(h->mutex); auto li=h->leases.find(lease); require(li!=h->leases.end(),GUA_SPATIAL_STALE);
+        for(auto it=h->batches.begin();it!=h->batches.end();) {
+            auto& b=it->second;
+            if(b.lease!=lease) { ++it; continue; }
+            if(!b.done) { if(auto reason=stopped(*h,b)) finish(*h,b,reason); else finish(*h,b,"boundary_ended"); }
+            b.lease=0;
+            if(b.owner_closed) it=h->batches.erase(it); else ++it;
+        }
+        auto p=h->providers.find(li->second); if(p!=h->providers.end()&&p->second.lease==lease) p->second.lease=0; h->leases.erase(li);
+    });
 }
 int gua_spatial_host_poll(gua_spatial_host_t* h,uint64_t o,uint64_t id,gua_spatial_document_t** out,gua_spatial_error_t* e) {
     if(out) *out=nullptr;
     return boundary(e,[&] {
-        host(h); require(out); std::lock_guard lock(h->mutex); auto it=h->batches.find({o,id}); require(it!=h->batches.end(),GUA_SPATIAL_STALE); auto& b=it->second;
+        host(h); require(out); std::lock_guard lock(h->mutex); require(h->owners.contains(o),GUA_SPATIAL_STALE); auto it=h->batches.find({o,id}); require(it!=h->batches.end(),GUA_SPATIAL_STALE); auto& b=it->second;
         if(!b.done) { if(auto reason=stopped(*h,b)) finish(*h,b,reason); }
         require(b.done,GUA_SPATIAL_NOT_READY);
         // Reauthorize even previously completed items before crossing public boundary.
