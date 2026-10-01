@@ -158,11 +158,14 @@ func attach(gua_adapter: RefCounted) -> bool:
       }
       if (command.type === 'get_game_input_capabilities') return JSON.parse(callGodot(getGameInputCapabilities));
       if (command.type === 'get_game_input_actions_v2') {
+        if (Object.keys(command).some(key => key !== 'type')) throw engineError('invalid_request', 'Unknown metadata discovery field.');
         const result = JSON.parse(callGodot(getGameInputActionsV2));
         if (result && result.code) throw engineError(result.code, result.message || 'The Godot Gua adapter is unavailable.');
         return result;
       }
       if (command.type === 'find_game_input_actions_v2') {
+        const allowed = ['type', 'id', 'query', 'valueType', 'active', 'context', 'category', 'tags', 'limit'];
+        if (Object.keys(command).some(key => !allowed.includes(key))) throw engineError('invalid_request', 'Unknown metadata selector field.');
         const result = JSON.parse(callGodot(findGameInputActionsV2, JSON.stringify(command)));
         if (result && result.code) throw engineError(result.code, result.message || 'Invalid game input selector.');
         return result;

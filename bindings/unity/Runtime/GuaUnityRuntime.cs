@@ -169,6 +169,12 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             commandType = document.RootElement.GetProperty("command").GetProperty("type").GetString() ?? string.Empty;
         }
         catch (Exception error) { Debug.LogError("Invalid Gua WebGL request: " + error.Message); return; }
+        if (commandType == "get_game_input_actions_v2" || commandType == "find_game_input_actions_v2")
+        {
+            using var document = JsonDocument.Parse(json);
+            if (!ValidMetadataDiscoveryFields(document.RootElement.GetProperty("command")))
+            { ResolveWebError(callId, "invalid_request", "Unknown or duplicate metadata discovery field."); return; }
+        }
         // Game input search uses a boolean `active` field, while the legacy world-query DTO below uses an integer
         if (commandType == "get_observe_snapshot" || commandType == "subscribe_observations" || commandType == "poll_observations" || commandType == "unsubscribe_observations")
         {
@@ -292,6 +298,16 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             return;
         }
         webCalls[requestId] = envelope.callId;
+    }
+
+    private static bool ValidMetadataDiscoveryFields(JsonElement command)
+    {
+        bool search = command.GetProperty("type").GetString() == "find_game_input_actions_v2";
+        var allowed = new HashSet<string>(search
+            ? new[] { "type", "id", "query", "valueType", "active", "context", "category", "tags", "limit" }
+            : new[] { "type" }, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        return command.EnumerateObject().All(field => allowed.Contains(field.Name) && seen.Add(field.Name));
     }
 
     public void HandleWebCancellation(string callIdValue)

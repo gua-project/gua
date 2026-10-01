@@ -92,6 +92,11 @@ mergeInto(LibraryManager.library, {
       __guaOwnerId: ownerId,
       invoke(command, options) {
         if (state.disposed) return Promise.reject({ code: 'engine_unsupported', message: 'The Unity WebGL Gua runtime is unavailable.' });
+        if (command.type === 'get_game_input_actions_v2' || command.type === 'find_game_input_actions_v2') {
+          const allowed = command.type === 'get_game_input_actions_v2' ? ['type'] :
+            ['type', 'id', 'query', 'valueType', 'active', 'context', 'category', 'tags', 'limit'];
+          if (Object.keys(command).some(key => !allowed.includes(key))) return Promise.reject({ code: 'invalid_request', message: 'Unknown metadata discovery field.' });
+        }
         if (command.type === 'get_screenshot') return Promise.reject({ code: 'engine_unsupported', message: 'Unity WebGL screenshot readback is not enabled.' });
         const selectorError = worldSelectorError(command);
         if (selectorError) return Promise.reject({ code: 'invalid_request', message: selectorError });

@@ -102,6 +102,21 @@ async function installGodotWebPort(
 }
 
 describe("Godot Web same-page port", () => {
+  test("v2 discovery rejects extra fields before host dispatch while preserving v1 calls", async () => {
+    let calls = 0;
+    const response = () => { calls++; return JSON.stringify({ schemaVersion: 2, actions: [] }); };
+    const port = await installGodotWebPort([], { getGameInputActionsV2: response, findGameInputActionsV2: response });
+    for (const type of ["get_game_input_actions_v2", "find_game_input_actions_v2"]) {
+      for (const extra of [{ confirmed: true }, { unknown: true }, { requestId: 1 }])
+        await expect(port.invoke({ type, ...extra })).rejects.toMatchObject({ code: "invalid_request" });
+    }
+    expect(calls).toBe(0);
+    await expect(port.invoke({ type: "get_game_input_actions_v2" })).resolves.toMatchObject({ schemaVersion: 2 });
+    await expect(port.invoke({ type: "find_game_input_actions_v2", id: "jump", query: "hop", valueType: "button",
+      active: true, context: "play", category: "movement", tags: ["gameplay"], limit: 100 })).resolves.toMatchObject({ schemaVersion: 2 });
+    expect(calls).toBe(2);
+    await expect(port.invoke({ type: "get_game_input_actions", confirmed: true })).resolves.toMatchObject({ schemaVersion: 1 });
+  });
   test("v2 discovery preserves structured capability-revocation errors", async () => {
     let revoked = false;
     const response = () => JSON.stringify(revoked
