@@ -317,3 +317,12 @@ Browser verifierはmonitor接続上でNetwork/Runtime/Page各domainの成功応�
 `MONITOR-FIXTURE-FAILURE`例外を実際に発火させ、両方をmonitorが受信したことを検証する。
 probeと実reportの結果を分けて保存し、実report4件の外部要求/例外は0だった。
 修正後の全Visual117/117、独立最終auditの統合11/11（skip0）に成功し、actionable findingsなし。
+
+後続のGitHub reviewで判明した2件も再現し修正した。legacy Debug比較は保存済みprivate
+baselineを含めPlayer Traceへ添付しない（TraceProfileのDebug/Player両指定で拒否）。
+同じ未profile選択getterを使う既存diagnosticsの自動添付もDebug限定にした。
+比較/診断の既存結果と元例外identityはそのまま。Playerの認可済みdiagnosticsは明示getter APIを使う。
+live取得後の実file衝突、必須property欠損、実supplement IOExceptionはTrace品質の
+diagnostics-failed/capture.failureに記録し、path/例外本文をコピーしない。
+新規5件を含む統合16/16、全Visual122/122（skip0）で確認。独立auditの証拠範囲は前段の11件であり、
+この後続修正の再監査とは扱わない（AGENTSの最大2pass制限を維持）。

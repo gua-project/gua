@@ -315,6 +315,9 @@ unconfirmed として扱い、completion が返した epoch でのみ確定相�
 
 `SemanticSnapshotOptions.Trace/TraceStepId/TraceProfile` は呼出側が実行した
 `CompareSnapshot/ExpectSnapshot` の結果を `gua.semantic-comparison.v1` にする。
+既存getterと保存baselineのPlayer投影を証明できないため、この自動添付はDebug限定。
+`TraceProfile = Player`でもPlayer TraceへDebugのactual/expectedを添付しない。
+添付拒否は明示比較/baseline更新の既存動作を変えず、品質へ残す。
 matched/baselineUpdated/reason/runId、rules適用済みexpected/actual/differencesを保存する。
 比較artifactやbaselineの絶対pathは含めず、任意ファイルを読み込まない。
 Traceがなくても既存の結果・例外・artifact・明示更新の契約は同じである。
@@ -334,10 +337,14 @@ Trace Eventへ残し、Recordingの成功stepを捏造しない。
 
 `GuaDiagnosticOptions.Trace/TraceStepId/TraceProfile` を指定すると既存の
 `GuaDiagnosticsSession` / Writerはcontext解放前に公開diagnosticsを同じStepへ保存する。
+未profile選択の既存getterを使う自動添付はDebug限定。Playerは下記の認可済みgetter
+overloadを使う。ラベルだけでDebug payloadをPlayerとして保存しない。
 logs/pendingRequests/environment等を保ち、Screenshotは常に取り除く。
 version、呼出側environment/callerMetadataは `gua.environment.v1` の別添付にする。
 既存diagnosticsのディスクファイルや例外本文をTraceへimportせず、それらの既存policyを
 再マスクする機能ではない。取得/保存/表示故障はTrace品質として扱い、元例外を置き換えない。
+live読取後のJSON必須property欠損、file生成、supplement/sink故障もdiagnostics-failed品質と
+capture.failureへ記録する。故障の例外本文やpathはTraceへコピーしない。
 `GuaTraceCapture.Diagnostics(trace, step, IGuaContext)` はprofile未選択のためDebug限定。
 Player/remoteは認可済みgetterとprofileを明示するoverloadを使う。
 

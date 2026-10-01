@@ -27,7 +27,7 @@ public sealed class SemanticSnapshotOptions
     /// <summary>Optional capture of this explicit comparison, using only normalized in-memory data.</summary>
     public GuaTraceSession? Trace { get; init; }
     public string? TraceStepId { get; init; }
-    /// <summary>Caller-authorized profile of the supplied context/World getter. Does not project or elevate data.</summary>
+    /// <summary>The legacy comparison is Debug-only. Player attachment is rejected, including stored baselines.</summary>
     public GuaObservationProfile TraceProfile { get; init; } = GuaObservationProfile.Debug;
 }
 
@@ -112,12 +112,15 @@ public static class GuaSemanticSnapshots
         File.WriteAllText(System.IO.Path.Combine(artifact, "comparison.json"), JsonSerializer.Serialize(result, JsonOptions));
         if (options.Trace is { } trace)
             GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.semantic-comparison.v1", () =>
+            {
+                if (options.TraceProfile != GuaObservationProfile.Debug) throw new NotSupportedException();
                 // Do not import files or include machine paths. Snapshot masking rules have already run.
-                JsonSerializer.Serialize(new { result.Matched, result.BaselineUpdated, result.Reason, result.RunId,
+                return JsonSerializer.Serialize(new { result.Matched, result.BaselineUpdated, result.Reason, result.RunId,
                     differences = result.Differences.Select(d => new { d.Kind, d.Path,
                         expected = d.ExpectedJson is null ? null : JsonNode.Parse(d.ExpectedJson),
                         actual = d.ActualJson is null ? null : JsonNode.Parse(d.ActualJson) }),
-                    actual, expected }, JsonOptions), options.TraceProfile);
+                    actual, expected }, JsonOptions);
+            }, GuaObservationProfile.Debug);
         return result;
     }
 

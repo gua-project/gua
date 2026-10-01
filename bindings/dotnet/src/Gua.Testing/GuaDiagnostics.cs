@@ -17,7 +17,7 @@ public sealed class GuaDiagnosticOptions
     /// <summary>Optional Trace copy, captured before teardown. Existing diagnostics files retain their own policy.</summary>
     public GuaTraceSession? Trace { get; init; }
     public string? TraceStepId { get; init; }
-    /// <summary>Profile already authorized on this context; does not elevate host access.</summary>
+    /// <summary>Legacy diagnostics is Debug-only. Player Trace copies are rejected; use an explicit authorized getter instead.</summary>
     public GuaObservationProfile TraceProfile { get; init; } = GuaObservationProfile.Debug;
 }
 
@@ -63,6 +63,7 @@ public sealed class GuaDiagnosticsSession
                 catch (Exception error) { errors.Add(new("attachment", error.GetType().Name, error.Message)); }
             }
         }
+        if (errors.Count > 0) GuaDiagnosticWriter.RecordTraceFailure(_options);
         return new(primaryException, capture.ArtifactPath, files, errors);
     }
 
@@ -131,7 +132,9 @@ public static class GuaDiagnosticWriter
         if (options.Trace is { } trace)
         {
             // Both outputs describe this one read, not two potentially different live snapshots.
-            GuaTraceCapture.Diagnostics(trace, options.TraceStepId ?? "", () => diagnosticsJson, options.TraceProfile);
+            GuaTraceCapture.Diagnostics(trace, options.TraceStepId ?? "", () =>
+                options.TraceProfile == GuaObservationProfile.Debug ? diagnosticsJson : throw new NotSupportedException(),
+                GuaObservationProfile.Debug);
             GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
                 JsonSerializer.Serialize(new { version = context.GetVersion(), environment = options.Environment,
                     callerMetadata = options.CallerMetadata }, JsonOptions), options.TraceProfile);
@@ -179,13 +182,25 @@ public static class GuaDiagnosticWriter
                 }
             }
             if (errors.Count > 0)
+            {
+                RecordTraceFailure(options);
                 WriteNew(Path.Combine(directory, "capture-errors.json"), JsonSerializer.Serialize(errors, JsonOptions));
+            }
             return new GuaDiagnosticCapture(Path.GetFullPath(directory), errors.Count == 0 ? null : string.Join("; ", errors));
         }
         catch (Exception error)
         {
+            RecordTraceFailure(options);
             return new GuaDiagnosticCapture(null, $"{error.GetType().Name}: {error.Message}");
         }
+    }
+
+    internal static void RecordTraceFailure(GuaDiagnosticOptions options)
+    {
+        if (options.Trace is not { } trace) return;
+        trace.ObservationIssue("diagnostics-failed");
+        trace.Record(options.TraceStepId ?? "", "capture.failure",
+            GuaTraceJson.Element(new { channel = "diagnostics", reason = "diagnostics-failed" }));
     }
 
     private static string CreateUniqueDirectory(GuaDiagnosticOptions options)

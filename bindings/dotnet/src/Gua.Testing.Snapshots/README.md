@@ -77,8 +77,10 @@ and atomic replacement so concurrent readers see complete documents. Concurrent
 approval of the same test/variant is last-writer-wins; use distinct variants for
 different expected states. No artifacts or packages are automatically published.
 
-For an explicitly invoked comparison, set `Trace`, `TraceStepId`, and the already
-authorized `TraceProfile` to attach the normalized result to that step. Trace does
+For an explicitly invoked comparison, set `Trace` and `TraceStepId` to attach the
+normalized result to a Debug Trace. The legacy context getter and stored baseline
+do not prove a Player projection, so Player attachment is rejected even when
+`TraceProfile = Player` is supplied. The comparison itself remains unchanged. Trace does
 not run comparisons or approve baselines. The attachment omits absolute paths and
 uses the same masking rules before Trace redaction. Keep separate baseline variants
 for profiles/builds. Raw Trace UI/World observations retain geometry and frame data

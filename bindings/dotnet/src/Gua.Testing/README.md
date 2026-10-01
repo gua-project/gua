@@ -394,7 +394,9 @@ trace.EndStep(step, comparison.Matched ? GuaTraceOutcome.Passed : GuaTraceOutcom
 ```
 
 comparisonは `Gua.Testing.Snapshots`、Recordingは `Gua.Testing.Recording` の任意依存で、
-coreのTrace writerに逆依存を追加しない。Playerには認可済みcontext/getterとTraceProfileを
-明示し、profile/build別baselineを使う。既存diagnostics sessionは
-`GuaDiagnosticOptions.Trace/TraceStepId/TraceProfile` で同じStepへ接続できる。
+coreのTrace writerに逆依存を追加しない。既存比較とdiagnostics sessionの自動添付は
+未profile選択のgetterと保存baselineを扱うためDebug限定。`TraceProfile = Player` は
+データを投影しないのでPlayer Traceへの添付を拒否する。既存動作は維持する。
+Player diagnosticsは認可済みgetter/profileを明示する`GuaTraceCapture.Diagnostics` overloadを使う。
+既存diagnostics sessionは`GuaDiagnosticOptions.Trace/TraceStepId`でDebug Stepへ接続できる。
 Lintはreport添付のみ、比較は呼出側の明示呼出しだけで、TraceはScenario成否やReplayを決めない。

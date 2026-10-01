@@ -157,6 +157,69 @@ public sealed class TraceIntegrationTests
         Assert.That(observed, Is.SameAs(primary));
     }
 
+    [TestCase(GuaObservationProfile.Debug)]
+    [TestCase(GuaObservationProfile.Player)]
+    public async Task PlayerTraceRejectsLegacyDebugComparisonAndDiagnostics(GuaObservationProfile claimedProfile)
+    {
+        using var context = new GuaContext(); Publish(context, 0);
+        var baseline = GuaSemanticSnapshots.CompareSnapshot(context, "private", Snapshot(update: true));
+        Assert.That(File.ReadAllText(baseline.BaselinePath), Does.Contain("PRIVATE-MARKER"));
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, Profile = "player" });
+        var step = trace.Mark("Reject legacy Debug data");
+        var comparison = GuaSemanticSnapshots.CompareSnapshot(context, "private", new()
+        {
+            BaselineDirectory = Path.Combine(_root, "baselines"), ArtifactDirectory = Path.Combine(_root, "comparisons"),
+            Trace = trace, TraceStepId = step, TraceProfile = claimedProfile
+        });
+        Assert.That(comparison.Matched, Is.True, "Rejection must preserve explicit comparison behavior.");
+        var primary = new ApplicationException("PRIVATE-EXCEPTION");
+        var diagnostics = new GuaDiagnosticsSession(context, new()
+        {
+            TestName = "private", OutputDirectory = Path.Combine(_root, "legacy"),
+            Trace = trace, TraceStepId = step, TraceProfile = claimedProfile
+        }).Capture(primary);
+        Assert.That(diagnostics.Succeeded, Is.True); Assert.That(diagnostics.PrimaryException, Is.SameAs(primary));
+        await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Where(e => e.Type == "attachment").Select(e => e.Data.GetProperty("schema").GetString()),
+            Does.Not.Contain("gua.semantic-comparison.v1").And.Not.Contain("gua.diagnostics.v1"));
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("profile-mismatch"));
+        Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())), Does.Not.Contain("PRIVATE-MARKER").And.Not.Contain("PRIVATE-EXCEPTION"));
+    }
+
+    [TestCase("directory")]
+    [TestCase("missing-property")]
+    [TestCase("supplement")]
+    public async Task DownstreamDiagnosticsFaultsAreVisibleWithoutReplacingPrimary(string fault)
+    {
+        using var context = new GuaContext(); Publish(context, 0);
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root });
+        var step = trace.Mark("Downstream fault");
+        Directory.CreateDirectory(_root);
+        var blocked = Path.Combine(_root, "blocked"); File.WriteAllText(blocked, "actual filesystem fault");
+        var primary = new ApplicationException("PRIVATE-EXCEPTION");
+        bool supplementFired = false;
+        var source = new SingleReadDiagnostics(context, fault == "missing-property" ? () => "{}" : null);
+        var result = new GuaDiagnosticsSession(source, new()
+        {
+            TestName = "fault", OutputDirectory = fault == "directory" ? blocked : Path.Combine(_root, "legacy"),
+            Trace = trace, TraceStepId = step,
+            TextArtifacts = fault == "supplement" ? new Dictionary<string, Func<string>>
+                { ["supplement.txt"] = () => { supplementFired = true; throw new IOException("PRIVATE-FAULT"); } } : new()
+        }).Capture(primary);
+        Assert.That(source.Reads, Is.EqualTo(1)); Assert.That(result.PrimaryException, Is.SameAs(primary));
+        Assert.That(result.CaptureErrors, Is.Not.Empty, "The downstream fault must actually fire.");
+        Assert.That(result.Succeeded, Is.EqualTo(fault == "supplement"));
+        Assert.That(supplementFired, Is.EqualTo(fault == "supplement"));
+        await trace.CompleteAsync(GuaTraceOutcome.Failed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("failed"));
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("diagnostics-failed"));
+        Assert.That(read.Events.Any(e => e.Type == "capture.failure" && e.Data.GetProperty("reason").GetString() == "diagnostics-failed"), Is.True);
+        Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())) + string.Join("", read.Events.Select(e => e.Data.GetRawText())),
+            Does.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain("PRIVATE-FAULT"));
+    }
+
     [Test]
     public async Task ExistingDiagnosticsSessionCapturesBeforeTeardownWithoutImportingFiles()
     {
@@ -228,10 +291,10 @@ public sealed class TraceIntegrationTests
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-failed"));
     }
 
-    private sealed class SingleReadDiagnostics(GuaContext context) : IGuaContext
+    private sealed class SingleReadDiagnostics(GuaContext context, Func<string>? payload = null) : IGuaContext
     {
         public int Reads;
-        public string GetDiagnosticsJson() => ++Reads == 1 ? context.GetDiagnosticsJson() : throw new IOException("second live read fired");
+        public string GetDiagnosticsJson() => ++Reads == 1 ? payload?.Invoke() ?? context.GetDiagnosticsJson() : throw new IOException("second live read fired");
         public GuaVersion GetVersion() => context.GetVersion();
         public string GetUiTreeJson() => context.GetUiTreeJson();
         public GuaNodeState GetNodeState(string id) => context.GetNodeState(id);
