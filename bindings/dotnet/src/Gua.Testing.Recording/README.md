@@ -59,3 +59,15 @@ payload forced synthetic sequence-based timing. Use `FromDiagnostics` only when
 that import metadata is not needed.
 
 Recording version 1 follows `protocol/schema/recording.schema.json`.
+# Trace integration
+
+`GuaRecordingTrace.Attach(trace, stepId, recorder.Recording, profile)` validates and
+attaches an explicitly created recording. Save/Load and replay behavior are unchanged.
+The attachment uses `gua.trace.recording.v1` (`trace-recording.schema.json`): a
+versioned envelope around an opaque redacted `recording` object. It is not a Recording
+file and must not be loaded with the Recording parser.
+Sensitive steps are masked in Trace; safe secret references and decimal-string request
+IDs are kept in a separate `gua.recording.references.v1` attachment. Correlation uses
+the related Trace step's confirmed source/epoch, never a guessed Recording epoch.
+Trace attachments are evidence, not a guarantee of replayability. Rejected, timed-out,
+and interrupted operations remain Trace events without fabricated Recording steps.

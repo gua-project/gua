@@ -12,8 +12,8 @@ Trace は操作と観測の事実を保存する。Goal、条件の時間的採�
 `protocol/schema/trace.schema.json` を envelope の契約とする。
 一つの生成済み `traceId` ディレクトリに `manifest.json`、`events.jsonl`、
 `snapshots/<sha256>.json`、`attachments/<sha256>.json` を置く。
-Recording は `gua.recording.v1` 等の schema を持つ添付として元形式のまま
-保存できる。Trace は Recording の再生可能性を保証しない。
+Recordingは別Save/Load形式を維持する。Trace添付は`gua.trace.recording.v1`のredacted envelopeで、
+元Recordingのparserへ渡さない。Traceは再生可能性を保証しない。
 
 schemaVersion は 1。未知の major version は reader が拒否する。
 同じ version の未知の追加フィールド・event type・添付 schema・注釈 namespace は
@@ -305,7 +305,65 @@ unconfirmed として扱い、completion が返した epoch でのみ確定相�
 | #125 T-03 | Snapshot/観測の分離、Observeの実native/実WebSocket購読、Value/カタログ、中間Change、欠損、独立UI/World読取 | ゲーム内部の未公開変化、失われた履歴の復元は保証対象外。各Runnerが取得契機を明示する |
 | #126 T-04 | 外部 Runner API、共通 Value、未知注釈/添付、評価/主結果/cleanup分離、native/Observe横断fixture、framework-free配布consumer | 任意の外部Runnerの採点・非公開情報の自動判別・ゲーム画面のE2Eは保証対象外 |
 | #127 T-05 | 共通 React、静的 HTML、timeline/状態/JSON/区間差分、caller-authorized PNGとbounds overlay、全端点・欠損表示、版固定資産/schema配布 | 同時pixel/snapshot取得とpixel秘密判別はcaller責務。ゲーム操作・Replay・外部添付fetchは対象外 |
-| #128 T-06 | diagnostics 添付、既存形式の汎用添付 | #106/#108 の Lint/comparison 実接続、全機能統合試験 |
+| #128 T-06 | 明示Lint report、明示baseline comparison、既存diagnostics session、Recordingの実API接続とnative/Observe統合fixture | 実ゲーム/利用側RunnerのE2E、pixel秘密判別は保証対象外。実行証拠はtrace-validation.md |
+
+## T-06 既存機能の明示接続（#128）
+
+`GuaTraceCapture.Lint(trace, step, report)` は明示実行済みの
+`GuaSemanticLinter.Analyze` のreportを `gua.semantic-lint.v1` 添付にする。
+実行や採点は行わず、reportのprofileとTraceのprofileが違えば保存しない。
+
+`SemanticSnapshotOptions.Trace/TraceStepId/TraceProfile` は呼出側が実行した
+`CompareSnapshot/ExpectSnapshot` の結果を `gua.semantic-comparison.v1` にする。
+既存getterと保存baselineのPlayer投影を証明できないため、この自動添付はDebug限定。
+`TraceProfile = Player`でもPlayer TraceへDebugのactual/expectedを添付しない。
+添付拒否は明示比較/baseline更新の既存動作を変えず、品質へ残す。
+matched/baselineUpdated/reason/runId、rules適用済みexpected/actual/differencesを保存する。
+比較artifactやbaselineの絶対pathは含めず、任意ファイルを読み込まない。
+Traceがなくても既存の結果・例外・artifact・明示更新の契約は同じである。
+Traceを指定しても `UpdateBaselines` / 明示環境変数を変更しない。
+runtime metadata/geometryの比較除外は比較添付だけに適用し、Tree/Observeからは削除しない。
+TraceProfileは既に認可された取得元のprofileで、DebugからPlayerへの変換機能ではない。
+context/World getterの認可、profile/build別のBaselineVariantとmask rulesは呼出側の責務。
+
+`GuaRecordingTrace.Attach` は `GuaRecordingFile.Validate` 済みRecordingを
+`gua.trace.recording.v1` 添付にし、元のRecording Save/Load形式を変更しない。
+`trace-recording.schema.json`のschemaVersion=1/recording envelopeを使う。recording内は
+redaction済みのopaque JSONで、敏感Stepの`{redacted:true}`も含む。元Recording parserで読み込まない。
+Trace側のwhole-object redactionによりsensitive stepは伏せられる。
+`gua.recording.references.v1` は元stepのindex、十進文字列requestId/eventIdと安全なsecretKey参照を
+別に保持する。source/epochは関連Trace Stepの実測要求相関を使い、RecordingのrequestIdだけから
+別接続/epochへ推定相関しない。Traceの伏せられたRecording添付はReplay可能と称さない。
+secretKey自体に秘密を使わず、必要ならSecretsへ登録する。拒否/Timeout/中断は通常の
+Trace Eventへ残し、Recordingの成功stepを捏造しない。
+
+`GuaDiagnosticOptions.Trace/TraceStepId/TraceProfile` を指定すると既存の
+`GuaDiagnosticsSession` / Writerはcontext解放前に公開diagnosticsを同じStepへ保存する。
+未profile選択の既存getterを使う自動添付はDebug限定。Playerは下記の認可済みgetter
+overloadを使う。ラベルだけでDebug payloadをPlayerとして保存しない。
+logs/pendingRequests/environment等を保ち、Screenshotは常に取り除く。
+元payloadを全`diagnostics.schema.json`（version/UI/logs等の参照を含む）で先にvalidateする。
+既存`gua.diagnostics.v1`は互換性を保つTrace projectionで、`trace-diagnostics.schema.json`を契約にする。
+Screenshot省略とnested redactionを許し、元runtime diagnostics形式とは区別する。
+version、呼出側environment/callerMetadataは `gua.environment.v1` の別添付にする。
+このlegacy自動コピーもDebug限定。Playerへ既存environment/callerMetadataをラベルだけで移さず、
+明示的に認可済みdataを渡す`GuaTraceCapture.Environment` APIを使う。
+`gua.environment.v1`共通fieldはcamelCaseのversion/environment（自動Debugコピーには任意callerMetadata）。
+両APIは同じTrace serializerを使う。既存version.jsonのPascalCaseは変更しない。
+既存diagnosticsのディスクファイルや例外本文をTraceへimportせず、それらの既存policyを
+再マスクする機能ではない。取得/保存/表示故障はTrace品質として扱い、元例外を置き換えない。
+live読取後のJSON必須property欠損、file生成、supplement/sink故障もdiagnostics-failed品質と
+capture.failureへ記録する。故障の例外本文やpathはTraceへコピーしない。
+`GuaTraceCapture.Diagnostics(trace, step, IGuaContext)` はprofile未選択のためDebug限定。
+Player/remoteは認可済みgetterとprofileを明示するoverloadを使う。
+
+`JsonAttachment` はprofile不一致をgetter実行前に拒否する。失敗はfalseとcapture.failure、
+attachment-failed/attachment-unavailable/profile-mismatch等の品質issueを残し、
+大きなpayloadのlimit停止後も小さなterminal failure eventは通常の予算内で記録を試みる。
+queue/artifactが満杯なら追加eventを保証せず、最大64品質issue内の
+`capture-failure:<retained stepId>:<channel>:<reason>`へ相関を残す。容量上限を緩めない。
+主結果PassedでもOnFailureで破棄しない。JSON redactionは保持/hash前、Screenshotのpixel認可は
+別APIのまま。汎用添付schemaや未知recordはViewerが安全なtextとして表示する。
 
 Gua は Gua Playtest に依存しない。Observe 本体、InputAction metadata、Replay 時間制御は
 この変更では実装しない。未提供の依存 API を仮実装して完了扱いにはしない。

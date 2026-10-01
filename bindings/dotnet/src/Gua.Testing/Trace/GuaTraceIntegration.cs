@@ -165,22 +165,41 @@ public static partial class GuaTraceCapture
 
     /// <summary>Reads only diagnostics exposed by the supplied context. Screenshots are deliberately omitted.</summary>
     public static bool Diagnostics(GuaTraceSession trace, string stepId, IGuaContext context)
+        // This interface cannot select or confirm a Player profile. Use an authorized getter for Player.
+        => Diagnostics(trace, stepId, context.GetDiagnosticsJson, GuaObservationProfile.Debug);
+
+    /// <summary>The caller must authorize the getter's profile. Capture before releasing the context.
+    /// Screenshot pixels are omitted even when present in diagnostics.</summary>
+    public static bool Diagnostics(GuaTraceSession trace, string stepId, Func<string> getter,
+        GuaObservationProfile profile)
+        => JsonAttachment(trace, stepId, "gua.diagnostics.v1", () => PrepareDiagnosticsJson(getter()), profile);
+
+    private static readonly Lazy<(JsonSchema Schema, EvaluationOptions Options)> DiagnosticsContract = new(() =>
     {
-        try
+        var options = new EvaluationOptions();
+        options.SchemaRegistry.Register(UiSchema.Value);
+        JsonSchema? diagnostics = null;
+        foreach (var name in new[] { "version", "logs", "screenshot", "trace-lifecycle", "diagnostics" })
         {
-            using var doc = JsonDocument.Parse(context.GetDiagnosticsJson());
-            // Screenshot pixels have a separate policy and cannot inherit semantic sensitive markers.
-            using var buffer = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(buffer))
-            {
-                writer.WriteStartObject();
-                foreach (var property in doc.RootElement.EnumerateObject())
-                    if (property.Name != "screenshot") property.WriteTo(writer);
-                writer.WriteEndObject();
-            }
-            using var safe = JsonDocument.Parse(buffer.ToArray());
-            return trace.Attach(stepId, "gua.diagnostics.v1", safe.RootElement);
+            var schema = LoadSchema(name); options.SchemaRegistry.Register(schema); diagnostics = schema;
         }
-        catch { trace.Record(stepId, "capture.failure", GuaTraceJson.Element(new { channel = "diagnostics", reason = "unavailable" })); return false; }
+        return (diagnostics!, options);
+    });
+
+    internal static string PrepareDiagnosticsJson(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var contract = DiagnosticsContract.Value;
+        if (!contract.Schema.Evaluate(doc.RootElement, contract.Options).IsValid) throw new JsonException();
+        // Screenshot pixels have a separate policy and cannot inherit semantic sensitive markers.
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var property in doc.RootElement.EnumerateObject())
+                if (property.Name != "screenshot") property.WriteTo(writer);
+            writer.WriteEndObject();
+        }
+        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
     }
 }

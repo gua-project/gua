@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/trace-recording.schema.json",
+  "title": "gua.trace.recording.v1 redacted Recording envelope",
+  "description": "Recording is validated before projection. The recording object is an opaque Trace-redacted representation, including redacted step placeholders. It cannot be loaded or replayed as a Recording file. Safe references are a separate attachment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "recording"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "recording": { "type": "object" }
+  }
+}

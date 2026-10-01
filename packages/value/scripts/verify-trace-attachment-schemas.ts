@@ -1,0 +1,14 @@
+import Ajv from "ajv/dist/2020.js";
+import { resolve } from "node:path";
+import diagnostics from "../../../protocol/schema/trace-diagnostics.schema.json";
+import recording from "../../../protocol/schema/trace-recording.schema.json";
+import originalRecording from "../../../protocol/schema/recording.schema.json";
+const root = resolve(process.argv[2] ?? "artifacts/integration-browser/schema");
+const ajv = new Ajv({ strict: false });
+const diag = ajv.compile(diagnostics), rec = ajv.compile(recording), original = ajv.compile(originalRecording);
+const diagData = await Bun.file(resolve(root, "diagnostics.json")).json();
+const recData = await Bun.file(resolve(root, "recording.json")).json();
+if (!diag(diagData)) throw new Error("Real diagnostics projection invalid: " + JSON.stringify(diag.errors));
+if (!rec(recData)) throw new Error("Real redacted recording envelope invalid: " + JSON.stringify(rec.errors));
+if (original(recData.recording)) throw new Error("Sensitive Trace recording must not masquerade as original Recording format");
+console.log(JSON.stringify({ realDiagnosticsProjection: true, realRedactedRecordingEnvelope: true, originalRecordingRejected: true }));
