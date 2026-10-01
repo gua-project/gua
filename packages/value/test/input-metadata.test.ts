@@ -152,6 +152,34 @@ test("v2 JSON text enforces raw example byte boundaries on both discovery paths"
   }
 });
 
+test("v2 discovery enforces the complete descriptor schema while legacy parsing stays unchanged", async () => {
+  const invalidActions = [
+    { ...vector, id: "Move!" }, { ...vector, risk: "not-a-risk" }, { ...vector, unknown: true },
+    { ...vector, valueType: { toString: () => "vector2" }, valueSchema: undefined, examples: undefined },
+    { ...vector, category: "bad category" }, { ...vector, category: "a".repeat(128) },
+    { ...vector, aliases: ["same", "same"] }, { ...vector, tags: ["same", "same"] },
+    { ...vector, aliases: Array.from({ length: 17 }, (_, i) => `alias${i}`) },
+    { ...vector, tags: ["x".repeat(65)] }, { ...vector, aliases: ["nul\0alias"] },
+    { ...vector, bindings: [""] }, { ...vector, range: { minimum: -1, maximum: 1, unknown: true } },
+  ];
+  for (const search of [false, true]) {
+    for (const action of invalidActions) {
+      const document = { ...map, actions: [action], ...(search ? { count: 1, truncated: false } : {}) };
+      expect(ajv.getSchema(search ? searchSchema.$id : mapSchema.$id)!(document)).toBe(false);
+      const bridge = createGuaInPageBridge({ invoke: async () => document }, { gameInput: true });
+      await expect(search ? bridge.findGameInputActionsV2!({}) : bridge.getGameInputActionsV2!()).rejects.toMatchObject({ code: "invalid_request" });
+    }
+    const invalidRoot = { ...map, unknown: true, ...(search ? { count: 1, truncated: false } : {}) };
+    const bridge = createGuaInPageBridge({ invoke: async () => invalidRoot }, { gameInput: true });
+    await expect(search ? bridge.findGameInputActionsV2!({}) : bridge.getGameInputActionsV2!()).rejects.toMatchObject({ code: "invalid_request" });
+    const { valueSchema: _, examples: __, ...legacyAction } = vector;
+    const old = { ...map, schemaVersion: 1, actions: [{ ...legacyAction, id: "Move!", risk: "old-custom-risk", unknown: true }],
+      ...(search ? { count: 1, truncated: false } : {}) };
+    const legacyBridge = createGuaInPageBridge({ invoke: async () => old }, { gameInput: true });
+    await expect(search ? legacyBridge.findGameInputActions!({}) : legacyBridge.getGameInputActions!()).resolves.toEqual(old);
+  }
+});
+
 test("v2 JSON text rejects duplicate decoded keys in schemas, examples and map envelopes", async () => {
   for (const search of [false, true]) {
     const document = { ...map, ...(search ? { count: 1, truncated: false } : {}) };

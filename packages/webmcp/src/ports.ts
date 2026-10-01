@@ -405,7 +405,8 @@ function parseGameInputActions(value: unknown, version = 1): GuaGameInputActionM
   if (!record || record.schemaVersion !== version || !Number.isInteger(record.sessionEpoch) || (record.sessionEpoch as number) < 1 ||
       !Number.isInteger(record.revision) || (record.revision as number) < 0 || !isNonEmptyString(record.context) ||
       !Array.isArray(record.actions) || !record.actions.every(isGameInputAction) ||
-      !record.actions.every(action => version === 2 ? validInputActionMetadata(action as Record<string, unknown>) :
+      (version === 2 && Object.keys(record).some(key => !gameInputMapV2Properties.has(key))) ||
+      !record.actions.every(action => version === 2 ? isGameInputActionV2(action) :
         !("valueSchema" in action) && !("examples" in action))) {
     throw new GuaWebError("invalid_request", "The engine returned an invalid game input action map.");
   }
@@ -419,10 +420,32 @@ function parseGameInputActionSearch(value: unknown, version = 1): GuaGameInputAc
       !Number.isInteger(record.revision) || (record.revision as number) < 0 || !isNonEmptyString(record.context) ||
       !Number.isInteger(record.count) || (record.count as number) < 0 || typeof record.truncated !== "boolean" ||
       !Array.isArray(record.actions) || record.count !== record.actions.length || !record.actions.every(isGameInputAction) ||
-      !record.actions.every(action => version === 2 ? validInputActionMetadata(action as Record<string, unknown>) :
+      (version === 2 && Object.keys(record).some(key => !gameInputSearchV2Properties.has(key))) ||
+      !record.actions.every(action => version === 2 ? isGameInputActionV2(action) :
         !("valueSchema" in action) && !("examples" in action)))
     throw new GuaWebError("invalid_request", "The engine returned an invalid game input action search result.");
   return parsed as GuaGameInputActionSearchResult;
+}
+
+const gameInputMapV2Properties = new Set(["schemaVersion", "sessionEpoch", "revision", "context", "actions"]);
+const gameInputSearchV2Properties = new Set([...gameInputMapV2Properties, "count", "truncated"]);
+const gameInputActionV2Properties = new Set([
+  "id", "description", "valueType", "range", "holdable", "active", "bindings", "risk", "requiresConfirmation",
+  "category", "aliases", "tags", "agentExposure", "valueSchema", "examples",
+]);
+const gameInputIdentifier = /^[a-z][a-z0-9_.-]*$/;
+function isGameInputActionV2(value: unknown): boolean {
+  const action = asRecord(value);
+  if (!action || !isGameInputAction(action) || Object.keys(action).some(key => !gameInputActionV2Properties.has(key)) ||
+      typeof action.valueType !== "string" ||
+      !gameInputIdentifier.test(action.id as string) || !["safe", "caution", "dangerous"].includes(action.risk as string)) return false;
+  if (action.category !== undefined && (!gameInputIdentifier.test(action.category as string) || (action.category as string).length > 127)) return false;
+  for (const field of ["aliases", "tags"]) {
+    const entries = action[field] as string[] | undefined;
+    if (entries && (entries.length > 16 || new Set(entries).size !== entries.length ||
+        entries.some(entry => [...entry].length > 64 || entry.includes("\0")))) return false;
+  }
+  return validInputActionMetadata(action);
 }
 
 function isGameInputAction(value: unknown): boolean {

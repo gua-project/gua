@@ -100,6 +100,7 @@ public sealed partial class GuaRuntime
 {
     private unsafe delegate int CopyGameInputJsonDelegate(byte* output, int size);
     private Action? gameInputShutdown;
+    private bool? metadataRegistrationSupported;
 
     public void EnableGameInput(GuaGameInputCapabilities capabilities, Action shutdown,
         GuaGameInputCapabilities playerCapabilities = GuaGameInputCapabilities.None)
@@ -152,9 +153,22 @@ public sealed partial class GuaRuntime
                         Tags = tagArray, TagCount = (uint)tags.Length, AgentExposure = (int)action.AgentExposure };
                     var extended = new Native.GameInputActionV3 { StructSize = (uint)Marshal.SizeOf<Native.GameInputActionV3>(),
                         Base = native, ValueSchemaJson = pointers[5], ExamplesJson = pointers[6] };
-                    var registered = action.ValueSchemaJson is null && action.ExamplesJson is null
-                        ? Native.gua_runtime_register_game_input_action_v2(_handle, in native)
-                        : Native.gua_runtime_register_game_input_action_v3(_handle, in extended);
+                    int registered;
+                    if (metadataRegistrationSupported != false && (action.ValueSchemaJson is not null || action.ExamplesJson is not null))
+                    {
+                        // Version capabilities depend on enabled input profiles, so
+                        // probe the ABI itself even before input is enabled. Only a
+                        // missing entry point selects the legacy registration path.
+                        try {
+                            registered = Native.gua_runtime_register_game_input_action_v3(_handle, in extended);
+                            metadataRegistrationSupported = true;
+                        }
+                        catch (EntryPointNotFoundException) {
+                            metadataRegistrationSupported = false;
+                            registered = Native.gua_runtime_register_game_input_action_v2(_handle, in native);
+                        }
+                    }
+                    else registered = Native.gua_runtime_register_game_input_action_v2(_handle, in native);
                     if (registered == 0)
                         throw new ArgumentException($"Invalid game input action '{action.Id}'.", nameof(actions));
                 }

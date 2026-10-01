@@ -34,6 +34,13 @@ through descriptor v2. New clients on old native libraries must use the old
 paths unless the capability is present; calling new ABI symbols requires the
 matching new native library. No release/package version is advanced here.
 
+.NET/Unity registration probes the descriptor-v3 entry point independently of
+enabled input capabilities. If the loaded native library lacks that entry point,
+registration uses descriptor v2 and omits metadata; the old host does not validate
+the omitted declarations or advertise metadata discovery. A caller requiring
+metadata validation must require a capable native host. Invalid declarations on
+a native library supporting v3 are rejected and never retried through v2.
+
 ## Supported dialect and declaration consistency
 
 `valueSchema` is a bounded JSON Schema draft 2020-12 subset. It is optional, and

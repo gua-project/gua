@@ -22,6 +22,19 @@ public sealed class InputMetadataTests
     }
 
     [Test]
+    public void RegistrationDetectsMetadataAbiBeforeSemanticInputIsEnabled()
+    {
+        using var runtime = new GuaRuntime();
+        Assert.That(GuaVersion.Parse(runtime.GetVersionJson()).Capabilities, Does.Not.Contain("semantic_game_input_metadata_v1"));
+        runtime.PublishGameInputActions("play", [Move]);
+        Assert.Throws<ArgumentException>(() => runtime.PublishGameInputActions("bad", [Move with { ValueSchemaJson = "{\"type\":\"number\"}" }]));
+        runtime.EnableGameInput(GuaGameInputCapabilities.Semantic, () => {}, GuaGameInputCapabilities.Semantic);
+        var result = runtime.FindGameInputActionsV2(new(Id: "move"));
+        Assert.That(result.Actions[0].ValueSchema, Is.Not.Null);
+        Assert.That(result.Actions[0].Examples![0].GetProperty("x").GetDouble(), Is.EqualTo(0.5));
+    }
+
+    [Test]
     public void MetadataRoundTripsOnlyOnExplicitV2CallsAndOldRecordSignaturesSurvive()
     {
         using var runtime = Runtime();
