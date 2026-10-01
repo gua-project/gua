@@ -155,6 +155,8 @@ test("v2 JSON text enforces raw example byte boundaries on both discovery paths"
 test("v2 discovery enforces the complete descriptor schema while legacy parsing stays unchanged", async () => {
   const invalidActions = [
     { ...vector, id: "Move!" }, { ...vector, risk: "not-a-risk" }, { ...vector, unknown: true },
+    { ...vector, id: "a".repeat(128) },
+    { ...vector, aliases: ["\ud800"] }, { ...vector, tags: ["\udfff"] },
     { ...vector, valueType: { toString: () => "vector2" }, valueSchema: undefined, examples: undefined },
     { ...vector, category: "bad category" }, { ...vector, category: "a".repeat(128) },
     { ...vector, aliases: ["same", "same"] }, { ...vector, tags: ["same", "same"] },
@@ -172,6 +174,10 @@ test("v2 discovery enforces the complete descriptor schema while legacy parsing 
     const invalidRoot = { ...map, unknown: true, ...(search ? { count: 1, truncated: false } : {}) };
     const bridge = createGuaInPageBridge({ invoke: async () => invalidRoot }, { gameInput: true });
     await expect(search ? bridge.findGameInputActionsV2!({}) : bridge.getGameInputActionsV2!()).rejects.toMatchObject({ code: "invalid_request" });
+    const boundary = { ...map, actions: [{ ...vector, id: "a".repeat(127) }], ...(search ? { count: 1, truncated: false } : {}) };
+    expect(ajv.getSchema(search ? searchSchema.$id : mapSchema.$id)!(boundary)).toBe(true);
+    const boundaryBridge = createGuaInPageBridge({ invoke: async () => boundary }, { gameInput: true });
+    await expect(search ? boundaryBridge.findGameInputActionsV2!({}) : boundaryBridge.getGameInputActionsV2!()).resolves.toEqual(boundary);
     const { valueSchema: _, examples: __, ...legacyAction } = vector;
     const old = { ...map, schemaVersion: 1, actions: [{ ...legacyAction, id: "Move!", risk: "old-custom-risk", unknown: true }],
       ...(search ? { count: 1, truncated: false } : {}) };

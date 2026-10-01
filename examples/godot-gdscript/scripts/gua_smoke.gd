@@ -27,6 +27,9 @@ func _input(event: InputEvent) -> void:
 
 
 func _run() -> void:
+	if not _test_input_metadata_precision():
+		_fail("Game input metadata precision was not preserved.")
+		return
 	var screen := Control.new()
 	smoke_root = screen
 	screen.name = "screen"
@@ -950,6 +953,37 @@ func _find_world_object(tree: Dictionary, id: String) -> Variant:
 		if object.get("id", "") == id:
 			return object
 	return null
+
+
+func _test_input_metadata_precision() -> bool:
+	var extension: Resource = load("res://addons/gua/gua.gdextension")
+	if extension == null or not ClassDB.can_instantiate("GuaContext"):
+		return false
+	var context: Variant = ClassDB.instantiate("GuaContext")
+	context.enable_game_input_adapter(1, 1)
+	var precise := 0.1234567890123456
+	if not context.publish_game_input_actions("precision", [{
+		"id": "axis", "description": "Precision fixture", "value_type": "axis1d", "holdable": true,
+		"value_schema": {"type": "number", "minimum": precise, "maximum": precise}, "examples": [precise]
+	}]):
+		return false
+	for text in [context.get_game_input_actions_json_v2(1), context.find_game_input_actions_json_v2({"id": "axis"}, 1)]:
+		var document: Variant = JSON.parse_string(text)
+		if not document is Dictionary or document.get("actions", []).size() != 1:
+			return false
+		var action: Dictionary = document["actions"][0]
+		if action.get("valueSchema", {}).get("minimum") != precise or action.get("valueSchema", {}).get("maximum") != precise:
+			return false
+		if action.get("examples", []).size() != 1 or action["examples"][0] != precise:
+			return false
+	print("Gua metadata discovery precision passed.")
+	var owner: int = context.create_game_input_owner()
+	var result: Dictionary = context.enqueue_game_input({"owner_id": owner, "kind": 1, "operation": 2, "target": "axis", "value": precise, "observation_profile": 1})
+	context.release_game_input_owner(owner)
+	if result.get("error_code", -1) != 0:
+		return false
+	print("Gua metadata Set precision passed.")
+	return true
 
 
 func _fail(message: String) -> void:

@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Gua.Core;
@@ -117,6 +118,67 @@ public sealed class InputMetadataTests
         Assert.That(runtime.GetGameInputActionsJsonV2(GuaObservationProfile.Player), Does.Not.Contain("secret-marker"));
         runtime.SetObservationProfile(GuaObservationProfile.Player);
         Assert.Throws<InvalidOperationException>(() => runtime.GetGameInputActionsJsonV2(GuaObservationProfile.Debug));
+    }
+
+    [Test]
+    public async Task V2WebSocketDiscoveryReportsAuthoritativeRevocationAsUnsupported()
+    {
+        var libraryDirectory = Environment.GetEnvironmentVariable("GUA_RUNTIME_NATIVE_DIR")
+            ?? Environment.GetEnvironmentVariable("GUA_NATIVE_DIR")
+            ?? throw new InvalidOperationException("Native build directory is required for the bridge fixture.");
+        string? fixture = null;
+        var directory = new DirectoryInfo(Path.GetFullPath(libraryDirectory));
+        for (var level = 0; level < 4 && directory is not null && fixture is null; level++, directory = directory.Parent) {
+            foreach (var configuration in new[] { "", "Debug", "Release" }) {
+                var candidate = Path.Combine(directory.FullName, "gua-ws-bridge", configuration,
+                    OperatingSystem.IsWindows() ? "gua-ws-bridge-tests.exe" : "gua-ws-bridge-tests");
+                if (File.Exists(candidate)) { fixture = candidate; break; }
+            }
+        }
+        Assert.That(fixture, Is.Not.Null, "The native bridge regression fixture must be built.");
+        var start = new ProcessStartInfo(fixture!) { UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardInput = true, RedirectStandardError = true };
+        start.ArgumentList.Add("--metadata-revocation-fixture");
+        using var process = Process.Start(start)!;
+        try {
+            using var startupDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            string? line;
+            do {
+                line = await process.StandardError.ReadLineAsync(startupDeadline.Token);
+                Assert.That(line, Is.Not.Null, "The bridge fixture exited before reporting its port.");
+            } while (!line!.StartsWith("GUA_REVOCATION_PORT=", StringComparison.Ordinal));
+            var port = int.Parse(line["GUA_REVOCATION_PORT=".Length..]);
+            using var socket = new ClientWebSocket();
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}"), deadline.Token);
+            foreach (var (id, type, error) in new[] { (11, "get_game_input_actions_v2", "unsupported"),
+                (12, "find_game_input_actions_v2", "unsupported"), (13, "find_game_input_actions_v2", "invalid game input selector") }) {
+                var request = id == 13 ? JsonSerializer.Serialize(new { id, type, limit = 0 }) : JsonSerializer.Serialize(new { id, type });
+                await socket.SendAsync(Encoding.UTF8.GetBytes(request), WebSocketMessageType.Text, true, deadline.Token);
+                while (true) {
+                    using var bytes = new MemoryStream();
+                    var buffer = new byte[4096];
+                    WebSocketReceiveResult received;
+                    do {
+                        received = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), deadline.Token);
+                        Assert.That(received.MessageType, Is.EqualTo(WebSocketMessageType.Text));
+                        bytes.Write(buffer, 0, received.Count);
+                        Assert.That(bytes.Length, Is.LessThan(65536));
+                    } while (!received.EndOfMessage);
+                    using var message = JsonDocument.Parse(bytes.ToArray());
+                    if (!message.RootElement.TryGetProperty("id", out var correlation) || correlation.GetInt32() != id) continue;
+                    Assert.That(message.RootElement.GetProperty("ok").GetBoolean(), Is.False);
+                    Assert.That(message.RootElement.GetProperty("error").GetString(), Is.EqualTo(error));
+                    break;
+                }
+            }
+        }
+        finally {
+            process.StandardInput.Close();
+            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(3)); }
+            catch (TimeoutException) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); }
+        }
+        Assert.That(process.ExitCode, Is.Zero);
     }
 
     [Test]

@@ -743,8 +743,8 @@ bool GuaContext::publish_game_input_actions(const String& input_context, const A
             category.is_empty() ? nullptr : category_utf8.get_data(), alias_pointers.empty() ? nullptr : alias_pointers.data(),
             static_cast<uint32_t>(alias_pointers.size()), tag_pointers.empty() ? nullptr : tag_pointers.data(),
             static_cast<uint32_t>(tag_pointers.size()), exposure == "private" ? GUA_AGENT_EXPOSURE_PRIVATE : GUA_AGENT_EXPOSURE_AUTO };
-        const String schema = source.has("value_schema") ? JSON::stringify(source["value_schema"]) : String();
-        const String examples = source.has("examples") ? JSON::stringify(source["examples"]) : String();
+        const String schema = source.has("value_schema") ? JSON::stringify(source["value_schema"], String(), true, true) : String();
+        const String examples = source.has("examples") ? JSON::stringify(source["examples"], String(), true, true) : String();
         const CharString schema_utf8 = schema.utf8(), examples_utf8 = examples.utf8();
         const gua_game_input_action_descriptor_v3_t extended { sizeof(extended), descriptor,
             source.has("value_schema") ? schema_utf8.get_data() : nullptr, source.has("examples") ? examples_utf8.get_data() : nullptr };
@@ -849,7 +849,7 @@ bool GuaContext::release_game_input_owner(uint64_t owner_id)
 Dictionary GuaContext::enqueue_game_input(const Dictionary& source)
 {
     const String target = source.get("target", String());
-    const String value_json = JSON::stringify(source.get("value", Variant()));
+    const String value_json = JSON::stringify(source.get("value", Variant()), String(), true, true);
     const CharString target_utf8 = target.utf8(), value_utf8 = value_json.utf8();
     const gua_game_input_request_descriptor_v2_t descriptor {
         sizeof(gua_game_input_request_descriptor_v2_t),

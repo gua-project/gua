@@ -51,7 +51,8 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_.-]*$"
+          "pattern": "^[a-z][a-z0-9_.-]*$",
+          "maxLength": 127
         },
         "description": {
           "type": "string"
@@ -116,7 +117,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
-            "pattern": "^[^\\u0000]+$"
+            "pattern": "^[^\\u0000\\uD800-\\uDFFF]+$"
           }
         },
         "tags": {
@@ -127,7 +128,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
-            "pattern": "^[^\\u0000]+$"
+            "pattern": "^[^\\u0000\\uD800-\\uDFFF]+$"
           }
         },
         "agentExposure": {

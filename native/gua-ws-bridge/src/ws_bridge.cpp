@@ -1446,7 +1446,7 @@ private:
                 if (!handlers_.query_game_input_actions_json_v2 || !handlers_.game_input_supported || !handlers_.game_input_supported(1U))
                     return error_response(command.id, "unsupported");
                 const auto result = handlers_.query_game_input_actions_json_v2(command.game_input_selector);
-                return result.empty() ? error_response(command.id, "invalid game input selector") : ok_response(command.id, result);
+                return result.empty() ? error_response(command.id, "unsupported") : ok_response(command.id, result);
             }
             if (command.type == "get_game_input_state") {
                 return game_input_owner_id != 0 && handlers_.get_game_input_state_json

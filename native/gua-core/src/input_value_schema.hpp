@@ -94,7 +94,8 @@ inline bool validate_value(std::string_view value, int type, bool has_range, dou
 }
 inline bool validate_metadata(const std::string& schema, const std::string& examples, int type,
     bool has_range, double minimum, double maximum, bool holdable) {
-    if (schema.size() > 16384 || examples.size() > 16384 || (has_range && type != 2 && type != 3)) return false;
+    if (schema.size() > 16384 || examples.size() > 16384 ||
+        ((!schema.empty() || !examples.empty()) && has_range && type != 2 && type != 3)) return false;
     try {
         std::optional<json> s;
         if (!schema.empty()) {

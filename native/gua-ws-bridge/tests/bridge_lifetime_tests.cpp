@@ -2,11 +2,25 @@
 
 #include <cassert>
 #include <chrono>
+#include <iostream>
 #include <string>
 #include <vector>
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc == 2 && std::string_view(argv[1]) == "--metadata-revocation-fixture") {
+        // Preflight succeeds; authoritative callbacks simulate later revocation.
+        gua::ws::BridgeServer fixture({
+            .game_input_supported = [](unsigned int) { return true; },
+            .get_game_input_actions_json_v2 = [] { return std::string(); },
+            .query_game_input_actions_json_v2 = [](const auto&) { return std::string(); },
+        }, { .port = 0 });
+        fixture.start();
+        std::cerr << "GUA_REVOCATION_PORT=" << fixture.port() << std::endl;
+        std::string stop;
+        std::getline(std::cin, stop);
+        return 0;
+    }
     const gua::ws::GameInputQuerySelector valid { .id = "jump", .query = "Jump", .value_type = 1,
         .active = 2, .context = "gameplay", .category = "movement", .tags = { "core", "player" }, .limit = 20 };
     assert(gua::ws::detail::valid_game_input_query_selector(valid));

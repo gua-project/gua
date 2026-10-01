@@ -438,12 +438,13 @@ function isGameInputActionV2(value: unknown): boolean {
   const action = asRecord(value);
   if (!action || !isGameInputAction(action) || Object.keys(action).some(key => !gameInputActionV2Properties.has(key)) ||
       typeof action.valueType !== "string" ||
-      !gameInputIdentifier.test(action.id as string) || !["safe", "caution", "dangerous"].includes(action.risk as string)) return false;
+      !gameInputIdentifier.test(action.id as string) || (action.id as string).length > 127 ||
+      !["safe", "caution", "dangerous"].includes(action.risk as string)) return false;
   if (action.category !== undefined && (!gameInputIdentifier.test(action.category as string) || (action.category as string).length > 127)) return false;
   for (const field of ["aliases", "tags"]) {
     const entries = action[field] as string[] | undefined;
     if (entries && (entries.length > 16 || new Set(entries).size !== entries.length ||
-        entries.some(entry => [...entry].length > 64 || entry.includes("\0")))) return false;
+        entries.some(entry => [...entry].length > 64 || entry.includes("\0") || /[\uD800-\uDFFF]/u.test(entry)))) return false;
   }
   return validInputActionMetadata(action);
 }

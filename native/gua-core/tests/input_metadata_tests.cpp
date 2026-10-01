@@ -57,6 +57,22 @@ int main() {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     auto* context = gua_create_context(); assert(context);
+    for (const int type : { GUA_GAME_INPUT_BUTTON, GUA_GAME_INPUT_TEXT }) {
+        auto absent = descriptor(type);
+        absent.value_schema_json = nullptr; absent.examples_json = nullptr;
+        absent.base.base.minimum = 0; absent.base.base.maximum = 1; absent.base.base.has_range = 1;
+        assert(gua_begin_game_input_frame(context, "play"));
+        assert(gua_register_game_input_action_v2(context, &absent.base)); assert(gua_end_game_input_frame(context));
+        const auto old_range = copy(context, false);
+        publish(context, absent);
+        assert(copy(context, false) == old_range);
+        assert(copy(context, true).find("\"range\":") != std::string::npos);
+        assert(copy(context, true).find("valueSchema") == std::string::npos);
+        absent.examples_json = "[]"; invalid(context, absent);
+        absent.examples_json = nullptr;
+        absent.value_schema_json = type == GUA_GAME_INPUT_BUTTON ? R"({"type":"boolean"})" : R"({"type":"string"})";
+        invalid(context, absent);
+    }
     auto action = descriptor();
     // Existing ABI v1/v2 and wire v1 remain byte-identical after metadata registration.
     assert(gua_begin_game_input_frame(context, "play"));
