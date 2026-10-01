@@ -3,7 +3,8 @@
 [English](README.md) | 日本語
 
 [![License](https://img.shields.io/github/license/link1345/gua)](https://github.com/link1345/gua/blob/main/LICENSE)
-[![Discord](https://img.shields.io/discord/1329272750099136552)](https://discord.gg/Zy65k8AxH2)
+
+Guaについての質問・相談は、[サポートDiscordサーバー](https://discord.gg/B495mwsTKK)へどうぞ。
 
 > この日本語版は補助ドキュメントです。内容に差異がある場合は、
 > [英語版README](README.md)を正しい最新情報として扱ってください。
