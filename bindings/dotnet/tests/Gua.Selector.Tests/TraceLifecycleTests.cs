@@ -34,10 +34,15 @@ public sealed class TraceLifecycleTests
         internal readonly ManualResetEventSlim Entered = new();
         internal readonly ManualResetEventSlim Release = new();
         internal bool BlockReads = true;
+        internal TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
         internal Func<string, string>? Transform;
+        internal Barrier? CaptureBarrier;
         public string GetDiagnosticsJson()
         {
-            if (Interlocked.Increment(ref _reads) > 1 && BlockReads) { Entered.Set(); Release.Wait(TimeSpan.FromSeconds(2)); }
+            if (Interlocked.Increment(ref _reads) > 1 && BlockReads) { Entered.Set(); Release.Wait(ReadTimeout); }
+            var barrier = Interlocked.Exchange(ref CaptureBarrier, null);
+            if (barrier is not null && !barrier.SignalAndWait(TimeSpan.FromSeconds(5)))
+                throw new TimeoutException("Concurrent diagnostic reads did not meet.");
             var json = context.GetDiagnosticsJson();
             return Transform?.Invoke(json) ?? json;
         }
@@ -197,6 +202,62 @@ public sealed class TraceLifecycleTests
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Events.Count(e => e.Type == "step.begin"), Is.EqualTo(1));
         Assert.That(Phases(read), Is.EqualTo(new[] { "enqueue", "consume", "completion" }));
+    }
+
+    [Test]
+    [NonParallelizable]
+    public async Task ConcurrentReadersKeepNativePhasesOrderedAndCorrelated()
+    {
+        // Both readers observe the same real, complete native journal. Synchronize
+        // their reads so acceptance/correlation races cannot hide behind serial IO.
+        for (var iteration = 0; iteration < 64; iteration++)
+        {
+            using var context = Context(); await using var trace = Trace();
+            var a = new SlowDiagnostics(context) { BlockReads = false };
+            var b = new SlowDiagnostics(context) { BlockReads = false };
+            var wa = trace.Watch(a, TimeSpan.FromHours(1)); var wb = trace.Watch(b, TimeSpan.FromHours(1));
+            Assert.That(context.EnqueueAction(new(GuaActionType.Click, "button"), out var id), Is.EqualTo(GuaActionError.None));
+            Complete(context, id);
+            using var barrier = new Barrier(2);
+            a.CaptureBarrier = b.CaptureBarrier = barrier;
+            // Dedicated threads keep the rendezvous independent of the test runner's pool.
+            await Task.WhenAll(
+                Task.Factory.StartNew(() => wa.Capture(), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default),
+                Task.Factory.StartNew(() => wb.Capture(), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default));
+            Assert.That(context.TryPollActionEvent(id, out var result), Is.True);
+            Assert.That(result.RequestId, Is.EqualTo(id));
+            await trace.CompleteAsync(GuaTraceOutcome.Passed);
+            var read = GuaTraceReader.Read(trace.ArtifactPath);
+            Assert.That(Phases(read), Is.EqualTo(new[] { "enqueue", "consume", "completion" }), $"iteration {iteration}");
+            Assert.That(read.Events.Count(e => e.Type == "step.begin"), Is.EqualTo(1));
+            Assert.That(read.Manifest.Quality.Issues, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task BlockedDiagnosticReadDoesNotHoldTheSessionCollectionLock()
+    {
+        using var context = Context(); var slow = new SlowDiagnostics(context) { ReadTimeout = Timeout.InfiniteTimeSpan };
+        await using var trace = Trace();
+        var blocked = trace.Watch(slow, TimeSpan.FromHours(1));
+        var available = trace.Watch(context, TimeSpan.FromHours(1));
+        var reading = Task.Factory.StartNew(() => blocked.Capture(), CancellationToken.None,
+            TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        Task<bool>? collecting = null;
+        try
+        {
+            Assert.That(slow.Entered.Wait(TimeSpan.FromSeconds(5)), Is.True);
+            Assert.That(context.EnqueueAction(new(GuaActionType.Click, "button"), out var id), Is.EqualTo(GuaActionError.None));
+            Complete(context, id);
+            collecting = Task.Factory.StartNew(() => { trace.Mark("unblocked"); return available.Capture(); },
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            Assert.That(await Task.WhenAny(collecting, Task.Delay(TimeSpan.FromSeconds(5))), Is.SameAs(collecting));
+            Assert.That(await collecting, Is.True);
+            Assert.That(context.TryPollActionEvent(id, out _), Is.True);
+        }
+        finally { slow.Release.Set(); await reading; if (collecting is not null) await collecting; }
+        await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        Assert.That(Phases(GuaTraceReader.Read(trace.ArtifactPath)), Is.EqualTo(new[] { "enqueue", "consume", "completion" }));
     }
 
     [Test]

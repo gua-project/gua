@@ -26,6 +26,8 @@ const godotGlobals = globalThis as typeof globalThis & {
   __guaGodotCancelAction?: GodotCallback<[requestId: string]>;
   __guaGodotGetGameInputCapabilities?: GodotCallback;
   __guaGodotGetGameInputActions?: GodotCallback;
+  __guaGodotGetGameInputActionsV2?: GodotCallback;
+  __guaGodotFindGameInputActionsV2?: GodotCallback<[request: string]>;
   __guaGodotFindGameInputActions?: GodotCallback<[request: string]>;
   __guaGodotGetGameInputState?: GodotCallback;
   __guaGodotEnqueueGameInput?: GodotCallback<[request: string]>;
@@ -44,6 +46,8 @@ afterEach(() => {
   delete godotGlobals.__guaGodotCancelAction;
   delete godotGlobals.__guaGodotGetGameInputCapabilities;
   delete godotGlobals.__guaGodotGetGameInputActions;
+  delete godotGlobals.__guaGodotGetGameInputActionsV2;
+  delete godotGlobals.__guaGodotFindGameInputActionsV2;
   delete godotGlobals.__guaGodotFindGameInputActions;
   delete godotGlobals.__guaGodotGetGameInputState;
   delete godotGlobals.__guaGodotEnqueueGameInput;
@@ -60,6 +64,8 @@ async function installGodotWebPort(
     pollGameInput?: (requestId: string) => string;
     releaseGameInput?: (recreate?: string) => number;
     findGameInputActions?: (request: string) => string;
+    getGameInputActionsV2?: () => string;
+    findGameInputActionsV2?: (request: string) => string;
   } = {},
 ) {
   const source = await Bun.file(new URL(
@@ -77,6 +83,8 @@ async function installGodotWebPort(
   godotGlobals.__guaGodotPollAction = godotCallback(options.pollAction ?? (() => "null"));
   godotGlobals.__guaGodotCancelAction = godotCallback((requestId) => { cancelled.push(requestId); return options.cancellationResult ?? 1; });
   godotGlobals.__guaGodotGetGameInputCapabilities = godotCallback(() => JSON.stringify(["raw_keyboard_input_v1"]));
+  if (options.getGameInputActionsV2) godotGlobals.__guaGodotGetGameInputActionsV2 = godotCallback(options.getGameInputActionsV2);
+  if (options.findGameInputActionsV2) godotGlobals.__guaGodotFindGameInputActionsV2 = godotCallback(options.findGameInputActionsV2);
   godotGlobals.__guaGodotGetGameInputActions = godotCallback(() => JSON.stringify({ schemaVersion: 1, sessionEpoch: 1, revision: 1, context: "", actions: [] }));
   godotGlobals.__guaGodotFindGameInputActions = godotCallback(options.findGameInputActions ?? ((request: string) => {
     const selector = JSON.parse(request) as { id?: string };
@@ -94,6 +102,50 @@ async function installGodotWebPort(
 }
 
 describe("Godot Web same-page port", () => {
+  test("v2 discovery rejects extra fields before host dispatch while preserving v1 calls", async () => {
+    let calls = 0;
+    const response = () => { calls++; return JSON.stringify({ schemaVersion: 2, actions: [] }); };
+    const port = await installGodotWebPort([], { getGameInputActionsV2: response, findGameInputActionsV2: response });
+    for (const type of ["get_game_input_actions_v2", "find_game_input_actions_v2"]) {
+      for (const extra of [{ confirmed: true }, { unknown: true }, { requestId: 1 }])
+        await expect(port.invoke({ type, ...extra })).rejects.toMatchObject({ code: "invalid_request" });
+    }
+    expect(calls).toBe(0);
+    await expect(port.invoke({ type: "get_game_input_actions_v2" })).resolves.toMatchObject({ schemaVersion: 2 });
+    await expect(port.invoke({ type: "find_game_input_actions_v2", id: "jump", query: "hop", valueType: "button",
+      active: true, context: "play", category: "movement", tags: ["gameplay"], limit: 100 })).resolves.toMatchObject({ schemaVersion: 2 });
+    expect(calls).toBe(2);
+    await expect(port.invoke({ type: "get_game_input_actions", confirmed: true })).resolves.toMatchObject({ schemaVersion: 1 });
+  });
+  test("v2 discovery preserves structured capability-revocation errors", async () => {
+    let revoked = false;
+    const response = () => JSON.stringify(revoked
+      ? { code: "engine_unsupported", message: "Semantic input was revoked." }
+      : { schemaVersion: 2, actions: [] });
+    const port = await installGodotWebPort([], { getGameInputActionsV2: response, findGameInputActionsV2: response });
+    await expect(port.invoke({ type: "get_game_input_actions_v2" })).resolves.toMatchObject({ schemaVersion: 2 });
+    revoked = true;
+    for (const type of ["get_game_input_actions_v2", "find_game_input_actions_v2"]) {
+      await expect(port.invoke({ type })).rejects.toMatchObject({ code: "engine_unsupported", message: "Semantic input was revoked." });
+    }
+  });
+  test("metadata discovery is routed only by explicit v2 calls", async () => {
+    let metadataCalls = 0;
+    const port = await installGodotWebPort([], { getGameInputActionsV2: () => {
+      metadataCalls++;
+      return JSON.stringify({ schemaVersion: 2, actions: [{ id: "axis", examples: [0.5] }] });
+    }, findGameInputActionsV2: (request) => {
+      metadataCalls++;
+      return JSON.stringify({ schemaVersion: 2, actions: [{ id: JSON.parse(request).id, examples: [0.5] }] });
+    } });
+    await expect(port.invoke({ type: "get_game_input_actions" })).resolves.toMatchObject({ schemaVersion: 1 });
+    expect(metadataCalls).toBe(0);
+    await expect(port.invoke({ type: "get_game_input_actions_v2" })).resolves.toMatchObject({ schemaVersion: 2 });
+    await expect(port.invoke({ type: "find_game_input_actions_v2", id: "axis" })).resolves.toMatchObject({
+      schemaVersion: 2, actions: [{ id: "axis", examples: [0.5] }],
+    });
+    expect(metadataCalls).toBe(2);
+  });
   test("detaching removes all observation callback globals", async () => {
     const port = await installGodotWebPort([]);
     expect(typeof godotGlobals.__guaGodotObserve).toBe("function");

@@ -118,6 +118,8 @@ struct BridgeHandlers {
     std::function<bool(unsigned int capability)> game_input_supported;
     std::function<std::string()> get_game_input_actions_json;
     std::function<std::string(const GameInputQuerySelector& selector)> query_game_input_actions_json;
+    std::function<std::string()> get_game_input_actions_json_v2;
+    std::function<std::string(const GameInputQuerySelector& selector)> query_game_input_actions_json_v2;
     std::function<std::string(unsigned long long owner_id)> get_game_input_state_json;
     std::function<long long(unsigned long long owner_id, const GameInputCommand& command)> enqueue_game_input;
     std::function<std::string(unsigned long long owner_id, unsigned long long request_id)> poll_game_input_result_json;

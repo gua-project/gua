@@ -121,6 +121,7 @@ struct GameInputAction {
     std::vector<std::string> aliases;
     std::vector<std::string> tags;
     int agent_exposure = GUA_AGENT_EXPOSURE_AUTO;
+    std::string value_schema_json, examples_json;
 };
 struct GameInputActionSelector {
     std::string id, query, context, category;
@@ -535,7 +536,7 @@ public:
         if (!gua_begin_game_input_frame(context_, context.c_str())) throw std::runtime_error("Failed to begin game input frame");
         for (const auto& action : actions) {
             const auto contains_nul = [](const std::string& value) { return value.find('\0') != std::string::npos; };
-            if (contains_nul(action.category) ||
+            if (contains_nul(action.value_schema_json) || contains_nul(action.examples_json) || contains_nul(action.category) ||
                 std::any_of(action.aliases.begin(), action.aliases.end(), contains_nul) ||
                 std::any_of(action.tags.begin(), action.tags.end(), contains_nul)) {
                 gua_abort_game_input_frame(context_);
@@ -557,19 +558,32 @@ public:
                 action.category.empty() ? nullptr : action.category.c_str(), aliases.empty() ? nullptr : aliases.data(),
                 static_cast<std::uint32_t>(aliases.size()), tags.empty() ? nullptr : tags.data(),
                 static_cast<std::uint32_t>(tags.size()), action.agent_exposure };
-            if (!gua_register_game_input_action_v2(context_, &descriptor)) {
+            gua_game_input_action_descriptor_v3_t extended { sizeof(extended), descriptor,
+                action.value_schema_json.empty() ? nullptr : action.value_schema_json.c_str(),
+                action.examples_json.empty() ? nullptr : action.examples_json.c_str() };
+            const auto registered = action.value_schema_json.empty() && action.examples_json.empty()
+                ? gua_register_game_input_action_v2(context_, &descriptor) : gua_register_game_input_action_v3(context_, &extended);
+            if (!registered) {
                 gua_abort_game_input_frame(context_);
                 throw std::invalid_argument("Invalid game input action: " + action.id);
             }
         }
         if (!gua_end_game_input_frame(context_)) throw std::runtime_error("Failed to commit game input frame");
     }
+    [[nodiscard]] std::string game_input_actions_json_v2(int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG) const
+    { return copy_json([observation_profile](auto* context, char* output, int size) { return gua_copy_game_input_actions_json_v2(context, observation_profile, output, size); }); }
     [[nodiscard]] std::string game_input_actions_json() const
     { return copy_json([](auto* context, char* output, int size) { return gua_copy_game_input_actions_json(context, output, size); }); }
     [[nodiscard]] std::string game_input_actions_json(int observation_profile) const
     { return copy_json([observation_profile](auto* context, char* output, int size) { return gua_copy_game_input_actions_json_for_profile(context, observation_profile, output, size); }); }
     [[nodiscard]] std::string find_game_input_actions_json(const GameInputActionSelector& selector,
         int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG) const
+    { return find_game_input_actions_json_impl(selector, observation_profile, false); }
+    [[nodiscard]] std::string find_game_input_actions_json_v2(const GameInputActionSelector& selector,
+        int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG) const
+    { return find_game_input_actions_json_impl(selector, observation_profile, true); }
+    [[nodiscard]] std::string find_game_input_actions_json_impl(const GameInputActionSelector& selector,
+        int observation_profile, bool metadata) const
     {
         const auto contains_nul = [](const std::string& value) { return value.find('\0') != std::string::npos; };
         if (contains_nul(selector.id) || contains_nul(selector.query) || contains_nul(selector.context) ||
@@ -584,7 +598,8 @@ public:
             selector.context.empty() ? nullptr : selector.context.c_str(), selector.category.empty() ? nullptr : selector.category.c_str(),
             tags.empty() ? nullptr : tags.data(), static_cast<std::uint32_t>(tags.size()), selector.limit };
         return copy_json([&](auto* context, char* output, int size) {
-            return gua_query_game_input_actions_json(context, &native, observation_profile, output, size);
+            return metadata ? gua_query_game_input_actions_json_v2(context, &native, observation_profile, output, size)
+                : gua_query_game_input_actions_json(context, &native, observation_profile, output, size);
         });
     }
     [[nodiscard]] GameInputActionSearchResult find_game_input_actions(const GameInputActionSelector& selector,

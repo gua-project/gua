@@ -40,6 +40,26 @@ async function loadUnityWebLibrary() {
 }
 
 describe("Unity WebGL same-page port", () => {
+  test("v2 discovery rejects extra fields before sending to Unity while preserving v1 calls", async () => {
+    const { library, messages } = await loadUnityWebLibrary();
+    library.GuaUnityWebInstall("Host", "owner-1", 100);
+    const port = unityGlobals.__guaUnityWebPort!;
+    for (const type of ["get_game_input_actions_v2", "find_game_input_actions_v2"]) {
+      for (const extra of [{ confirmed: true }, { unknown: true }, { requestId: 1 }])
+        await expect(port.invoke({ type, ...extra })).rejects.toMatchObject({ code: "invalid_request" });
+    }
+    expect(messages).toHaveLength(0);
+    for (const command of [{ type: "get_game_input_actions_v2" },
+      { type: "find_game_input_actions_v2", id: "jump", query: "hop", valueType: "button", active: true,
+        context: "play", category: "movement", tags: ["gameplay"], limit: 100 },
+      { type: "get_game_input_actions", confirmed: true }]) {
+      const pending = port.invoke(command);
+      const envelope = JSON.parse(messages.at(-1)!.payload) as { callId: number; command: unknown };
+      expect(envelope.command).toEqual(command);
+      library.GuaUnityWebResolve("owner-1", envelope.callId, "{}", 0);
+      await expect(pending).resolves.toEqual({});
+    }
+  });
   test("routes calls to the installed runtime object and resolves by owner", async () => {
     const { library, messages } = await loadUnityWebLibrary();
     library.GuaUnityWebInstall("Custom Gua Host", "owner-1", 100);

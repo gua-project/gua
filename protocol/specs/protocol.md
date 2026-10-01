@@ -391,6 +391,10 @@ digit/operator, and PrintScreen codes; clients must not assume every optional
 or platform-specific W3C code is available.
 
 Descriptor v2 adds optional `category`, `aliases`, `tags`, and `agentExposure`.
+Optional value schemas and Set examples use an additive descriptor v3 and
+explicit capability-gated wire v2 map/search commands. Legacy wire v1 and ABI
+v1/v2 remain unchanged; see [Input Action metadata v1](input-action-metadata-v1.md)
+for the supported JSON Schema subset, consistency rules and compatibility tests.
 Category follows the Action ID ASCII identifier and byte limits. Aliases and
 tags contain at most 16 distinct, non-empty values of 1-64 Unicode code points;
 metadata is compared exactly without Unicode normalization or case folding.

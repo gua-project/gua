@@ -11,7 +11,9 @@ var enqueue_callback: JavaScriptObject
 var poll_callback: JavaScriptObject
 var cancel_callback: JavaScriptObject
 var get_game_input_capabilities_callback: JavaScriptObject
+var get_game_input_actions_v2_callback: JavaScriptObject
 var get_game_input_actions_callback: JavaScriptObject
+var find_game_input_actions_v2_callback: JavaScriptObject
 var find_game_input_actions_callback: JavaScriptObject
 var get_game_input_state_callback: JavaScriptObject
 var enqueue_game_input_callback: JavaScriptObject
@@ -40,7 +42,9 @@ func attach(gua_adapter: RefCounted) -> bool:
 	poll_callback = JavaScriptBridge.create_callback(_poll_action)
 	cancel_callback = JavaScriptBridge.create_callback(_cancel_action)
 	get_game_input_capabilities_callback = JavaScriptBridge.create_callback(_get_game_input_capabilities)
+	get_game_input_actions_v2_callback = JavaScriptBridge.create_callback(_get_game_input_actions_v2)
 	get_game_input_actions_callback = JavaScriptBridge.create_callback(_get_game_input_actions)
+	find_game_input_actions_v2_callback = JavaScriptBridge.create_callback(_find_game_input_actions_v2)
 	find_game_input_actions_callback = JavaScriptBridge.create_callback(_find_game_input_actions)
 	get_game_input_state_callback = JavaScriptBridge.create_callback(_get_game_input_state)
 	enqueue_game_input_callback = JavaScriptBridge.create_callback(_enqueue_game_input)
@@ -58,7 +62,9 @@ func attach(gua_adapter: RefCounted) -> bool:
 	window.__guaGodotPollAction = poll_callback
 	window.__guaGodotCancelAction = cancel_callback
 	window.__guaGodotGetGameInputCapabilities = get_game_input_capabilities_callback
+	window.__guaGodotGetGameInputActionsV2 = get_game_input_actions_v2_callback
 	window.__guaGodotGetGameInputActions = get_game_input_actions_callback
+	window.__guaGodotFindGameInputActionsV2 = find_game_input_actions_v2_callback
 	window.__guaGodotFindGameInputActions = find_game_input_actions_callback
 	window.__guaGodotGetGameInputState = get_game_input_state_callback
 	window.__guaGodotEnqueueGameInput = enqueue_game_input_callback
@@ -80,6 +86,8 @@ func attach(gua_adapter: RefCounted) -> bool:
   const pollAction = globalThis.__guaGodotPollAction;
   const cancelAction = globalThis.__guaGodotCancelAction;
   const getGameInputCapabilities = globalThis.__guaGodotGetGameInputCapabilities;
+  const getGameInputActionsV2 = globalThis.__guaGodotGetGameInputActionsV2;
+  const findGameInputActionsV2 = globalThis.__guaGodotFindGameInputActionsV2;
   const getGameInputActions = globalThis.__guaGodotGetGameInputActions;
   const findGameInputActions = globalThis.__guaGodotFindGameInputActions;
   const getGameInputState = globalThis.__guaGodotGetGameInputState;
@@ -149,6 +157,19 @@ func attach(gua_adapter: RefCounted) -> bool:
         return result;
       }
       if (command.type === 'get_game_input_capabilities') return JSON.parse(callGodot(getGameInputCapabilities));
+      if (command.type === 'get_game_input_actions_v2') {
+        if (Object.keys(command).some(key => key !== 'type')) throw engineError('invalid_request', 'Unknown metadata discovery field.');
+        const result = JSON.parse(callGodot(getGameInputActionsV2));
+        if (result && result.code) throw engineError(result.code, result.message || 'The Godot Gua adapter is unavailable.');
+        return result;
+      }
+      if (command.type === 'find_game_input_actions_v2') {
+        const allowed = ['type', 'id', 'query', 'valueType', 'active', 'context', 'category', 'tags', 'limit'];
+        if (Object.keys(command).some(key => !allowed.includes(key))) throw engineError('invalid_request', 'Unknown metadata selector field.');
+        const result = JSON.parse(callGodot(findGameInputActionsV2, JSON.stringify(command)));
+        if (result && result.code) throw engineError(result.code, result.message || 'Invalid game input selector.');
+        return result;
+      }
       if (command.type === 'get_game_input_actions') return JSON.parse(callGodot(getGameInputActions));
       if (command.type === 'find_game_input_actions') {
         const result = JSON.parse(callGodot(findGameInputActions, JSON.stringify(command)));
@@ -290,7 +311,9 @@ func detach() -> void:
   delete globalThis.__guaGodotCancelAction;
   delete globalThis.__guaGodotGetGameInputCapabilities;
   delete globalThis.__guaGodotGetGameInputActions;
+  delete globalThis.__guaGodotGetGameInputActionsV2;
   delete globalThis.__guaGodotFindGameInputActions;
+  delete globalThis.__guaGodotFindGameInputActionsV2;
   delete globalThis.__guaGodotGetGameInputState;
   delete globalThis.__guaGodotEnqueueGameInput;
   delete globalThis.__guaGodotPollGameInput;
@@ -309,7 +332,9 @@ func detach() -> void:
 	poll_callback = null
 	cancel_callback = null
 	get_game_input_capabilities_callback = null
+	get_game_input_actions_v2_callback = null
 	get_game_input_actions_callback = null
+	find_game_input_actions_v2_callback = null
 	find_game_input_actions_callback = null
 	get_game_input_state_callback = null
 	enqueue_game_input_callback = null
@@ -472,6 +497,7 @@ func _game_input_capabilities(adapter: RefCounted) -> Array:
 	var result: Array = []
 	if mask & 1: result.push_back("semantic_game_input_v1")
 	if mask & 1: result.push_back("semantic_game_input_search_v1")
+	if mask & 1 and adapter.has_method("supports_game_input_metadata") and adapter.supports_game_input_metadata(): result.push_back("semantic_game_input_metadata_v1")
 	if mask & 2: result.push_back("raw_keyboard_input_v1")
 	if mask & 4: result.push_back("raw_pointer_input_v1")
 	if mask & 8: result.push_back("raw_gamepad_input_v1")
@@ -509,6 +535,32 @@ func _find_game_input_actions(arguments: Array) -> void:
 	}
 	if selector.active == null: selector.erase("active")
 	_respond(arguments, adapter.find_game_input_actions_json(selector, 1))
+
+
+func _get_game_input_actions_v2(arguments: Array) -> void:
+	var adapter := _adapter()
+	if adapter == null or not "semantic_game_input_metadata_v1" in _game_input_capabilities(adapter):
+		_respond(arguments, JSON.stringify({"code": "engine_unsupported", "message": "Semantic game input is unavailable."}))
+		return
+	_respond(arguments, adapter.get_game_input_actions_json_v2(1))
+
+
+func _find_game_input_actions_v2(arguments: Array) -> void:
+	var adapter := _adapter()
+	if adapter == null or not "semantic_game_input_metadata_v1" in _game_input_capabilities(adapter):
+		_respond(arguments, JSON.stringify({"code": "engine_unsupported", "message": "Semantic game input search is unavailable."}))
+		return
+	var source = JSON.parse_string(str(_request_argument(arguments)))
+	if not source is Dictionary:
+		_respond(arguments, JSON.stringify({"code": "invalid_request", "message": "Invalid game input selector."}))
+		return
+	var selector := {
+		"id": source.get("id", ""), "query": source.get("query", ""), "value_type": source.get("valueType", ""),
+		"active": source.get("active") if source.has("active") else null, "context": source.get("context", ""),
+		"category": source.get("category", ""), "tags": source.get("tags", []), "limit": source.get("limit", 20),
+	}
+	if selector.active == null: selector.erase("active")
+	_respond(arguments, adapter.find_game_input_actions_json_v2(selector, 1))
 
 
 func _get_game_input_state(arguments: Array) -> void:

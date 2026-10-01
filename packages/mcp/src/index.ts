@@ -148,6 +148,8 @@ export const guaMcpTools = [
   "select",
   "scroll",
   "press_key",
+  "get_game_input_actions_v2",
+  "find_game_input_actions_v2",
   "get_game_input_actions",
   "find_game_input_actions",
   "press_game_input_action",
@@ -192,6 +194,14 @@ export const guaMcpToolDefinitions: readonly McpTool[] = [
   ...worldObservationTools,
   { name: "get_game_input_actions", description: "Read the host-published semantic game action map.", inputSchema: objectSchema({}) },
   { name: "find_game_input_actions", description: "Search the current host-authorized semantic game action map.", inputSchema: objectSchema({
+    id: { type: "string", pattern: "^[a-z][a-z0-9_.-]*$", maxLength: 127 }, query: { type: "string", minLength: 1, maxLength: 128, pattern: "^[^\\u0000]+$" },
+    valueType: { type: "string", enum: ["button", "axis1d", "vector2", "text"] }, active: { type: "boolean" },
+    context: { type: "string", minLength: 1, pattern: "^[^\\u0000]+$" }, category: { type: "string", pattern: "^[a-z][a-z0-9_.-]*$", maxLength: 127 },
+    tags: { type: "array", maxItems: 16, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 64, pattern: "^[^\\u0000]+$" } },
+    limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+  }) },
+  { name: "get_game_input_actions_v2", description: "Explicitly request the action map with value schema and Set examples; requires semantic_game_input_metadata_v1.", inputSchema: objectSchema({}) },
+  { name: "find_game_input_actions_v2", description: "Explicitly search with value schema and Set examples; metadata is not execution authority.", inputSchema: objectSchema({
     id: { type: "string", pattern: "^[a-z][a-z0-9_.-]*$", maxLength: 127 }, query: { type: "string", minLength: 1, maxLength: 128, pattern: "^[^\\u0000]+$" },
     valueType: { type: "string", enum: ["button", "axis1d", "vector2", "text"] }, active: { type: "boolean" },
     context: { type: "string", minLength: 1, pattern: "^[^\\u0000]+$" }, category: { type: "string", pattern: "^[a-z][a-z0-9_.-]*$", maxLength: 127 },
@@ -549,6 +559,8 @@ async function executeTool(
         action: "press_key", nodeId: readOptionalStringArg(args, "nodeId"), key: readStringArg(args, "key"),
         modifiers: readIntegerArg(args, "modifiers", 0),
       });
+    case "get_game_input_actions_v2": return bridge.getGameInputActionsV2();
+    case "find_game_input_actions_v2": return bridge.findGameInputActionsV2(gameInputSearchCommand(args));
     case "get_game_input_actions": return bridge.getGameInputActions();
     case "find_game_input_actions": return bridge.findGameInputActions(gameInputSearchCommand(args));
     case "get_game_input_state": return bridge.getGameInputState();
@@ -1091,6 +1103,16 @@ export class GuaBridgeClient {
   }
 
   async getClock(): Promise<unknown> { return this.request({ type: "get_clock" }); }
+  private async requireGameInputMetadata(): Promise<void> {
+    const version = await this.request<{ capabilities?: string[] }>({ type: "get_version" });
+    if (!version.capabilities?.includes("semantic_game_input_metadata_v1")) throw new Error("unsupported game input metadata");
+  }
+  async getGameInputActionsV2(): Promise<unknown> {
+    await this.requireGameInputMetadata(); return this.request({ type: "get_game_input_actions_v2" });
+  }
+  async findGameInputActionsV2(selector: Omit<Extract<BridgeCommandInput, { type: "find_game_input_actions" }>, "type">): Promise<unknown> {
+    await this.requireGameInputMetadata(); return this.request({ type: "find_game_input_actions_v2", ...selector });
+  }
   async getGameInputActions(): Promise<unknown> { return this.request({ type: "get_game_input_actions" }); }
   async findGameInputActions(selector: Omit<Extract<BridgeCommandInput, { type: "find_game_input_actions" }>, "type">): Promise<unknown> {
     return this.request({ type: "find_game_input_actions", ...selector });
@@ -1412,6 +1434,8 @@ type BridgeCommandInput =
   | { type: "get_context_status" }
   | { type: "poll_events"; requestId: number }
   | { type: "poll_game_input"; requestId: number }
+  | { type: "get_game_input_actions_v2" }
+  | { type: "find_game_input_actions_v2"; actionId?: string; query?: string; valueType?: number; active?: number; context?: string; category?: string; tags?: string[]; limit?: number }
   | { type: "get_game_input_actions" | "get_game_input_state" }
   | { type: "find_game_input_actions"; actionId?: string; query?: string; valueType?: number; active?: number; context?: string; category?: string; tags?: string[]; limit?: number }
   | { type: "get_clock" | "clock_pause" | "clock_resume" }

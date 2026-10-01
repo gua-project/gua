@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/input-value-schema-v1.schema.json",
+  "title": "Gua Input Value Schema subset v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "boolean"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
+        },
+        "$schema": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "number"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "$schema": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "type",
+        "properties",
+        "required",
+        "additionalProperties"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "object"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
+        },
+        "properties": {
+          "type": "object",
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "number"
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "pattern": "^[^\\uD800-\\uDFFF]*$"
+                },
+                "minimum": {
+                  "type": "number"
+                },
+                "maximum": {
+                  "type": "number"
+                }
+              }
+            },
+            "y": {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "number"
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1024,
+                  "pattern": "^[^\\uD800-\\uDFFF]*$"
+                },
+                "minimum": {
+                  "type": "number"
+                },
+                "maximum": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "required": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "x",
+              "y"
+            ]
+          }
+        },
+        "additionalProperties": {
+          "const": false
+        },
+        "$schema": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "string"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40
+        },
+        "$schema": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        }
+      }
+    }
+  ]
+}

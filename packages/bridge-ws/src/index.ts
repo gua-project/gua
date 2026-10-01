@@ -47,6 +47,8 @@ export function handleMessage(message: string | Buffer, target: DemoRuntime = ru
       case "clock_pause": return ok(command.id, target.pauseClock());
       case "clock_run_for": return ok(command.id, target.runClockFor(command.durationMs, command.stepMs));
       case "clock_resume": return ok(command.id, target.resumeClock());
+      case "get_game_input_actions_v2":
+      case "find_game_input_actions_v2": return { id: command.id, ok: false, error: "unsupported game input metadata" };
       case "get_game_input_actions": return ok(command.id, target.getGameInputActions());
       case "find_game_input_actions": {
         const selector = gameInputSelectorFromWire(command as unknown as Record<string, unknown>);

@@ -330,6 +330,9 @@ button:disabled {
 .gua-game-action-search input, .gua-game-action-search select { min-width: 110px; }
 .gua-game-action > span { display: grid; margin-right: auto; }
 .gua-game-action small { color: #96a3b3; }
+.gua-game-action:has(> details) { flex-wrap: wrap; }
+.gua-game-action > details { flex-basis: 100%; min-width: 0; order: 1; }
+.gua-game-action > details pre { margin: 8px 0; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .gua-held-inputs { color: #c8d2df; margin: 8px 0 0; }
 .gua-danger { border-color: #9b4b4b; color: #ffb0a8; }
 

@@ -502,6 +502,18 @@ func get_game_input_actions_json() -> String:
 	return context.get_game_input_actions_json()
 
 
+func get_game_input_actions_json_v2(observation_profile := 0) -> String:
+	return context.get_game_input_actions_json_v2(observation_profile) if _ensure_context() else "{}"
+
+
+func supports_game_input_metadata() -> bool:
+	return _ensure_context() and context.has_method("get_game_input_actions_json_v2") and context.has_method("find_game_input_actions_json_v2")
+
+
+func find_game_input_actions_json_v2(selector: Dictionary, observation_profile := 0) -> String:
+	return context.find_game_input_actions_json_v2(selector, observation_profile) if _ensure_context() else "{}"
+
+
 func get_player_game_input_actions_json() -> String:
 	return context.get_player_game_input_actions_json() if _ensure_context() else "{}"
 
