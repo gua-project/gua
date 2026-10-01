@@ -104,7 +104,26 @@ int main() {
     }
     {
         Fixture x; assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); assert(gua_spatial_host_unregister(x.h,x.p,&x.e)==0);
-        assert(x.complete(l,q)==GUA_SPATIAL_STALE); auto r=x.poll(); assert(!r.at("items").items[0].fields.contains("result")); assert(gua_spatial_host_end(x.h,l,&x.e)==GUA_SPATIAL_STALE);
+        assert(x.complete(l,q)==GUA_SPATIAL_STALE); auto r=x.poll(); assert(!r.at("items").items[0].fields.contains("result"));
+        assert(r.at("items").items[0].at("state").text=="failed"&&r.at("items").items[0].at("reason").text=="provider_unregistered");
+        assert(r.at("items").items[1].at("state").text=="notExecuted"&&r.at("items").items[1].at("reason").text=="provider_unregistered");
+        assert(gua_spatial_host_end(x.h,l,&x.e)==GUA_SPATIAL_STALE);
+    }
+    {
+        Fixture x; assert(x.enqueue()==0); assert(gua_spatial_host_unregister(x.h,x.p,&x.e)==0);
+        x.set_owner(x.owner); // unchanged owner grants do not rewrite unregister
+        auto r=x.poll(); for(const auto& i:r.at("items").items) assert(i.at("state").text=="notExecuted"&&i.at("reason").text=="provider_unregistered");
+    }
+    {
+        Fixture x; assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); assert(x.complete(l,q)==0);
+        assert(gua_spatial_host_unregister(x.h,x.p,&x.e)==0); auto r=x.poll();
+        for(const auto& i:r.at("items").items) assert(!i.fields.contains("result")&&i.at("reason").text=="provider_unregistered");
+        assert(r.at("items").items[0].at("state").text=="failed");
+    }
+    {
+        Fixture x; assert(x.enqueue()==0); assert(gua_spatial_host_unregister(x.h,x.p,&x.e)==0);
+        auto g=x.owner; g.fields["enabled"]=parse("false"); x.set_owner(g);
+        auto r=x.poll(); for(const auto& i:r.at("items").items) assert(i.at("reason").text=="not_authorized");
     }
     {
         Fixture x(1000,1000,1); assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); assert(gua_spatial_host_close_owner(x.h,x.o,&x.e)==0);

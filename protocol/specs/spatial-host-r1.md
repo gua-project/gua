@@ -107,6 +107,10 @@ unregister, owner close, authorization loss, deadline, work budget and early
 boundary end must preserve this distinction and retain prior valid completions
 except when their authorization has been revoked. Late/duplicate completions
 cannot overwrite a terminal item. The polling owner alone consumes its result.
+After provider removal, polling redacts completed geometry as `failed` with
+`provider_unregistered` while preserving existing terminal reasons for other
+items. The owner's current grants are still checked independently; actual
+owner authorization loss produces `not_authorized` instead.
 
 Coverage complete requires successful execution and whole-query containment in
 the registered loaded region. Otherwise complete is rejected. Providers can

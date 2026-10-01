@@ -143,15 +143,17 @@ void document(const gua_spatial_document_t* d,int type) { require(d&&d->type==ty
 const json* policy(const host_provider& p,const std::string& id) {
     for(const auto& a:p.registration.at("policies").items) if(text(a,"id")==id) return &a; return nullptr;
 }
-const json* authorized(gua_spatial_host_t& h,const host_batch& b,const json& q) {
-    auto o=h.owners.find(b.owner); auto p=h.providers.find(b.provider);
-    if(o==h.owners.end()||p==h.providers.end()) return nullptr;
+bool owner_authorized(gua_spatial_host_t& h,const host_batch& b,const json& q) {
+    auto o=h.owners.find(b.owner);
+    if(o==h.owners.end()) return false;
     const auto& g=o->second.grants;
-    if(!boolean(g.at("enabled"))||(text(g,"profile")!="Debug"&&text(g,"profile")!="Testing")||sequence(g.at("sessionEpoch"))!=sequence(q.at("sessionEpoch"))) return nullptr;
-    if(!contains(g.at("policies"),text(q,"queryPolicyId"))) return nullptr;
+    return boolean(g.at("enabled"))&&(text(g,"profile")=="Debug"||text(g,"profile")=="Testing")&&sequence(g.at("sessionEpoch"))==sequence(q.at("sessionEpoch"))&&contains(g.at("policies"),text(q,"queryPolicyId"))&&fits(query_bounds(q),aabb(g.at("region")));
+}
+const json* authorized(gua_spatial_host_t& h,const host_batch& b,const json& q) {
+    auto p=h.providers.find(b.provider);
+    if(p==h.providers.end()||!owner_authorized(h,b,q)) return nullptr;
     auto pol=policy(p->second,text(q,"queryPolicyId")); if(!pol) return nullptr;
-    auto bnd=query_bounds(q);
-    return fits(bnd,aabb(g.at("region")))&&fits(bnd,aabb(pol->at("region")))?pol:nullptr;
+    return fits(query_bounds(q),aabb(pol->at("region")))?pol:nullptr;
 }
 json item(const json& q,const char* state,const char* reason) {
     return obj({{"requestId",q.at("requestId")},{"queryId",q.at("queryId")},{"state",str(state)},{"reason",str(reason)}});
@@ -164,7 +166,7 @@ void terminate(host_batch& b,const char* reason) {
 }
 void revoke(gua_spatial_host_t& h,host_batch& b) {
     const auto& qs=b.input.at("queries").items;
-    for(size_t i=0;i<qs.size();++i) if(!authorized(h,b,qs[i])) b.items[i]=item(qs[i],b.dispatched[i]?"failed":"notExecuted","not_authorized");
+    for(size_t i=0;i<qs.size();++i) if(h.providers.contains(b.provider)?!authorized(h,b,qs[i]):!owner_authorized(h,b,qs[i])) b.items[i]=item(qs[i],b.dispatched[i]?"failed":"notExecuted","not_authorized");
     terminate(b,"not_authorized");
 }
 const char* stopped(gua_spatial_host_t& h,host_batch& b) {
@@ -356,7 +358,15 @@ int gua_spatial_host_poll(gua_spatial_host_t* h,uint64_t o,uint64_t id,gua_spati
         if(!b.done) { if(auto reason=stopped(*h,b)) finish(*h,b,reason); }
         require(b.done,GUA_SPATIAL_NOT_READY);
         // Reauthorize even previously completed items before crossing public boundary.
-        for(const auto& q:b.input.at("queries").items) if(!authorized(*h,b,q)) { revoke(*h,b); break; }
+        if(!h->providers.contains(b.provider)) {
+            // Provider removal invalidates geometry, not the recorded termination
+            // reason. Independently recheck the owner's current public authority.
+            const auto& qs=b.input.at("queries").items;
+            for(size_t i=0;i<qs.size();++i) {
+                if(!owner_authorized(*h,b,qs[i])) b.items[i]=item(qs[i],b.dispatched[i]?"failed":"notExecuted","not_authorized");
+                else if(has(b.items[i],"result")) b.items[i]=item(qs[i],"failed","provider_unregistered");
+            }
+        } else for(const auto& q:b.input.at("queries").items) if(!authorized(*h,b,q)) { revoke(*h,b); break; }
         json items; items.type=json::array; items.items=b.items;
         auto r=obj({{"schemaVersion",str("spatial-host-r1")},{"documentType",str("batchResult")},{"batchId",integer(b.id)},{"items",std::move(items)}}); host_document(r,6);
         auto owned=doc(6,std::move(r)); h->batches.erase(it); *out=owned.release();

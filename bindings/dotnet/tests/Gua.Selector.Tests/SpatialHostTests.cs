@@ -89,6 +89,17 @@ public sealed class SpatialHostTests
         } finally { h.End(l); }
     }
     [Test]
+    public void UnregisterPreservesTerminationReasonsAndRedactsCompletedGeometry()
+    {
+        using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var batch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var p=h.Register(registration); var o=h.OpenOwner(grants); h.Enqueue(o,batch); var l=h.Begin(p,boundary)!.Value;
+        using var q=h.Take(l); h.Complete(l,execution); h.Unregister(p);
+        using var result=h.Poll(o,1)!; var items=result.ReadBatchResult().Items;
+        Assert.That(items[0].State,Is.EqualTo("failed")); Assert.That(items[1].State,Is.EqualTo("notExecuted"));
+        Assert.That(items.All(i=>i.Reason=="provider_unregistered"&&i.Result is null),Is.True);
+        Assert.That(Assert.Throws<GuaSpatialException>(()=>h.End(l))!.Code,Is.EqualTo(GuaSpatialErrorCode.Stale));
+    }
+    [Test]
     public void ClosedOwnerRetainsConsumedCompletionButCannotPoll()
     {
         using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var batch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
