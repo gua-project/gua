@@ -4,8 +4,8 @@ using System.Text.Json.Serialization;
 using Microsoft.Win32.SafeHandles;
 namespace Gua.Core;
 
-public enum GuaSpatialDocumentType { Request = 1, Result = 2, Provider = 3 }
-public enum GuaSpatialErrorCode { Invalid = 1, Version = 2, Geometry = 3, Context = 4, Unsupported = 5, Semantics = 6, Internal = 7 }
+public enum GuaSpatialDocumentType { Request = 1, Result = 2, Provider = 3, HostResult = 4, Batch = 5, BatchResult = 6, Registration = 7, Owner = 8, Boundary = 9, Execution = 10, Advertisement = 11 }
+public enum GuaSpatialErrorCode { Invalid = 1, Version = 2, Geometry = 3, Context = 4, Unsupported = 5, Semantics = 6, Internal = 7, NotAuthorized = 8, Capacity = 9, NotReady = 10, Stale = 11 }
 public sealed class GuaSpatialException : InvalidOperationException
 {
     public GuaSpatialErrorCode Code { get; }
@@ -55,6 +55,8 @@ public sealed class GuaSpatialDocument : IDisposable
         options.Converters.Add(new SafeLongConverter()); options.Converters.Add(new SafeIntConverter()); return options;
     }
     private GuaSpatialDocument(nint p) { _handle = new(p); }
+    internal static GuaSpatialDocument Owned(nint p) => new(p);
+    internal nint Use(SpatialReferences references) => references.Use(_handle);
     private static void Check(int status, Native.SpatialError error) { if (status != 0) throw new GuaSpatialException(error); }
     public static GuaSpatialDocument FromJson(GuaSpatialDocumentType type, string json)
     {
@@ -66,11 +68,24 @@ public sealed class GuaSpatialDocument : IDisposable
     public static GuaSpatialDocument FromRequest(GuaSpatialRequest request) => FromJson(GuaSpatialDocumentType.Request, JsonSerializer.Serialize(request, JsonOptions));
     public static GuaSpatialDocument FromResult(GuaSpatialResult result) => FromJson(GuaSpatialDocumentType.Result, JsonSerializer.Serialize(result, JsonOptions));
     public static GuaSpatialDocument FromProvider(GuaSpatialProvider provider) => FromJson(GuaSpatialDocumentType.Provider, JsonSerializer.Serialize(provider, JsonOptions));
+    public static GuaSpatialDocument FromRegistration(GuaSpatialRegistration value) => FromJson(GuaSpatialDocumentType.Registration, JsonSerializer.Serialize(value, JsonOptions));
+    public static GuaSpatialDocument FromOwner(GuaSpatialOwnerGrants value) => FromJson(GuaSpatialDocumentType.Owner, JsonSerializer.Serialize(value, JsonOptions));
+    public static GuaSpatialDocument FromBatch(GuaSpatialBatch value) => FromJson(GuaSpatialDocumentType.Batch, JsonSerializer.Serialize(value, JsonOptions));
+    public static GuaSpatialDocument FromBoundary(GuaSpatialBoundary value) => FromJson(GuaSpatialDocumentType.Boundary, JsonSerializer.Serialize(value, JsonOptions));
+    public static GuaSpatialDocument FromExecution(GuaSpatialHostQueryResult value) => FromJson(GuaSpatialDocumentType.Execution, JsonSerializer.Serialize(value, JsonOptions));
     public GuaSpatialDocumentType Type { get { using var inputs = new SpatialReferences(); return (GuaSpatialDocumentType)Native.gua_spatial_document_type(inputs.Use(_handle)); } }
     public string ToJson() { using var inputs = new SpatialReferences(); return GuaValue.Copy(inputs.Use(_handle), Native.gua_spatial_copy_json); }
     public GuaSpatialRequest ReadRequest() => Read<GuaSpatialRequest>(GuaSpatialDocumentType.Request);
     public GuaSpatialResult ReadResult() => Read<GuaSpatialResult>(GuaSpatialDocumentType.Result);
     public GuaSpatialProvider ReadProvider() => Read<GuaSpatialProvider>(GuaSpatialDocumentType.Provider);
+    public GuaSpatialRegistration ReadRegistration() => Read<GuaSpatialRegistration>(GuaSpatialDocumentType.Registration);
+    public GuaSpatialOwnerGrants ReadOwner() => Read<GuaSpatialOwnerGrants>(GuaSpatialDocumentType.Owner);
+    public GuaSpatialBatch ReadBatch() => Read<GuaSpatialBatch>(GuaSpatialDocumentType.Batch);
+    public GuaSpatialBoundary ReadBoundary() => Read<GuaSpatialBoundary>(GuaSpatialDocumentType.Boundary);
+    public GuaSpatialHostQueryResult ReadExecution() => Read<GuaSpatialHostQueryResult>(GuaSpatialDocumentType.Execution);
+    public GuaSpatialHostQueryResult ReadHostResult() => Read<GuaSpatialHostQueryResult>(GuaSpatialDocumentType.HostResult);
+    public GuaSpatialBatchResult ReadBatchResult() => Read<GuaSpatialBatchResult>(GuaSpatialDocumentType.BatchResult);
+    public GuaSpatialAdvertisement ReadAdvertisement() => Read<GuaSpatialAdvertisement>(GuaSpatialDocumentType.Advertisement);
     private T Read<T>(GuaSpatialDocumentType type) { if (Type != type) throw new InvalidOperationException("Spatial document type mismatch"); return JsonSerializer.Deserialize<T>(ToJson(), JsonOptions)!; }
     public void CheckRequest(GuaSpatialDocument provider)
     {
