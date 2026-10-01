@@ -1,0 +1,202 @@
+extends Node3D
+
+const Reader = preload("res://addons/gua/gua_spatial.gd")
+var fixture: Dictionary
+var host := GuaSpatialHost.new()
+var reader: GuaSpatialReader
+var viewport: SubViewport
+var index := 0
+var phase := 0
+var spatial_owner: int
+var queued_at: int
+var evidence: Array = []
+var door_sample: Dictionary
+var region := {"min":{"x":-20,"y":-20,"z":-20},"max":{"x":20,"y":20,"z":20}}
+
+func _ready() -> void:
+	fixture = JSON.parse_string(FileAccess.get_file_as_string("res://spatial-engine-r1.json"))
+	var version := Engine.get_version_info()
+	if not _check(version.major == 4 and version.minor == 7 and version.patch == 0 and version.status == "stable" and version.hash.begins_with("5b4e0cb0f"), "pinned Godot patch"):
+		set_physics_process(false)
+		return
+	_check(host.configure("fixture-godot", 2, 2, 4, 64, 2, 1000, 1000).status == 0, "host configure")
+	# A permanently populated separate World3D must not contaminate empty cases.
+	var other := SubViewport.new()
+	other.own_world_3d = true
+	add_child(other)
+	_obstacle(other, {"center":{"x":0,"y":0,"z":0},"size":{"x":10,"y":10,"z":10},"category":"solid"})
+
+func _check(condition: bool, label: String) -> bool:
+	if not condition:
+		push_error("SPATIAL FAIL: " + label)
+		get_tree().quit(1)
+	return condition
+
+func _obstacle(parent: Node, obstacle: Dictionary) -> void:
+	var body: CollisionObject3D = Area3D.new() if obstacle.category == "trigger" else StaticBody3D.new()
+	body.collision_layer = 2 if obstacle.category == "self" else 1
+	body.position = Vector3(obstacle.center.x, obstacle.center.y, obstacle.center.z)
+	var collision := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(obstacle.size.x, obstacle.size.y, obstacle.size.z)
+	collision.shape = box
+	body.add_child(collision)
+	parent.add_child(body)
+
+func _registration(loaded: bool) -> Dictionary:
+	var basis := {"x":{"x":1,"y":0,"z":0},"y":{"x":0,"y":1,"z":0},"z":{"x":0,"y":0,"z":1}}
+	var registration := {"schemaVersion":"spatial-host-r1", "documentType":"registration",
+		"provider":{"schemaVersion":"spatial-r1", "documentType":"provider", "providerId":"godot-fixture",
+		"spaceId":"fixture", "spaceEpoch":index+1, "worldSpace":"world3d", "basis":basis, "up":basis.y,
+		"unit":{"label":"fixture-unit"}, "precision":{"representation":"binary32", "reason":"backend_error_unmeasured"},
+		"operations":["raycast","overlap","sweep"], "shapes":["sphere","capsule","box"],
+		"policies":["solid","triggers"], "consistencies":["bestEffort","samePhysicsSample"],
+		"engine":{"name":"Godot", "version":Engine.get_version_info().string, "backend":"GodotPhysics3D", "backendVersion":"unknown"},
+		"limits":{"maxQueriesPerBatch":64,"maxHitsPerQuery":2,"maxDeadlineMs":1000}},
+		"policies":[{"id":"solid","revision":1,"region":region},{"id":"triggers","revision":1,"region":region}]}
+	if loaded:
+		registration.loadedRegion = region
+	return registration
+
+func _physics_process(_delta: float) -> void:
+	if index >= fixture.cases.size():
+		var output := {"configuration":fixture.configuration,"results":evidence,"physicsTick":Engine.get_physics_frames()}
+		var file := FileAccess.open("res://evidence.json", FileAccess.WRITE)
+		file.store_string(JSON.stringify(output, "\t"))
+		print("SPATIAL PASS: ", evidence.size(), " real Godot cases")
+		get_tree().quit(0)
+		set_physics_process(false)
+		return
+	var case: Dictionary = fixture.cases[index]
+	if phase == 0:
+		case.query.spaceEpoch = index+1
+		viewport = SubViewport.new()
+		viewport.own_world_3d = true
+		add_child(viewport)
+		for obstacle in case.obstacles:
+			_obstacle(viewport, obstacle)
+		reader = Reader.new()
+		var policies := {"solid":{"mask":1,"bodies":true,"areas":false,"backfaces":false,"margin":0.0,"exclude":[]},
+			"triggers":{"mask":1,"bodies":true,"areas":true,"backfaces":false,"margin":0.0,"exclude":[]}}
+		if not _check(reader.configure(host, viewport.find_world_3d(), _registration(case.loaded), policies) == 0, case.id + " registration"):
+			return
+		var grants := {"schemaVersion":"spatial-host-r1","documentType":"owner","sessionEpoch":1,
+			"profile":"Testing","enabled":true,"policies":["solid","triggers"],"region":region}
+		var opened := host.open_owner(JSON.stringify(grants))
+		if not _check(opened.status == 0, "spatial_owner"):
+			return
+		spatial_owner = opened.handle
+		var denied_query: Dictionary = case.query.duplicate(true)
+		denied_query.kind = "overlap"
+		denied_query.erase("segment")
+		denied_query.erase("delta")
+		denied_query.shape = {"type":"sphere","center":{"x":19.75,"y":0,"z":0},"radius":0.5}
+		var denied_batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":9999,
+			"consistency":"samePhysicsSample","queries":[denied_query]}
+		_check(host.enqueue(spatial_owner, JSON.stringify(denied_batch)).status == 8, "whole-shape region denied")
+		grants.profile = "Player"
+		_check(host.set_owner(spatial_owner, JSON.stringify(grants)).status == 0, "player grants")
+		denied_batch.queries = [case.query]
+		_check(host.enqueue(spatial_owner, JSON.stringify(denied_batch)).status == 8, "Player denied before physics")
+		grants.profile = "Testing"
+		_check(host.set_owner(spatial_owner, JSON.stringify(grants)).status == 0, "testing restore")
+		var narrow_grants: Dictionary = grants.duplicate(true)
+		narrow_grants.region.min.y = 0.74999998
+		_check(host.set_owner(spatial_owner, JSON.stringify(narrow_grants)).status == 0, "derived geometry narrow grant")
+		var rounding_query: Dictionary = case.query.duplicate(true)
+		rounding_query.requestId = 10001
+		rounding_query.queryId = "capsule-derived-rounding"
+		rounding_query.kind = "overlap"
+		rounding_query.erase("segment")
+		rounding_query.erase("delta")
+		rounding_query.shape = {"type":"capsule","pointA":{"x":0,"y":1,"z":0},
+			"pointB":{"x":0,"y":1.0000001192092896,"z":0},"radius":0.25}
+		var rounding_batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":10001,
+			"consistency":"samePhysicsSample","queries":[rounding_query]}
+		_check(host.enqueue(spatial_owner, JSON.stringify(rounding_batch)).status == 0, "original volume authorized")
+		_check(reader.pump() == 0, "derived geometry refusal pump")
+		var rounding_result := host.poll(spatial_owner, 10001)
+		var rounding_doc: Dictionary = JSON.parse_string(rounding_result.json)
+		_check(rounding_doc.items[0].state == "failed" and rounding_doc.items[0].reason == "unsupported_shape" and not rounding_doc.items[0].has("result"), "no expanded physics geometry")
+		_check(host.set_owner(spatial_owner, JSON.stringify(grants)).status == 0, "normal grants restored")
+		var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":index+1,
+			"consistency":"samePhysicsSample","queries":[case.query]}
+		queued_at = Time.get_ticks_usec()
+		_check(host.enqueue(spatial_owner, JSON.stringify(batch)).status == 0, case.id + " enqueue")
+		phase = 1
+		return
+	# Engine has advanced a normal physics boundary after host-created colliders.
+	var start := Time.get_ticks_usec()
+	if not _check(reader.pump() == 0, case.id + " pump"):
+		set_physics_process(false)
+		return
+	var elapsed := Time.get_ticks_usec() - start
+	var polled := host.poll(spatial_owner, index+1)
+	if not _check(polled.status == 0, case.id + " poll"):
+		return
+	var result: Dictionary = JSON.parse_string(polled.json)
+	var item: Dictionary = result.items[0]
+	if not _check(item.state == "completed", case.id + " completion " + JSON.stringify(item)):
+		return
+	var expected: String = case.doorOpenOutcome if phase == 2 else case.outcome
+	if expected != "engine-specific":
+		if not _check(item.result.outcome == expected, case.id + " expected " + expected + " got " + JSON.stringify(item)):
+			return
+	_check(item.result.truncated == case.truncated, case.id + " truncation")
+	if case.id == "inside-ray":
+		_check(item.result.originInside == "unknown", "inside ray uncertainty")
+	for hit in item.result.hits:
+		_check(hit.missing.has("normal") and hit.relation == "unknown", "no fabricated normal/penetration")
+	evidence.append({"case":case.id,"result":item.result,"pumpWallUs":elapsed,"queueWallUs":start-queued_at})
+	if case.id == "door-transition" and phase == 1:
+		door_sample = item.result.sample
+		viewport.get_child(0).position = Vector3(0, 0, 10)
+		case.query.requestId = 5000
+		case.query.queryId = "door-transition-open"
+		var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":index+1,
+			"consistency":"samePhysicsSample","queries":[case.query]}
+		queued_at = Time.get_ticks_usec()
+		_check(host.enqueue(spatial_owner, JSON.stringify(batch)).status == 0, "door open enqueue")
+		phase = 2
+		return
+	if phase == 2:
+		_check(item.result.sample.physicsSampleId != door_sample.physicsSampleId and item.result.sample.tick > door_sample.tick, "door state matches new sample/tick")
+	var queries: Array = []
+	for n in range(16):
+		var query: Dictionary = case.query.duplicate(true)
+		query.requestId = 6000+n
+		query.queryId = "batch:%s" % n
+		queries.append(query)
+	var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":6000,
+		"consistency":"samePhysicsSample","queries":queries}
+	var queue_start := Time.get_ticks_usec()
+	_check(host.enqueue(spatial_owner, JSON.stringify(batch)).status == 0, "batch enqueue")
+	var batch_start := Time.get_ticks_usec()
+	_check(reader.pump() == 0, "batch pump")
+	var batch_wall := Time.get_ticks_usec()-batch_start
+	var batch_result := host.poll(spatial_owner, 6000)
+	_check(batch_result.status == 0, "batch poll")
+	var batch_doc: Dictionary = JSON.parse_string(batch_result.json)
+	var sample_id: String = batch_doc.items[0].result.sample.physicsSampleId
+	for batch_item in batch_doc.items:
+		_check(batch_item.state == "completed" and batch_item.result.sample.physicsSampleId == sample_id, "one held physics sample")
+		_check(expected == "engine-specific" or batch_item.result.outcome == expected, "batch fixed expectation")
+		_check(batch_item.result.truncated == case.truncated, "batch truncation")
+	evidence.append({"case":case.id,"batchSize":16,"pumpWallUs":batch_wall,"queueWallUs":batch_start-queue_start,"result":batch_doc})
+	_check(reader.dispose() == 0, "dispose")
+	var stale_batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":9999,
+		"consistency":"samePhysicsSample","queries":[case.query]}
+	_check(host.enqueue(spatial_owner, JSON.stringify(stale_batch)).status != 0, "unregistered world rejected")
+	# Explicit host lifecycle: unregister before changing origin, then new epoch.
+	for obstacle in viewport.get_children():
+		obstacle.position.x += 100
+	var new_registration := _registration(false)
+	new_registration.provider.spaceEpoch = index+1001
+	var replacement := Reader.new()
+	_check(replacement.configure(host, viewport.find_world_3d(), new_registration, {"solid":{"mask":1,"bodies":true,"areas":false,"backfaces":false,"margin":0.0,"exclude":[]},"triggers":{"mask":1,"bodies":true,"areas":true,"backfaces":false,"margin":0.0,"exclude":[]}}) == 0, "new origin epoch registration")
+	_check(host.enqueue(spatial_owner, JSON.stringify(stale_batch)).status != 0, "old origin epoch rejected")
+	_check(replacement.dispose() == 0, "new epoch dispose")
+	_check(host.close_owner(spatial_owner).status == 0, "close")
+	viewport.queue_free()
+	phase = 0
+	index += 1

@@ -30,6 +30,7 @@ FetchContent_MakeAvailable(godot-cpp)
 
 add_library(gua-godot SHARED
     src/gua_context.cpp
+    src/spatial_host.cpp
     src/register_types.cpp
 )
 

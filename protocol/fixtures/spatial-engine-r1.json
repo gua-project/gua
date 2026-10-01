@@ -1,0 +1,1515 @@
+{
+  "configuration": {
+    "godot": "4.7.stable.official.5b4e0cb0f",
+    "godotBackend": "GodotPhysics3D",
+    "unity": "6000.5.3f1",
+    "unityBackend": "PhysX",
+    "os": "Windows x64",
+    "tickHz": 60,
+    "geometryTolerance": 0.001,
+    "policyMargin": 0,
+    "expectations": "Fixed analytic occupancy for boxes; engine-specific internal-start ray and boundary contact do not certify normals or penetration."
+  },
+  "cases": [
+    {
+      "id": "clear",
+      "obstacles": [],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 1,
+        "sessionEpoch": 1,
+        "queryId": "clear",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "radius": 0.25
+        },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 4
+        }
+      },
+      "outcome": "clear",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "blocked",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 2,
+        "sessionEpoch": 1,
+        "queryId": "blocked",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "radius": 0.25
+        },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 4
+        }
+      },
+      "outcome": "blocked",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "initial",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 3,
+        "sessionEpoch": 1,
+        "queryId": "initial",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 0.5
+        },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 4
+        }
+      },
+      "outcome": "initialOverlap",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "zero-clear",
+      "obstacles": [],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 4,
+        "sessionEpoch": 1,
+        "queryId": "zero-clear",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 0.5
+        },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "outcome": "clear",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "zero-initial",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 5,
+        "sessionEpoch": 1,
+        "queryId": "zero-initial",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 0.5
+        },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "outcome": "initialOverlap",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "gap-ray",
+      "obstacles": [
+        {
+          "center": {
+            "x": -1.25,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 1.5,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 1.25,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 1.5,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 6,
+        "sessionEpoch": 1,
+        "queryId": "gap-ray",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": 2
+          }
+        }
+      },
+      "outcome": "noHit",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "gap-capsule",
+      "obstacles": [
+        {
+          "center": {
+            "x": -1.25,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 1.5,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 1.25,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 1.5,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 7,
+        "sessionEpoch": 1,
+        "queryId": "gap-capsule",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "capsule",
+          "pointA": {
+            "x": 0,
+            "y": -0.5,
+            "z": -2
+          },
+          "pointB": {
+            "x": 0,
+            "y": 0.5,
+            "z": -2
+          },
+          "radius": 0.75
+        },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 4
+        }
+      },
+      "outcome": "blocked",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "capsule-total-height",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 1.125,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 0.5,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 8,
+        "sessionEpoch": 1,
+        "queryId": "capsule-total-height",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "capsule",
+          "pointA": {
+            "x": 0,
+            "y": -0.5,
+            "z": 0
+          },
+          "pointB": {
+            "x": 0,
+            "y": 0.5,
+            "z": 0
+          },
+          "radius": 0.5
+        }
+      },
+      "outcome": "detected",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "capsule-horizontal",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 1.125,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 0.5,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 9,
+        "sessionEpoch": 1,
+        "queryId": "capsule-horizontal",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "capsule",
+          "pointA": {
+            "x": -0.5,
+            "y": 0,
+            "z": 0
+          },
+          "pointB": {
+            "x": 0.5,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 0.5
+        }
+      },
+      "outcome": "notDetected",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "capsule-point",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 10,
+        "sessionEpoch": 1,
+        "queryId": "capsule-point",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "capsule",
+          "pointA": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "pointB": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 0.5
+        }
+      },
+      "outcome": "detected",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "box-x",
+      "obstacles": [
+        {
+          "center": {
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.5,
+            "y": 4,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 11,
+        "sessionEpoch": 1,
+        "queryId": "box-x",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "box",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "halfExtents": {
+            "x": 1,
+            "y": 0.25,
+            "z": 0.25
+          },
+          "basis": {
+            "x": {
+              "x": 1,
+              "y": 0,
+              "z": 0
+            },
+            "y": {
+              "x": 0,
+              "y": 1,
+              "z": 0
+            },
+            "z": {
+              "x": 0,
+              "y": 0,
+              "z": 1
+            }
+          }
+        }
+      },
+      "outcome": "detected",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "box-z",
+      "obstacles": [
+        {
+          "center": {
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 0.5,
+            "y": 4,
+            "z": 4
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 12,
+        "sessionEpoch": 1,
+        "queryId": "box-z",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "box",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "halfExtents": {
+            "x": 1,
+            "y": 0.25,
+            "z": 0.25
+          },
+          "basis": {
+            "x": {
+              "x": 0,
+              "y": 0,
+              "z": -1
+            },
+            "y": {
+              "x": 0,
+              "y": 1,
+              "z": 0
+            },
+            "z": {
+              "x": 1,
+              "y": 0,
+              "z": 0
+            }
+          }
+        }
+      },
+      "outcome": "notDetected",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "inside-ray",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 13,
+        "sessionEpoch": 1,
+        "queryId": "inside-ray",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": 2
+          }
+        }
+      },
+      "outcome": "engine-specific",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "self-behind-wall",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.25
+          },
+          "category": "self"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 14,
+        "sessionEpoch": 1,
+        "queryId": "self-behind-wall",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": 2
+          }
+        }
+      },
+      "outcome": "hit",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "trigger-ignore",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "trigger"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 15,
+        "sessionEpoch": 1,
+        "queryId": "trigger-ignore",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": 2
+          }
+        }
+      },
+      "outcome": "noHit",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "trigger-include",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "trigger"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 16,
+        "sessionEpoch": 1,
+        "queryId": "trigger-include",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "triggers",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "raycast",
+        "segment": {
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": 2
+          }
+        }
+      },
+      "outcome": "hit",
+      "truncated": false,
+      "loaded": true
+    },
+    {
+      "id": "saturation",
+      "obstacles": [
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        },
+        {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "size": {
+            "x": 4,
+            "y": 4,
+            "z": 0.5
+          },
+          "category": "solid"
+        }
+      ],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 17,
+        "sessionEpoch": 1,
+        "queryId": "saturation",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "overlap",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "radius": 0.5
+        }
+      },
+      "outcome": "detected",
+      "truncated": true,
+      "loaded": true
+    },
+    {
+      "id": "unloaded",
+      "obstacles": [],
+      "query": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "request",
+        "requestId": 18,
+        "sessionEpoch": 1,
+        "queryId": "unloaded",
+        "spaceId": "fixture",
+        "spaceEpoch": 1,
+        "queryPolicyId": "solid",
+        "deadlineMs": 1000,
+        "consistency": "samePhysicsSample",
+        "maxHits": 2,
+        "kind": "sweep",
+        "shape": {
+          "type": "sphere",
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": -2
+          },
+          "radius": 0.25
+        },
+        "delta": {
+          "x": 0,
+          "y": 0,
+          "z": 4
+        }
+      },
+      "outcome": "indeterminate",
+      "truncated": false,
+      "loaded": false
+    },
+    {
+      "id": "floor-contact",
+      "truncated": false,
+      "loaded": true,
+      "obstacles": [
+        {
+          "category": "solid",
+          "size": {
+            "z": 8,
+            "x": 8,
+            "y": 1
+          },
+          "center": {
+            "z": 0,
+            "x": 0,
+            "y": -1
+          }
+        }
+      ],
+      "outcome": "engine-specific",
+      "query": {
+        "spaceEpoch": 1,
+        "deadlineMs": 1000,
+        "documentType": "request",
+        "maxHits": 2,
+        "queryId": "floor-contact",
+        "queryPolicyId": "solid",
+        "consistency": "samePhysicsSample",
+        "shape": {
+          "type": "sphere",
+          "radius": 0.5,
+          "center": {
+            "z": 0,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "spaceId": "fixture",
+        "kind": "overlap",
+        "sessionEpoch": 1,
+        "requestId": 19,
+        "schemaVersion": "spatial-r1"
+      }
+    },
+    {
+      "id": "door-transition",
+      "doorOpenOutcome": "noHit",
+      "loaded": true,
+      "obstacles": [
+        {
+          "category": "solid",
+          "size": {
+            "z": 0.5,
+            "x": 4,
+            "y": 4
+          },
+          "center": {
+            "z": 0,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "truncated": false,
+      "outcome": "hit",
+      "query": {
+        "spaceEpoch": 1,
+        "deadlineMs": 1000,
+        "documentType": "request",
+        "maxHits": 2,
+        "queryId": "door-transition",
+        "queryPolicyId": "solid",
+        "consistency": "samePhysicsSample",
+        "spaceId": "fixture",
+        "kind": "raycast",
+        "sessionEpoch": 1,
+        "segment": {
+          "to": {
+            "z": 2,
+            "x": 0,
+            "y": 0
+          },
+          "from": {
+            "z": -2,
+            "x": 0,
+            "y": 0
+          }
+        },
+        "requestId": 20,
+        "schemaVersion": "spatial-r1"
+      }
+    }
+  ]
+}
