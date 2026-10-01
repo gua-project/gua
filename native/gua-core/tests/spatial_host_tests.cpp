@@ -139,6 +139,18 @@ int main() {
         Fixture x(1000,5); assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); std::this_thread::sleep_for(std::chrono::milliseconds(15));
         assert(x.complete(l,q)==GUA_SPATIAL_NOT_READY); auto r=x.poll(); assert(r.at("items").items[0].at("reason").text=="work_budget"); assert(r.at("items").items[1].at("state").text=="notExecuted"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
     }
+    for(bool deadline:{false,true}) {
+        Fixture x(deadline?5:1000,deadline?1000:5);
+        if(deadline) for(auto& q:x.batch.fields.at("queries").items) q.fields["deadlineMs"]=parse("5");
+        assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l);
+        auto bad=x.execution; bad.fields["queryId"]=parse("\"wrong\""); gua::SpatialDocument d(10,wire(bad));
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        assert(gua_spatial_host_complete(x.h,l,d.get(),&x.e)==GUA_SPATIAL_NOT_READY);
+        auto r=x.poll(); const auto& items=r.at("items").items;
+        assert(items[0].at("state").text=="failed"&&items[1].at("state").text=="notExecuted");
+        for(const auto& i:items) assert(i.at("reason").text==(deadline?"deadline_exceeded":"work_budget")&&!i.fields.contains("result"));
+        assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+    }
     {
         Fixture x(1000,1000,1); assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l);
         assert(gua_spatial_host_close_owner(x.h,x.o,&x.e)==0); assert(gua_spatial_host_unregister(x.h,x.p,&x.e)==0);

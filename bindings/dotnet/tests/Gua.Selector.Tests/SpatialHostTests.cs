@@ -88,6 +88,21 @@ public sealed class SpatialHostTests
             Assert.That(h.Take(l),Is.Null); Assert.That(count,Is.EqualTo(2));
         } finally { h.End(l); }
     }
+    [TestCase(false)]
+    [TestCase(true)]
+    public void LateMiscorrelatedCompletionPreservesElapsedBudgetReason(bool deadline)
+    {
+        using var h=new GuaSpatialHost(new GuaSpatialHostOptions { MaxProviders=2,MaxOwners=2,MaxQueueDepth=2,MaxQueriesPerBatch=64,MaxHitsPerQuery=2,QueryDeadlineMs=deadline?50:1000,MaxBatchWorkMs=deadline?1000:50 },"managed-clock");
+        using var registration=Doc(0); using var grants=Doc(1); using var original=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var batch=original.ReadBatch(); if(deadline) foreach(var query in batch.Queries) query.DeadlineMs=50;
+        using var input=GuaSpatialDocument.FromBatch(batch); var bad=execution.ReadExecution(); bad.QueryId="wrong"; using var payload=GuaSpatialDocument.FromExecution(bad);
+        var p=h.Register(registration); var o=h.OpenOwner(grants); h.Enqueue(o,input); var l=h.Begin(p,boundary)!.Value; using var q=h.Take(l);
+        Thread.Sleep(100);
+        Assert.That(Assert.Throws<GuaSpatialException>(()=>h.Complete(l,payload))!.Code,Is.EqualTo(GuaSpatialErrorCode.NotReady));
+        using var result=h.Poll(o,1)!; var items=result.ReadBatchResult().Items;
+        Assert.That(items[0].State,Is.EqualTo("failed")); Assert.That(items[1].State,Is.EqualTo("notExecuted"));
+        Assert.That(items.All(i=>i.Reason==(deadline?"deadline_exceeded":"work_budget")&&i.Result is null),Is.True); h.End(l);
+    }
     [Test]
     public void UnregisterPreservesTerminationReasonsAndRedactsCompletedGeometry()
     {

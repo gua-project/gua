@@ -82,6 +82,9 @@ before each take, at completion and at publication. Budgets use host steady time
 not physics ticks or client time. One backend query cannot be forcefully
 interrupted; an over-budget completion is discarded, not relabeled a timely
 success. Limits are cooperative bounds, never hard real-time guarantees.
+At completion an already elapsed deadline/work budget is checked before
+result-specific validation, so malformed late evidence cannot overwrite the
+elapsed-time termination reason with `internal`.
 
 ## Results and compatibility
 

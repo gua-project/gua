@@ -313,6 +313,9 @@ int gua_spatial_host_take(gua_spatial_host_t* h,uint64_t lease,gua_spatial_docum
 int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spatial_document_t* d,gua_spatial_error_t* e) {
     return boundary(e,[&] {
         host(h); document(d,10); std::lock_guard lock(h->mutex); auto& b=leased(*h,lease); require(b.inflight,GUA_SPATIAL_NOT_READY);
+        // Expired backend work is discarded before its result facts can turn
+        // the truthful stop reason into a payload validation failure.
+        if(!b.owner_closed) if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
         const auto& q=b.input.at("queries").items[b.next]; gua_spatial_document_t qd{1,q,{}}; gua_spatial_error_t error{};
         if(gua_spatial_check_result(&qd,d,&error)!=0) { finish(*h,b,"internal"); fail(error.code); }
         if(b.owner_closed) { b.inflight=false; b.done=true; return; }
