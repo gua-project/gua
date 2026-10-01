@@ -74,10 +74,16 @@ a runtime nor detects secrets in pixels. Generic external writers may use
 8192 per dimension and 16,777,216 pixels, also subject to Trace attachment budgets.
 PNG dimensions must match IHDR. SVG, URL images and arbitrary data MIME are rejected.
 Decoder failure remains visible and cannot create an overlay.
+Select **Show screenshot** to decode pixels. Only one image is active at a time,
+so the aggregate active decode budget is 16,777,216 pixels, even when many highly
+compressed screenshots share one step. Observation IDs are indexed once per Trace;
+duplicate observation IDs remain ambiguous. Event sequence, rather than a possibly
+reused event ID, isolates per-screenshot selection and decoder state.
 
 Overlay requires exactly one retained, available UI observation matching the
 attachment's observation ID, confirmed source/epoch identity, and complete finite
 x/y/w/h bounds. Bounds scale with image dimensions in physical viewport pixels;
+epochs must be positive decimal uint64 strings; zero/placeholders are unconfirmed.
 partial bounds are not filled with zero. The caller must associate pixels and
 snapshot correctly; this reference alone does not establish simultaneous capture.
 Unknown or evicted snapshots still permit authorized pixels but no guessed overlay.
@@ -103,3 +109,6 @@ The browser script runs both static reports and the Inspector, exercises the
 actual directory picker and loading races, checks responsive overlay geometry,
 and writes PNG screenshots plus `browser-evidence.json`. These are generated
 artifacts and stay out of git.
+The verifier requires exactly the success/failure/interruption fixture set and
+defaults to the configured Inspector port 1420. Its local-file allowlist uses
+normalized file URLs on both Windows and POSIX.

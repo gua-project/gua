@@ -155,6 +155,20 @@ export function traceScreenshot(value: unknown, profile: string) {
   } catch { return null; }
 }
 
+/** Null means ambiguous: a duplicate observation ID cannot select one snapshot. */
+export function indexObservations(events: TraceEvent[]) {
+  const index = new Map<string, TraceEvent | null>();
+  for (const event of events) {
+    if (event.type !== "observation") continue;
+    const id = object(event.data).observationId;
+    if (typeof id === "string" && id) index.set(id, index.has(id) ? null : event);
+  }
+  return index;
+}
+export function confirmedEpoch(value: unknown): value is string {
+  return typeof value === "string" && /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 18446744073709551615n;
+}
+
 export function pendingRequests(events: TraceEvent[]) {
   const pending = new Map<string, string>();
   for (const e of events) {

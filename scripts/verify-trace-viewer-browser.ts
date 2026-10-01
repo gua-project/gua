@@ -6,8 +6,12 @@ import { createCdpClient } from "./godot-web-cdp";
 const root = resolve(import.meta.dir, "..");
 const fixturesRoot = resolve(root, process.argv[2] ?? "artifacts/trace-viewer-qa");
 const port = process.argv[3] ?? "9337";
-const inspectorUrl = process.argv[4] ?? "http://127.0.0.1:5173";
+const inspectorUrl = process.argv[4] ?? "http://127.0.0.1:1420";
 const fixtures = JSON.parse(await readFile(resolve(fixturesRoot, "fixtures.json"), "utf8")) as { outcome: string; directory: string; report: string }[];
+if (!Array.isArray(fixtures) || fixtures.length !== 3 ||
+    !["passed", "failed", "interrupted"].every(outcome => fixtures.filter(f => f?.outcome === outcome && typeof f.directory === "string" && typeof f.report === "string").length === 1))
+  throw new Error("Browser fixtures must contain exactly passed, failed and interrupted reports");
+const localPrefix = pathToFileURL(root + "/").href;
 const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json() as { webSocketDebuggerUrl: string };
 const client = createCdpClient(target.webSocketDebuggerUrl);
 await client.open();
@@ -16,7 +20,7 @@ await new Promise<void>((resolve, reject) => { observed.addEventListener("open",
 const external: string[] = [], exceptions: string[] = [];
 observed.addEventListener("message", e => {
   const m = JSON.parse(String(e.data));
-  if (m.method === "Network.requestWillBeSent" && /^(https?:|file:)/.test(m.params.request.url) && !m.params.request.url.startsWith(inspectorUrl) && !m.params.request.url.startsWith("file:///" + root.replaceAll("\\", "/"))) external.push(m.params.request.url);
+  if (m.method === "Network.requestWillBeSent" && /^(https?:|file:)/.test(m.params.request.url) && !m.params.request.url.startsWith(inspectorUrl) && !m.params.request.url.startsWith(localPrefix)) external.push(m.params.request.url);
   if (m.method === "Runtime.exceptionThrown") exceptions.push(m.params.exceptionDetails.text);
   if (m.method === "Page.javascriptDialogOpening") exceptions.push("unexpected dialog");
 });
@@ -63,6 +67,9 @@ try {
     require(await evaluate("document.body.innerText.includes('hold-pending') && document.body.innerText.includes('hold-started') && document.body.innerText.includes('release-requested') && document.body.innerText.includes('release-confirmed') && document.body.innerText.includes('late-completion')"), "distinct hold/release/late phases");
     require(await evaluate("document.body.innerText.includes('First') && document.body.innerText.includes('Second') && document.body.innerText.includes('Third') && document.body.innerText.includes('before → result-decision')"), "intermediate/difference UI");
     require(await evaluate("!window.__hostileExecuted && !document.querySelector('img[src^=http],a[href^=http]')"), "inert hostile data");
+    require(await evaluate("!document.querySelector('figure img')"), "screenshots are never decoded eagerly");
+    await evaluate("[...document.querySelectorAll('article button')].find(b=>b.textContent==='Show screenshot').click()");
+    await wait("!!document.querySelector('figure img')");
     // Collapse bulky JSON before visual QA; retain the recorded image and its selector.
     await evaluate("document.querySelectorAll('article pre').forEach(p=>p.style.display='none');document.querySelector('article').querySelectorAll('details').forEach(d=>{if(d.querySelector('figure'))d.open=true})");
     await evaluate("(() => { const s=document.querySelector('figure select'); s.value='player';s.dispatchEvent(new Event('change',{bubbles:true})); })()");
@@ -78,12 +85,26 @@ try {
     await evaluate("document.querySelector('figure').scrollIntoView({block:'center'})");
     await screenshot("static-" + fixture.outcome);
     await select(1); await openDetails();
+    require(await evaluate("!document.querySelector('figure')"), "switching steps resets screenshot selection even with reused event IDs");
     require(await evaluate("document.querySelector('article').innerText.includes('request 8') && !document.querySelector('article').innerText.includes('late-completion')"), "repeated label retains separate request");
     await filter("cleanup"); require(await evaluate("document.querySelectorAll('nav button').length===1 && document.querySelector('article h2').innerText==='Runner cleanup'"), "filtered selection follows visible step");
     await filter("no-match"); require(await evaluate("document.querySelector('article').innerText==='No matching steps'"), "empty filter hides old detail");
     await filter(""); await select(2); await openDetails();
     require(await evaluate(`document.body.innerText.includes('Primary result: ${fixture.outcome}') && document.querySelector('article').innerText.includes('after-cleanup') && document.querySelector('article').innerText.includes('Step result: failed')`), "cleanup doesn't overwrite primary");
-    require(await evaluate("document.querySelector('article').innerText.includes('Screenshot unavailable:') && document.querySelector('article').innerText.includes('bounds overlay unavailable') && ['failed','partial','stale','gap','outsideRetention'].every(s=>document.querySelector('article').innerText.includes('missing-'+s)) && !document.querySelector('img[src^=http]')"), "missing observations and malicious screenshot never become complete records");
+    await evaluate("[...document.querySelectorAll('article button')].filter(b=>b.textContent==='Show screenshot')[0].click()");
+    await wait("document.querySelector('article').innerText.includes('bounds overlay unavailable')");
+    await evaluate("[...document.querySelectorAll('article button')].filter(b=>b.textContent==='Show screenshot')[0].click()");
+    await wait("document.querySelector('article').innerText.includes('Screenshot unavailable:')");
+    require(await evaluate("!document.querySelector('figure img') && ['failed','partial','stale','gap','outsideRetention'].every(s=>document.querySelector('article').innerText.includes('missing-'+s)) && !document.querySelector('img[src^=http]')"), "missing observations and malicious screenshot never become complete records");
+    await evaluate("document.querySelectorAll('article button')[2].click()");
+    await wait("document.body.innerText.includes('Screenshot decode failed; pixels unavailable')");
+    require(await evaluate("!document.querySelector('figure img') && !document.querySelector('[aria-label^=\"Bounds overlay\"]')"), "decoder failure never enables overlays");
+    await evaluate("document.querySelectorAll('article button')[3].click()");
+    await wait("!!document.querySelector('figure img')");
+    require(await evaluate("document.querySelector('figure select').options.length===1"), "unconfirmed epoch never enables node overlays");
+    await select(0); await evaluate("[...document.querySelectorAll('article button')].find(b=>b.textContent==='Show screenshot').click()");
+    await wait("document.querySelector('figure img')?.naturalWidth===640");
+    require(await evaluate("document.querySelectorAll('figure img').length===1 && !document.body.innerText.includes('Screenshot decode failed; pixels unavailable')"), "duplicate event IDs cannot leak failed decode state across steps");
     evidence.push({ surface: "static .NET report", outcome: fixture.outcome, checks: "timeline, repeated actions, filtering, truth/result, phases, differences, overlay, unknown records, inert hostile data, cleanup" });
   }
   await navigate(pathToFileURL(resolve(fixturesRoot, "missing.html")).href); await wait("!!document.querySelector('.gua-trace')");

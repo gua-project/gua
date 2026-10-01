@@ -237,3 +237,22 @@ final-head CI remains a separate merge gate. Screenshot pixel authorization,
 masking and truthful association to the UI observation remain caller duties;
 PNG header checks do not prove simultaneous capture or discover secrets in pixels.
 Real game acquisition/E2E and T-06 Lint/comparison integration are outside T-05.
+
+### #127 automated review follow-up
+
+Validated and fixed all eight automated-review findings: one explicit active
+screenshot within the 16,777,216-pixel aggregate budget; a once-per-Trace observation
+index (duplicate IDs remain ambiguous); parser-enforced unique sequence keys;
+positive uint64 overlay/difference epochs; independent quality labels for dropped
+versus stopped detail; configured 1420 verifier default; exact three-outcome fixture
+coverage; and pathToFileURL-based Windows/POSIX local-file prefixes.
+
+Focused regression now passes 26/26 (98 assertions), including 100,000 observation
+index entries/access counts and 100 screenshot attachments with zero eager images.
+The enhanced Chrome acceptance run passes all seven cases with zero external reads
+or exceptions, using the default Inspector URL. It also verifies no eager image,
+single-image selection, actual truncated-PNG decode failure, missing bounds/epoch,
+and failed-to-valid screenshot switching across reused event IDs. Missing
+interruption fixtures are rejected before any browser connection. Evidence is under
+ignored `artifacts/trace-viewer-qa-review`. The earlier audit passes remain the bounded
+independent audit gate; automated review fixes receive focused tests and review replies.

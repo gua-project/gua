@@ -14,6 +14,8 @@ describe("Trace v1 offline reader/viewer", () => {
     for (const identity of [{}, { channel: "ui" }, { channel: "ui", host: {} },
       { channel: "ui", host: { sourceId: "", sessionEpoch: "1" } },
       { channel: "ui", host: { sourceId: "game", sessionEpoch: "" } },
+      { channel: "ui", host: { sourceId: "game", sessionEpoch: "0" } },
+      { channel: "ui", host: { sourceId: "game", sessionEpoch: "unknown" } },
       { channel: "", host: { sourceId: "game", sessionEpoch: "1" } }]) {
       const blobs = Object.fromEntries([1, 2].map(i => [`snapshots/${String(i).repeat(64)}.json`, { position: i }]));
       const trace = parseTrace(JSON.stringify(manifest), lines(...[1, 2].map(i => event(i, "observation", {

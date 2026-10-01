@@ -52,8 +52,18 @@ foreach (var outcome in new[] { GuaTraceOutcome.Passed, GuaTraceOutcome.Failed, 
         observationId = "missing-observation", screenshot = new { dataUri = Png(), width = 640, height = 360 } }));
     trace.Attach(cleanup, "gua.trace.screenshot.v1", Json(new { schemaVersion = 1, profile = "player", pixelPolicy = "caller-authorized",
         observationId = "missing-observation", screenshot = new { dataUri = "https://attacker.invalid/pixels", width = 640, height = 360 } }));
+    trace.Attach(cleanup, "gua.trace.screenshot.v1", Json(new { schemaVersion = 1, profile = "player", pixelPolicy = "caller-authorized",
+        observationId = "missing-observation", screenshot = new { dataUri = "data:image/png;base64," + Convert.ToBase64String(Convert.FromBase64String(Png().Substring(22)).Take(33).ToArray()), width = 640, height = 360 } }));
+    var unconfirmed = trace.Observe(cleanup, "ui", "unconfirmed-epoch", "available", new("game", "0"), Json(new { nodes = new[] { new { id = "unknown", bounds = new { x = 0, y = 0, w = 10, h = 10 } } } }));
+    trace.Attach(cleanup, "gua.trace.screenshot.v1", Json(new { schemaVersion = 1, profile = "player", pixelPolicy = "caller-authorized",
+        observationId = unconfirmed, screenshot = new { dataUri = Png(), width = 640, height = 360 } }));
     trace.EndStep(cleanup, GuaTraceOutcome.Failed);
     await trace.CompleteAsync(GuaTraceOutcome.Passed);
+    // Generic writers may reuse event IDs; sequence remains the enforced unique identity.
+    var eventPath = Path.Combine(trace.ArtifactPath, "events.jsonl");
+    var fixtureEvents = File.ReadAllLines(eventPath).Select(line => JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(line)!).ToArray();
+    foreach (var record in fixtureEvents) if (record["type"].GetString() == "attachment") record["eventId"] = Json("reused-attachment-id");
+    File.WriteAllLines(eventPath, fixtureEvents.Select(record => JsonSerializer.Serialize(record)));
     var report = GuaTraceReport.WriteHtml(trace.ArtifactPath, Path.Combine(root, outcome.ToString().ToLowerInvariant() + ".html"));
     if (!report.Succeeded) throw new Exception(report.Error);
     fixtures.Add(new { outcome = outcome.ToString().ToLowerInvariant(), directory = trace.ArtifactPath, report = report.Path });

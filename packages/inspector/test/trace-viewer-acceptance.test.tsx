@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GuaTraceViewer } from "../src/TraceViewer";
-import { parseTrace, pendingRequests, readTraceFiles, traceScreenshot } from "../src/trace";
+import { confirmedEpoch, indexObservations, parseTrace, pendingRequests, readTraceFiles, traceScreenshot } from "../src/trace";
 
 export const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=";
 const id = "a".repeat(32), step = "b".repeat(32);
@@ -11,6 +11,35 @@ const lines = (...events: unknown[]) => events.map(e => JSON.stringify(e)).join(
 const screenshot = { schemaVersion: 1, profile: "player", pixelPolicy: "caller-authorized", observationId: "o1", screenshot: { dataUri: png, width: 1, height: 1 } };
 
 describe("Trace Viewer acceptance contracts", () => {
+  test("dropped events never claim detail collection stopped", () => {
+    const trace = parseTrace(JSON.stringify({ ...manifest, lastSequence: 1, quality: { ...manifest.quality, droppedEvents: 2 } }), lines(event(1, "step.begin", { label: "retained" })));
+    const html = renderToStaticMarkup(<GuaTraceViewer trace={trace} />);
+    expect(html).toContain("events dropped"); expect(html).not.toContain("detail collection stopped");
+  });
+  test("overlay epochs require a positive decimal uint64", () => {
+    for (const epoch of ["0", "unknown", "", "01", "-1", "18446744073709551616", 1]) expect(confirmedEpoch(epoch)).toBe(false);
+    for (const epoch of ["1", "18446744073709551615"]) expect(confirmedEpoch(epoch)).toBe(true);
+  });
+  test("100k observation index reads each data record once, keeps duplicate IDs ambiguous", () => {
+    let reads = 0;
+    const events = Array.from({ length: 100000 }, (_, i) => {
+      const e = event(i + 1, "observation", {});
+      Object.defineProperty(e, "data", { get: () => { reads++; return { observationId: `o${i}` }; } }); return e;
+    });
+    const index = indexObservations(events);
+    let matches = 0;
+    for (let i = 0; i < 100000; i++) if (index.get(`o${i}`)?.sequence === i + 1) matches++;
+    expect(matches).toBe(100000);
+    expect(reads).toBe(100000);
+    expect(indexObservations([event(1, "observation", { observationId: "same" }), event(2, "observation", { observationId: "same" })]).get("same")).toBeNull();
+  });
+  test("many screenshot attachments do not mount any decoded pixels until explicitly selected", () => {
+    const blob = "attachments/" + "3".repeat(64) + ".json";
+    const events = Array.from({ length: 100 }, (_, i) => event(i + 1, "attachment", { schema: "gua.trace.screenshot.v1", blob }));
+    const trace = parseTrace(JSON.stringify({ ...manifest, lastSequence: 100 }), lines(...events), { [blob]: screenshot });
+    const html = renderToStaticMarkup(<GuaTraceViewer trace={trace} />);
+    expect(html).not.toContain("<img"); expect(html.match(/Show screenshot/g)).toHaveLength(100);
+  });
   test("PNG only: external, SVG, policy/profile mismatch, size and IHDR mismatch are unavailable", () => {
     expect(traceScreenshot(screenshot, "player")).not.toBeNull();
     for (const value of [
