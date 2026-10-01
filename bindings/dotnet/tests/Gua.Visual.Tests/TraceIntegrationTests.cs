@@ -196,6 +196,7 @@ public sealed class TraceIntegrationTests
     [TestCase("missing-property")]
     [TestCase("supplement")]
     [TestCase("live-read")]
+    [TestCase("bookkeeping")]
     public async Task DownstreamDiagnosticsFaultsAreVisibleWithoutReplacingPrimary(string fault)
     {
         using var context = new GuaContext(); Publish(context, 0);
@@ -211,13 +212,25 @@ public sealed class TraceIntegrationTests
         {
             TestName = "fault", OutputDirectory = fault == "directory" ? blocked : Path.Combine(_root, "legacy"),
             Trace = trace, TraceStepId = step,
-            TextArtifacts = fault == "supplement" ? new Dictionary<string, Func<string>>
-                { ["supplement.txt"] = () => { supplementFired = true; throw new IOException("PRIVATE-FAULT"); } } : new()
+            TextArtifacts = fault is "supplement" or "bookkeeping" ? new Dictionary<string, Func<string>>
+                { ["supplement.txt"] = () =>
+                    {
+                        supplementFired = true;
+                        if (fault == "bookkeeping")
+                        {
+                            var directory = Path.GetFullPath(Directory.GetDirectories(Path.Combine(_root, "legacy", "fault")).Single());
+                            Assert.That(directory.StartsWith(Path.GetFullPath(_root) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase), Is.True);
+                            Directory.Delete(directory, true); // Only this fixture's generated legacy capture; simulate unavailable storage.
+                        }
+                        throw new IOException("PRIVATE-FAULT");
+                    } } : new()
         }).Capture(primary);
         Assert.That(source.Reads, Is.EqualTo(1)); Assert.That(result.PrimaryException, Is.SameAs(primary));
         Assert.That(result.CaptureErrors, Is.Not.Empty, "The downstream fault must actually fire.");
-        Assert.That(result.Succeeded, Is.EqualTo(fault == "supplement"));
-        Assert.That(supplementFired, Is.EqualTo(fault == "supplement"));
+        Assert.That(result.Succeeded, Is.EqualTo(fault is "supplement" or "bookkeeping"));
+        Assert.That(supplementFired, Is.EqualTo(fault is "supplement" or "bookkeeping"));
+        if (fault == "bookkeeping")
+            Assert.That(result.CaptureErrors.Select(e => e.Stage), Does.Contain("error-summary").And.Contain("bookkeeping"), "Both actual bookkeeping faults must fire without replacing primary.");
         await trace.CompleteAsync(GuaTraceOutcome.Failed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("failed"));
@@ -243,6 +256,7 @@ public sealed class TraceIntegrationTests
         Assert.That(singleRead.Reads, Is.EqualTo(1), "A second live diagnostics read fails in this fixture.");
         Assert.That(singleRead.VersionReads, Is.EqualTo(1), "A second live version read also fails in this fixture.");
         Assert.That(result.PrimaryException, Is.SameAs(primary)); Assert.That(result.Succeeded, Is.True);
+        Assert.That(GuaTraceCapture.Environment(trace, step, context.GetVersion(), options.Environment, GuaObservationProfile.Debug), Is.True);
         Assert.Throws<IOException>(() => singleRead.GetVersion(), "The second version read fault is real but capture must avoid it.");
         Assert.That(singleRead.VersionReads, Is.EqualTo(2));
         var failedCapture = new GuaDiagnosticsSession(singleRead, options).Capture(primary);
@@ -253,15 +267,22 @@ public sealed class TraceIntegrationTests
         await trace.CompleteAsync(GuaTraceOutcome.Failed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Events.Where(e => e.Type == "attachment").Select(e => e.Data.GetProperty("schema").GetString()),
-            Is.EquivalentTo(new[] { "gua.diagnostics.v1", "gua.environment.v1" }));
+            Is.EquivalentTo(new[] { "gua.diagnostics.v1", "gua.environment.v1", "gua.environment.v1" }));
         var diagnosticCopy = read.Blobs[read.Events.Single(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.diagnostics.v1").Data.GetProperty("blob").GetString()!];
         Assert.That(System.Text.Json.Nodes.JsonNode.DeepEquals(
             System.Text.Json.Nodes.JsonNode.Parse(diagnosticCopy.GetProperty("uiTree").GetRawText()),
             System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath!, "ui-tree.json")))), Is.True);
-        var environmentCopy = read.Blobs[read.Events.Single(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.environment.v1").Data.GetProperty("blob").GetString()!];
+        var environmentAttachments = read.Events.Where(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.environment.v1").ToArray();
+        var environmentCopy = read.Blobs[environmentAttachments[0].Data.GetProperty("blob").GetString()!];
+        var explicitCopy = read.Blobs[environmentAttachments[1].Data.GetProperty("blob").GetString()!];
         Assert.That(System.Text.Json.Nodes.JsonNode.DeepEquals(
             System.Text.Json.Nodes.JsonNode.Parse(environmentCopy.GetProperty("version").GetRawText()),
-            System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath!, "version.json")))), Is.True);
+            System.Text.Json.Nodes.JsonNode.Parse(explicitCopy.GetProperty("version").GetRawText())), Is.True, "One schema must have one case-sensitive version shape.");
+        Assert.That(environmentCopy.GetProperty("version").TryGetProperty("protocolSchemaVersion", out _), Is.True);
+        using var legacyVersion = JsonDocument.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath!, "version.json")));
+        Assert.That(legacyVersion.RootElement.TryGetProperty("ProtocolSchemaVersion", out _), Is.True, "Legacy file casing remains unchanged.");
+        Assert.That(GuaVersion.Parse(environmentCopy.GetProperty("version").GetRawText()).ProtocolSchemaVersion,
+            Is.EqualTo(GuaVersion.Parse(legacyVersion.RootElement.GetRawText()).ProtocolSchemaVersion));
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("diagnostics-failed"));
         Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())), Does.Not.Contain("SECRET-MARKER").And.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain(result.ArtifactPath!));
     }

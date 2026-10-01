@@ -343,6 +343,8 @@ logs/pendingRequests/environment等を保ち、Screenshotは常に取り除く�
 version、呼出側environment/callerMetadataは `gua.environment.v1` の別添付にする。
 このlegacy自動コピーもDebug限定。Playerへ既存environment/callerMetadataをラベルだけで移さず、
 明示的に認可済みdataを渡す`GuaTraceCapture.Environment` APIを使う。
+`gua.environment.v1`共通fieldはcamelCaseのversion/environment（自動Debugコピーには任意callerMetadata）。
+両APIは同じTrace serializerを使う。既存version.jsonのPascalCaseは変更しない。
 既存diagnosticsのディスクファイルや例外本文をTraceへimportせず、それらの既存policyを
 再マスクする機能ではない。取得/保存/表示故障はTrace品質として扱い、元例外を置き換えない。
 live読取後のJSON必須property欠損、file生成、supplement/sink故障もdiagnostics-failed品質と

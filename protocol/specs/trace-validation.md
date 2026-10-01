@@ -343,3 +343,9 @@ limitでdetail停止した後のattachment failureは、通常のevent/queue/byt
 実attachment limit（Recent/Streaming）、artifact limit（両方式）、writer gateで実queue飽和の
 5caseを追加し、主結果Passedの保持、OnFailure保存、secret blobなし、payload/manifest上限と
 eventまたはsummaryの相関を確認。統合22/22、全Visual128/128（skip0）。
+
+session補助取得故障はerror-summary保存/列挙より前にTraceへ記録し、両bookkeepingもguardする。
+fixtureの生成済みlegacy directoryだけを補助getter内で削除して実IOExceptionを起こし、
+error-summary保存と列挙の実故障がCaptureErrorsへ残り、元例外identityと単一故障eventを保つ。
+自動/明示Environment両APIのversion JSONをcase-sensitiveに比較し、共通camelCaseを確認。
+legacy version.jsonのPascalCaseを保ち同じversion値であることも検証。統合23件。
