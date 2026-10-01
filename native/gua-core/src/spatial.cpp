@@ -1,4 +1,4 @@
-#include "gua/spatial.h"
+#include "gua/spatial_host.h"
 #include "value_json.hpp"
 #include <array>
 #include <cstring>
@@ -7,6 +7,9 @@
 #include <set>
 #include <locale>
 #include <sstream>
+#include <chrono>
+#include <mutex>
+#include <deque>
 
 using gua_value_detail::json;
 struct gua_spatial_document_t { int type; json value; std::string wire; };
@@ -99,8 +102,16 @@ void coverage(const json& j) {
     else require(has(j,"reason"),GUA_SPATIAL_SEMANTICS);
     if(has(j,"reason")) text(j,"reason");
 }
-void sample(const json& j) {
-    object(j,{"physicsSampleId","tick","observedAtMs"},{"worldSnapshot"}); text(j,"physicsSampleId"); sequence(j.at("tick")); range(j.at("observedAtMs"),0);
+void sample(const json& j, bool host=false) {
+    if(host) {
+        object(j,{"physicsSampleId","clockId","observedFromMs","observedToMs","queryPolicyRevision"},{"tick","worldSnapshot"});
+        text(j,"clockId"); sequence(j.at("queryPolicyRevision"),true);
+        require(range(j.at("observedFromMs"),0)<=range(j.at("observedToMs"),0),GUA_SPATIAL_SEMANTICS);
+        if(has(j,"tick")) sequence(j.at("tick"));
+    } else {
+        object(j,{"physicsSampleId","tick","observedAtMs"},{"worldSnapshot"}); sequence(j.at("tick")); range(j.at("observedAtMs"),0);
+    }
+    text(j,"physicsSampleId");
     if(has(j,"worldSnapshot")) {
         const auto& w=j.at("worldSnapshot"); object(w,{"sessionEpoch","frameSequence","revision"});
         sequence(w.at("sessionEpoch"),true); sequence(w.at("frameSequence")); sequence(w.at("revision"));
@@ -131,7 +142,7 @@ void motion(const json& j) {
     if(k=="nativeBracket") { auto a=range(j.at("safeFraction"),0,1),b=range(j.at("unsafeFraction"),0,1); require(a<=b,GUA_SPATIAL_SEMANTICS); }
     else { require(has(j,"distance")||has(j,"fraction")); if(has(j,"distance")) range(j.at("distance"),0); if(has(j,"fraction")) range(j.at("fraction"),0,1); }
 }
-void result(const json& j) {
+void result(const json& j, int mode=0) {
     object(j,{"schemaVersion","documentType","requestId","sessionEpoch","queryId","spaceId","spaceEpoch","kind","status"},
         {"error","outcome","coverage","truncated","sample","hits","nearest","originInside","initialOverlap","motion"});
     correlation(j); auto status=tag(j.at("status"),{"completed","rejected","unsupported","failed","cancelled","deadlineExceeded"});
@@ -145,8 +156,8 @@ void result(const json& j) {
         if(status=="deadlineExceeded") require(code=="deadline_exceeded",GUA_SPATIAL_SEMANTICS);
         return;
     }
-    require(!has(j,"error")&&has(j,"outcome")&&has(j,"coverage")&&has(j,"truncated")&&has(j,"sample")&&has(j,"hits"));
-    coverage(j.at("coverage")); sample(j.at("sample")); const bool truncated=boolean(j.at("truncated"));
+    require(!has(j,"error")&&has(j,"outcome")&&has(j,"coverage")&&has(j,"truncated")&&(has(j,"sample")== (mode!=2))&&has(j,"hits"));
+    coverage(j.at("coverage")); if(mode!=2) sample(j.at("sample"),mode==1); const bool truncated=boolean(j.at("truncated"));
     const auto& hits=j.at("hits"); require(hits.type==json::array&&hits.items.size()<=32); for(auto& h:hits.items) hit(h);
     auto k=text(j,"kind"),o=text(j,"outcome");
     if(k=="raycast") {
@@ -206,17 +217,19 @@ bool contains(const json& a,const std::string& v) { for(auto& x:a.items) if(x.te
 void documents(const gua_spatial_document_t* a,int at,const gua_spatial_document_t* b,int bt) {
     require(a&&b&&a->type==at&&b->type==bt);
 }
+void host_document(const json& j,int type);
 }
 extern "C" {
 int gua_spatial_from_json(const gua_spatial_parse_options_v1_t* options,gua_value_text_t input,gua_spatial_document_t** out,gua_spatial_error_t* error) {
     if(out) *out=nullptr;
     return boundary(error,[&] {
-        require(out&&options&&options->struct_size==sizeof(*options)&&options->document_type>=1&&options->document_type<=3&&(!input.size||input.data));
+        require(out&&options&&options->struct_size==sizeof(*options)&&options->document_type>=1&&options->document_type<=11&&(!input.size||input.data));
+        if(options->document_type>=4) require(input.size<=1024*1024);
         json j; try { j=gua_value_detail::parser(std::string_view(input.data?input.data:"",input.size)).parse(); }
         catch(const gua_value_detail::failure&) { fail(GUA_SPATIAL_INVALID); }
-        require(j.type==json::object); require(text(j,"schemaVersion")=="spatial-r1",GUA_SPATIAL_VERSION,"$.schemaVersion");
-        const char* types[]={"","request","result","provider"}; require(text(j,"documentType")==types[options->document_type]);
-        if(options->document_type==1) request(j); else if(options->document_type==2) result(j); else provider(j);
+        require(j.type==json::object); require(text(j,"schemaVersion")== (options->document_type<=3?"spatial-r1":"spatial-host-r1"),GUA_SPATIAL_VERSION,"$.schemaVersion");
+        const char* types[]={"","request","result","provider","result","batch","batchResult","registration","owner","boundary","execution","advertisement"}; require(text(j,"documentType")==types[options->document_type]);
+        if(options->document_type==1) request(j); else if(options->document_type==2) result(j); else if(options->document_type==3) provider(j); else host_document(j,options->document_type);
         auto document=std::make_unique<gua_spatial_document_t>(); document->type=options->document_type; document->wire=dump(j); document->value=std::move(j); *out=document.release();
     });
 }
@@ -240,13 +253,13 @@ int gua_spatial_check_request(const gua_spatial_document_t* r,const gua_spatial_
 }
 int gua_spatial_check_result(const gua_spatial_document_t* r,const gua_spatial_document_t* result_document,gua_spatial_error_t* error) {
     return boundary(error,[&] {
-        documents(r,1,result_document,2); const auto& a=r->value; const auto& b=result_document->value;
+        require(r&&r->type==1&&result_document&&(result_document->type==2||result_document->type==4||result_document->type==10)); const auto& a=r->value; const auto& b=result_document->value;
         for(auto k:{"queryId","spaceId","kind"}) require(text(a,k)==text(b,k),GUA_SPATIAL_CONTEXT);
         for(auto k:{"requestId","sessionEpoch","spaceEpoch"}) require(sequence(a.at(k))==sequence(b.at(k)),GUA_SPATIAL_CONTEXT);
         if(text(b,"status")!="completed") return;
         auto limit=has(a,"maxHits")?sequence(a.at("maxHits")):32;
         require(b.at("hits").items.size()<=static_cast<size_t>(limit),GUA_SPATIAL_SEMANTICS);
-        if(has(b.at("sample"),"worldSnapshot")) require(sequence(b.at("sample").at("worldSnapshot").at("sessionEpoch"))==sequence(a.at("sessionEpoch")),GUA_SPATIAL_CONTEXT);
+        if(has(b,"sample")&&has(b.at("sample"),"worldSnapshot")) require(sequence(b.at("sample").at("worldSnapshot").at("sessionEpoch"))==sequence(a.at("sessionEpoch")),GUA_SPATIAL_CONTEXT);
         if(text(a,"kind")=="raycast") {
             const auto& segment=a.at("segment"); auto from=vector(segment.at("from")),to=vector(segment.at("to"));
             const double distance=length({to[0]-from[0],to[1]-from[1],to[2]-from[2]});
@@ -264,3 +277,4 @@ int gua_spatial_check_result(const gua_spatial_document_t* r,const gua_spatial_d
     });
 }
 }
+#include "spatial_host.inc"

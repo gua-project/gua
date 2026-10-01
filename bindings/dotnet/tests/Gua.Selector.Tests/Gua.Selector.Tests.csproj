@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../../../protocol/fixtures/trace-external-runner.json" Link="trace-external-runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../../protocol/fixtures/spatial-host-r1.json" Link="spatial-host-r1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../../protocol/fixtures/spatial-r1.json" Link="spatial-r1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../../protocol/fixtures/observe-v1.json" Link="observe-v1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../../protocol/fixtures/semantic-lint-v1.json" Link="semantic-lint-v1.json" CopyToOutputDirectory="PreserveNewest" />
