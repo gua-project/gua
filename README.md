@@ -3,7 +3,8 @@
 English | [日本語](README.ja.md)
 
 [![License](https://img.shields.io/github/license/link1345/gua)](https://github.com/link1345/gua/blob/main/LICENSE)
-[![Discord](https://img.shields.io/discord/1329272750099136552)](https://discord.gg/Zy65k8AxH2)
+
+Questions about Gua? Join our [support Discord server](https://discord.gg/B495mwsTKK).
 
 > **A game testing and automation protocol built around Playwright-like design
 > principles, with Godot 4.7 and Unity 6 support and semantic access to UI,
