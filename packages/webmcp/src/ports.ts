@@ -418,7 +418,8 @@ function parseGameInputActionSearch(value: unknown, version = 1): GuaGameInputAc
   const record = asRecord(parsed);
   if (!record || record.schemaVersion !== version || !Number.isInteger(record.sessionEpoch) || (record.sessionEpoch as number) < 1 ||
       !Number.isInteger(record.revision) || (record.revision as number) < 0 || !isNonEmptyString(record.context) ||
-      !Number.isInteger(record.count) || (record.count as number) < 0 || typeof record.truncated !== "boolean" ||
+      !Number.isInteger(record.count) || (record.count as number) < 0 ||
+      (version === 2 && (record.count as number) > 100) || typeof record.truncated !== "boolean" ||
       !Array.isArray(record.actions) || record.count !== record.actions.length || !record.actions.every(isGameInputAction) ||
       (version === 2 && Object.keys(record).some(key => !gameInputSearchV2Properties.has(key))) ||
       !record.actions.every(action => version === 2 ? isGameInputActionV2(action) :

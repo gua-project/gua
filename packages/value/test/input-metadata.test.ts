@@ -186,6 +186,24 @@ test("v2 discovery enforces the complete descriptor schema while legacy parsing 
   }
 });
 
+test("v2 searches enforce the 100-action boundary without limiting maps or changing v1 parsing", async () => {
+  for (const count of [100, 101]) {
+    const actions = Array.from({ length: count }, (_, i) => ({ ...vector, id: `move${i}` }));
+    const document = { ...map, actions, count, truncated: false };
+    expect(ajv.getSchema(searchSchema.$id)!(document)).toBe(count === 100);
+    const bridge = createGuaInPageBridge({ invoke: async () => document }, { gameInput: true });
+    if (count === 100) await expect(bridge.findGameInputActionsV2!({ limit: 100 })).resolves.toEqual(document);
+    else await expect(bridge.findGameInputActionsV2!({ limit: 100 })).rejects.toMatchObject({ code: "invalid_request" });
+    const mapDocument = { ...map, actions };
+    expect(ajv.getSchema(mapSchema.$id)!(mapDocument)).toBe(true);
+    const mapBridge = createGuaInPageBridge({ invoke: async () => mapDocument }, { gameInput: true });
+    await expect(mapBridge.getGameInputActionsV2!()).resolves.toEqual(mapDocument);
+    const legacy = { ...document, schemaVersion: 1, actions: actions.map(({ valueSchema: _, examples: __, ...action }) => action) };
+    const legacyBridge = createGuaInPageBridge({ invoke: async () => legacy }, { gameInput: true });
+    await expect(legacyBridge.findGameInputActions!({ limit: 100 })).resolves.toEqual(legacy);
+  }
+});
+
 test("v2 JSON text rejects duplicate decoded keys in schemas, examples and map envelopes", async () => {
   for (const search of [false, true]) {
     const document = { ...map, ...(search ? { count: 1, truncated: false } : {}) };
