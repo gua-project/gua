@@ -168,10 +168,20 @@ void advance(host_batch& b) {
     if(!b.inflight) while(b.next<b.items.size()&&b.items[b.next].type!=json::null) ++b.next;
     b.done=std::all_of(b.items.begin(),b.items.end(),[](const json& i) { return i.type!=json::null; });
 }
+void retained(host_batch& b) {
+    b.retained_bytes=512;
+    const auto& qs=b.input.at("queries").items;
+    for(size_t i=0;i<qs.size();++i) b.retained_bytes+=dump(b.items[i].type==json::null?item(qs[i],"notExecuted","provider_unregistered"):b.items[i]).size();
+}
+void expire(gua_spatial_host_t& h,host_batch& b) {
+    const auto& qs=b.input.at("queries").items; const auto elapsed=now(h)-b.accepted;
+    for(size_t i=0;i<qs.size();++i) if(b.items[i].type==json::null&&elapsed>=num(qs[i].at("deadlineMs"))) b.items[i]=item(qs[i],b.dispatched[i]?"failed":"notExecuted","deadline_exceeded");
+    advance(b); retained(b);
+}
 void revoke(gua_spatial_host_t& h,host_batch& b) {
     const auto& qs=b.input.at("queries").items;
     for(size_t i=0;i<qs.size();++i) if(h.providers.contains(b.provider)?!authorized(h,b,qs[i]):!owner_authorized(h,b,qs[i])) b.items[i]=item(qs[i],b.dispatched[i]?"failed":"notExecuted","not_authorized");
-    advance(b);
+    advance(b); retained(b);
 }
 const char* stopped(gua_spatial_host_t& h,host_batch& b) {
     if(b.cancelled) return "cancelled";
@@ -188,7 +198,9 @@ host_batch& leased(gua_spatial_host_t& h,uint64_t lease) {
     fail(GUA_SPATIAL_STALE);
 }
 void finish(gua_spatial_host_t& h,host_batch& b,const char* reason) {
-    if(std::string_view(reason)=="not_authorized") revoke(h,b); else terminate(b,reason);
+    if(std::string_view(reason)=="not_authorized") revoke(h,b);
+    else if(std::string_view(reason)=="deadline_exceeded") expire(h,b);
+    else terminate(b,reason);
 }
 }
 extern "C" {
@@ -294,7 +306,11 @@ int gua_spatial_host_begin(gua_spatial_host_t* h,uint64_t p,const gua_spatial_do
     return boundary(e,[&] {
         host(h); document(d,9); require(out); std::lock_guard lock(h->mutex); auto pi=h->providers.find(p); require(pi!=h->providers.end(),GUA_SPATIAL_STALE); require(pi->second.lease==0,GUA_SPATIAL_NOT_READY);
         host_batch* first=nullptr;
-        for(auto& [k,b]:h->batches) { (void)k; if(b.provider!=p||b.done||b.lease) continue; if(auto reason=stopped(*h,b)) { finish(*h,b,reason); continue; } if(!first||b.order<first->order) first=&b; }
+        for(auto& [k,b]:h->batches) {
+            (void)k; if(b.provider!=p||b.done||b.lease) continue;
+            while(!b.done) { auto reason=stopped(*h,b); if(!reason) break; finish(*h,b,reason); if(std::string_view(reason)!="deadline_exceeded") break; }
+            if(!b.done&&(!first||b.order<first->order)) first=&b;
+        }
         require(first,GUA_SPATIAL_NOT_READY);
         if(has(d->value,"worldSnapshot")) require(sequence(d->value.at("worldSnapshot").at("sessionEpoch"))==sequence(first->input.at("queries").items.front().at("sessionEpoch")),GUA_SPATIAL_CONTEXT);
         first->boundary=d->value; first->started=now(*h); first->lease=token(*h); h->leases.emplace(first->lease,p); pi->second.lease=first->lease; *out=first->lease;
@@ -308,7 +324,7 @@ int gua_spatial_host_take(gua_spatial_host_t* h,uint64_t lease,gua_spatial_docum
         host_batch* pending=nullptr;
         for(auto& [key,candidate]:h->batches) { (void)key; if(candidate.lease==lease&&!candidate.done) pending=&candidate; }
         require(pending,GUA_SPATIAL_NOT_READY); auto& b=*pending; require(!b.inflight,GUA_SPATIAL_NOT_READY);
-        if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
+        while(auto reason=stopped(*h,b)) { finish(*h,b,reason); if(b.done||std::string_view(reason)!="deadline_exceeded") fail(GUA_SPATIAL_NOT_READY); }
         require(b.next<b.items.size(),GUA_SPATIAL_NOT_READY);
         const auto& q=b.input.at("queries").items[b.next]; auto pol=authorized(*h,b,q); require(pol,GUA_SPATIAL_NOT_AUTHORIZED);
         auto owned=doc(1,q); b.revision=static_cast<uint64_t>(sequence(pol->at("revision"))); b.inflight=true; b.dispatched[b.next]=true; *out=owned.release();
@@ -319,12 +335,14 @@ int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spa
         host(h); document(d,10); std::lock_guard lock(h->mutex); auto& b=leased(*h,lease); require(b.inflight,GUA_SPATIAL_NOT_READY);
         // Expired backend work is discarded before its result facts can turn
         // the truthful stop reason into a payload validation failure.
-        if(!b.owner_closed&&b.items[b.next].type==json::null) if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
+        if(!b.owner_closed) {
+            if(b.items[b.next].type!=json::null) { b.inflight=false; ++b.next; advance(b); fail(GUA_SPATIAL_NOT_READY); }
+            if(auto reason=stopped(*h,b)) { finish(*h,b,reason); if(std::string_view(reason)=="deadline_exceeded") { b.inflight=false; ++b.next; advance(b); } fail(GUA_SPATIAL_NOT_READY); }
+        }
         const auto& q=b.input.at("queries").items[b.next]; gua_spatial_document_t qd{1,q,{}}; gua_spatial_error_t error{};
         if(gua_spatial_check_result(&qd,d,&error)!=0) { finish(*h,b,"internal"); fail(error.code); }
         if(b.owner_closed) { b.inflight=false; b.done=true; return; }
-        if(b.items[b.next].type!=json::null) { b.inflight=false; ++b.next; advance(b); fail(GUA_SPATIAL_NOT_READY); }
-        if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
+        if(auto reason=stopped(*h,b)) { finish(*h,b,reason); if(std::string_view(reason)=="deadline_exceeded") { b.inflight=false; ++b.next; advance(b); } fail(GUA_SPATIAL_NOT_READY); }
         if(text(d->value,"status")!="completed") {
             auto code=text(d->value.at("error"),"code"); if(code=="invalid_request"||code=="unsupported_policy") code="internal";
             b.items[b.next]=item(q,"failed",code.c_str());

@@ -56,7 +56,11 @@ A batch document contains version/type, positive batchId, consistency, and 1..64
 legacy request documents in order. IDs and query IDs are unique within a batch;
 all share session epoch, space ID/epoch and consistency. The effective provider
 and host limits apply before acceptance; absent maxHits uses the advertised
-effective hit limit. Each query's deadline starts at acceptance. Queue capacity
+effective hit limit. Each query's deadline starts at acceptance.
+Expiry applies to each query individually: a later still-live query remains
+eligible after an earlier expiry. Pumping skips expired never-dispatched items;
+an expired consumed completion is discarded before later work continues.
+Queue capacity
 includes queued, executing and unconsumed completed batches, preventing an
 unbounded completion cache. IDs cannot be reused while retained by that owner.
 
@@ -90,6 +94,8 @@ work remains completable and later authorized items continue in order, skipping
 revoked never-dispatched items. A selectively revoked consumed item keeps the
 lease occupied until its correlated completion is discarded or the boundary
 ends; a fully terminated batch rejects late completions as stale.
+Redacting prior evidence releases its retained-byte charge, allowing later
+authorized completions to use the reclaimed output budget.
 
 ## Results and compatibility
 

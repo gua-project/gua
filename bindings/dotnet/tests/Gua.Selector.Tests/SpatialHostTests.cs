@@ -90,6 +90,21 @@ public sealed class SpatialHostTests
     }
     [TestCase(false)]
     [TestCase(true)]
+    public void ExpiredQueryDoesNotExpireLaterLiveQuery(bool dispatched)
+    {
+        using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var original=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var batch=original.ReadBatch(); batch.Queries[0].DeadlineMs=50; using var input=GuaSpatialDocument.FromBatch(batch);
+        var p=h.Register(registration); var o=h.OpenOwner(grants); h.Enqueue(o,input); ulong l=0;
+        if(dispatched) { l=h.Begin(p,boundary)!.Value; using var q=h.Take(l); }
+        Thread.Sleep(100);
+        if(dispatched) Assert.That(Assert.Throws<GuaSpatialException>(()=>h.Complete(l,execution))!.Code,Is.EqualTo(GuaSpatialErrorCode.NotReady));
+        else { Assert.That(h.Poll(o,1),Is.Null); l=h.Begin(p,boundary)!.Value; }
+        using var second=h.Take(l)!; var request=second.ReadRequest(); var result=execution.ReadExecution(); result.RequestId=request.RequestId; result.QueryId=request.QueryId; using var completed=GuaSpatialDocument.FromExecution(result); h.Complete(l,completed);
+        using var output=h.Poll(o,1)!; var items=output.ReadBatchResult().Items;
+        Assert.That(items[0].State,Is.EqualTo(dispatched?"failed":"notExecuted")); Assert.That(items[0].Reason,Is.EqualTo("deadline_exceeded")); Assert.That(items[1].State,Is.EqualTo("completed")); h.End(l);
+    }
+    [TestCase(false)]
+    [TestCase(true)]
     public void SelectiveRevocationPreservesOtherQueries(bool revokeInFlight)
     {
         using var h=Host(); using var originalRegistration=Doc(0); using var originalGrants=Doc(1); using var originalBatch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);

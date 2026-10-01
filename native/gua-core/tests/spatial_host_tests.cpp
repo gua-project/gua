@@ -186,6 +186,19 @@ int main() {
         Fixture x(5); for(auto& q:x.batch.fields.at("queries").items) q.fields["deadlineMs"]=parse("5"); assert(x.enqueue()==0); std::this_thread::sleep_for(std::chrono::milliseconds(15));
         auto r=x.poll(); for(auto& it:r.at("items").items) assert(it.at("state").text=="notExecuted"&&it.at("reason").text=="deadline_exceeded");
     }
+    for(bool dispatched:{false,true}) {
+        Fixture x; x.batch.fields.at("queries").items[0].fields["deadlineMs"]=parse("5"); assert(x.enqueue()==0);
+        uint64_t l=0; json first; if(dispatched) { l=x.begin(); first=x.take(l); }
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        if(dispatched) { auto bad=x.execution; bad.fields["queryId"]=parse("\"wrong\""); gua::SpatialDocument d(10,wire(bad)); assert(gua_spatial_host_complete(x.h,l,d.get(),&x.e)==GUA_SPATIAL_NOT_READY); }
+        else { gua_spatial_document_t* pending=nullptr; assert(gua_spatial_host_poll(x.h,x.o,1,&pending,&x.e)==GUA_SPATIAL_NOT_READY&&pending==nullptr); l=x.begin(); }
+        auto second=x.take(l); assert(second.at("requestId").text=="2"); assert(x.complete(l,second)==0);
+        auto r=x.poll(); assert(r.at("items").items[0].at("reason").text=="deadline_exceeded"&&r.at("items").items[0].at("state").text==(dispatched?"failed":"notExecuted")); assert(r.at("items").items[1].at("state").text=="completed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+    }
+    {
+        Fixture x; x.batch.fields.at("queries").items[1].fields["deadlineMs"]=parse("5"); auto third=x.batch.at("queries").items[0]; third.fields["queryId"]=parse("\"third\""); third.fields["requestId"]=parse("3"); x.batch.fields.at("queries").items.push_back(third);
+        assert(x.enqueue()==0); auto l=x.begin(); auto first=x.take(l); assert(x.complete(l,first)==0); std::this_thread::sleep_for(std::chrono::milliseconds(15)); auto last=x.take(l); assert(last.at("requestId").text=="3"); assert(x.complete(l,last)==0); auto r=x.poll(); assert(r.at("items").items[1].at("reason").text=="deadline_exceeded"&&r.at("items").items[2].at("state").text=="completed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+    }
     {
         Fixture x; assert(x.enqueue()==0); auto l=x.begin(); auto q=x.take(l); auto r=x.execution; r.fields["queryId"]=parse("\"wrong\""); gua::SpatialDocument d(10,wire(r));
         assert(gua_spatial_host_complete(x.h,l,d.get(),&x.e)==GUA_SPATIAL_CONTEXT); auto result=x.poll(); assert(result.at("items").items[0].at("state").text=="failed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
@@ -199,6 +212,13 @@ int main() {
         hit.fields.at("missing").fields.at("normal").text=std::string(700000,'x');
         x.execution.fields["hits"].items.push_back(hit); assert(x.enqueue()==0); auto l=x.begin(); auto a=x.take(l); assert(x.complete(l,a)==0); auto b=x.take(l); assert(x.complete(l,b)==GUA_SPATIAL_CAPACITY);
         auto r=x.poll(); assert(wire(r).size()<1024*1024); gua::SpatialDocument roundtrip(6,wire(r)); assert(r.at("items").items[0].at("state").text=="completed"); assert(r.at("items").items[1].at("state").text=="failed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+    }
+    {
+        Fixture x; x.dual_policies(); x.execution.fields["outcome"]=parse("\"hit\"");
+        auto hit=parse(R"({"relation":"unknown","missing":{"position":"unknown","distance":"unknown","normal":"unknown","collisionRef":"unknown","worldObjectId":"unknown"}})"); hit.fields.at("missing").fields.at("normal").text=std::string(600000,'x'); x.execution.fields["hits"].items.push_back(hit);
+        assert(x.enqueue()==0); auto l=x.begin(); auto first=x.take(l); assert(x.complete(l,first)==0); auto second=x.take(l);
+        auto grants=x.owner; grants.fields["policies"].items={parse("\"other\"")}; x.set_owner(grants);
+        assert(x.complete(l,second)==0); auto r=x.poll(); assert(r.at("items").items[0].at("reason").text=="not_authorized"&&!r.at("items").items[0].fields.contains("result")); assert(r.at("items").items[1].at("state").text=="completed"); assert(wire(r).size()<1024*1024); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
     }
     // Dispatch/host mutation race: neither side holds the mutex during fake engine work.
     for(int i=0;i<50;++i) {
