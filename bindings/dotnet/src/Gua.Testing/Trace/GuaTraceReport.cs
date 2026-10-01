@@ -35,4 +35,3 @@ public static class GuaTraceReport
         catch { return new(false, null, "report-failed"); }
     }
 }
-
