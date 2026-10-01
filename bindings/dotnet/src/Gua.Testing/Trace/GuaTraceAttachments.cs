@@ -27,8 +27,7 @@ public static partial class GuaTraceCapture
 
     private static bool AttachmentFailure(GuaTraceSession trace, string stepId, string reason)
     {
-        trace.ObservationIssue(reason);
-        trace.Record(stepId, "capture.failure", GuaTraceJson.Element(new { channel = "attachment", reason }));
+        trace.RecordCaptureFailure(stepId, "attachment", reason);
         return false;
     }
 

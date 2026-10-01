@@ -205,9 +205,7 @@ public static class GuaDiagnosticWriter
     internal static void RecordTraceFailure(GuaDiagnosticOptions options)
     {
         if (options.Trace is not { } trace) return;
-        trace.ObservationIssue("diagnostics-failed");
-        trace.Record(options.TraceStepId ?? "", "capture.failure",
-            GuaTraceJson.Element(new { channel = "diagnostics", reason = "diagnostics-failed" }));
+        trace.RecordCaptureFailure(options.TraceStepId ?? "", "diagnostics", "diagnostics-failed");
     }
 
     private static string CreateUniqueDirectory(GuaDiagnosticOptions options)

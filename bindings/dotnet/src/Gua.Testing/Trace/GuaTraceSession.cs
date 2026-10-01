@@ -217,6 +217,20 @@ public sealed partial class GuaTraceSession : IDisposable, IAsyncDisposable
     }
     internal string ObservationProfile => _options.Profile;
     internal void ObservationIssue(string issue) { lock (_gate) { if (!_closed && _issues.Count < 64) _issues.Add(issue); } }
+    internal bool RecordCaptureFailure(string stepId, string channel, string reason)
+    {
+        lock (_gate)
+        {
+            if (_closed) return false;
+            if (_issues.Count < 64) _issues.Add(reason);
+            if (!_byId.TryGetValue(stepId, out var step)) return false;
+            // A small terminal fact may fit after rejecting a large payload. All ordinary budgets still apply.
+            if (AppendUnsafe(step, "capture.failure", GuaTraceJson.Element(new { channel, reason }), allowStopped: true)) return true;
+            // A full queue/artifact cannot promise another event. Keep bounded step/channel correlation in the summary.
+            if (_issues.Count < 64) _issues.Add("capture-failure:" + step.Id + ":" + channel + ":" + reason);
+            return false;
+        }
+    }
     /// <summary>JSON-only attachment boundary; screenshots require a separate caller-side pixel policy.</summary>
     public bool Attach(string stepId, string schema, JsonElement content, bool sensitive = false)
     {
@@ -236,9 +250,9 @@ public sealed partial class GuaTraceSession : IDisposable, IAsyncDisposable
         return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
     }
     private bool AppendUnsafe(Step step, string type, JsonElement data, bool sensitive = false,
-        Dictionary<string, byte[]>? blobs = null)
+        Dictionary<string, byte[]>? blobs = null, bool allowStopped = false)
     {
-        if (_stopped || _closed) { _dropped++; return false; }
+        if ((_stopped && !allowStopped) || _closed) { _dropped++; return false; }
         try
         {
             var cleanBytes = _redaction.Json(data, sensitive);

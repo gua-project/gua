@@ -287,6 +287,56 @@ public sealed class TraceIntegrationTests
         }
     }
 
+    [TestCase(GuaTraceCaptureMode.Recent, "attachment")]
+    [TestCase(GuaTraceCaptureMode.Streaming, "attachment")]
+    [TestCase(GuaTraceCaptureMode.Recent, "artifact")]
+    [TestCase(GuaTraceCaptureMode.Streaming, "artifact")]
+    [TestCase(GuaTraceCaptureMode.Streaming, "queue")]
+    public async Task AttachmentLimitFailureKeepsCorrelationWithoutExceedingBudgets(GuaTraceCaptureMode mode, string limit)
+    {
+        await using var trace = new GuaTraceSession(new()
+        {
+            OutputDirectory = _root, CaptureMode = mode, SavePolicy = GuaTraceSavePolicy.OnFailure,
+            MaxAttachmentBytes = limit == "attachment" ? 128 : 4096,
+            MaxArtifactBytes = limit == "artifact" ? 1024 : 16384, MaxMemoryBytes = 16384, MaxQueueItems = limit == "queue" ? 1 : 256,
+            MaxEventBytes = 512, Secrets = new[] { "SECRET-MARKER" }
+        });
+        string step;
+        var gate = typeof(GuaTraceSession).GetField("_gate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(trace)!;
+        lock (gate)
+        {
+            step = trace.BeginStep(GuaTraceStepKind.Mark, "Limit capture");
+            if (limit == "queue")
+            {
+                for (var i = 0; i < 10 && !trace.Status.DetailStopped; i++)
+                    trace.Record(step, "detail", JsonSerializer.SerializeToElement(new { index = i }));
+                Assert.That(trace.Status.Issues, Does.Contain("queue-limit"), "The full queue fault must actually fire.");
+            }
+            Assert.That(GuaTraceCapture.JsonAttachment(trace, step, "limit.fixture.v1", () =>
+                JsonSerializer.Serialize(new { secret = "SECRET-MARKER", payload = new string('x', 2048) }), GuaObservationProfile.Debug), Is.False);
+            Assert.That(trace.Status.DetailStopped, Is.True);
+            Assert.That(trace.Record(step, "detail", JsonSerializer.SerializeToElement(new { })), Is.False);
+        }
+        Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.True);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("passed"));
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-unavailable"));
+        Assert.That(read.Blobs, Is.Empty);
+        if (limit == "queue")
+            Assert.That(read.Manifest.Quality.Issues, Does.Contain("capture-failure:" + step + ":attachment:attachment-unavailable"));
+        else
+        {
+            var failure = read.Events.Single(e => e.Type == "capture.failure");
+            Assert.That(failure.StepId, Is.EqualTo(step));
+            Assert.That(failure.Data.GetProperty("channel").GetString(), Is.EqualTo("attachment"));
+        }
+        var payloadBytes = Directory.GetFiles(trace.ArtifactPath, "*", SearchOption.AllDirectories)
+            .Where(p => Path.GetFileName(p) != "manifest.json").Sum(p => new FileInfo(p).Length);
+        Assert.That(payloadBytes, Is.LessThanOrEqualTo(limit == "artifact" ? 1024 : 16384));
+        Assert.That(new FileInfo(Path.Combine(trace.ArtifactPath, "manifest.json")).Length, Is.LessThanOrEqualTo(65536));
+        Assert.That(string.Join("", read.Events.Select(e => e.Data.GetRawText())), Does.Not.Contain("SECRET-MARKER"));
+    }
+
     [Test]
     public async Task SensitiveRecordingKeepsSafeReferenceAndRejectsInvalidPayload()
     {

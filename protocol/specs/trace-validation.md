@@ -336,3 +336,10 @@ live diagnostics readの実IOExceptionも同じ集約に含め、adapter別に�
 legacy environment/version/callerMetadataの自動添付もDebug限定に統一した。
 Player fixtureへSecrets未登録のPRIVATE-CONFIG/PRIVATE-METADATAを渡し、Debug/Playerの両labelで
 すべての自動添付が拒否されることを確認する。明示Environment APIは認可済みdata専用のまま。
+
+limitでdetail停止した後のattachment failureは、通常のevent/queue/byte予算内でterminal factを
+保存する。大きなattachment/artifact拒否では小さなcapture.failureのStep/channelを保持する。
+満杯queueでは無制限追記せず、最大64件の品質summaryへretained Step/channel/reasonを残す。
+実attachment limit（Recent/Streaming）、artifact limit（両方式）、writer gateで実queue飽和の
+5caseを追加し、主結果Passedの保持、OnFailure保存、secret blobなし、payload/manifest上限と
+eventまたはsummaryの相関を確認。統合22/22、全Visual128/128（skip0）。

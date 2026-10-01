@@ -352,6 +352,9 @@ Player/remoteは認可済みgetterとprofileを明示するoverloadを使う。
 
 `JsonAttachment` はprofile不一致をgetter実行前に拒否する。失敗はfalseとcapture.failure、
 attachment-failed/attachment-unavailable/profile-mismatch等の品質issueを残し、
+大きなpayloadのlimit停止後も小さなterminal failure eventは通常の予算内で記録を試みる。
+queue/artifactが満杯なら追加eventを保証せず、最大64品質issue内の
+`capture-failure:<retained stepId>:<channel>:<reason>`へ相関を残す。容量上限を緩めない。
 主結果PassedでもOnFailureで破棄しない。JSON redactionは保持/hash前、Screenshotのpixel認可は
 別APIのまま。汎用添付schemaや未知recordはViewerが安全なtextとして表示する。
 
