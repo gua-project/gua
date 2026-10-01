@@ -34,6 +34,7 @@
     <EmbeddedResource Include="../../../../artifacts/trace-viewer/viewer.js" LogicalName="Gua.Trace.Viewer.js"
                       Condition="Exists('../../../../artifacts/trace-viewer/viewer.js')" />
     <None Include="../../../../protocol/schema/trace.schema.json" Pack="true" PackagePath="trace/" />
+    <None Include="../../../../protocol/schema/trace-screenshot.schema.json;../../../../protocol/schema/trace-lifecycle.schema.json" Pack="true" PackagePath="trace/" />
     <None Include="../../../../protocol/schema/trace-observe-semantics.mjs" Pack="true" PackagePath="trace/" />
     <None Include="../../../../protocol/schema/observe-transport-v1.schema.json;../../../../protocol/schema/observe-v1.schema.json;../../../../protocol/schema/enum-catalog-v1.schema.json;../../../../protocol/schema/value-v1.schema.json" Pack="true" PackagePath="trace/" />
     <EmbeddedResource Include="../../../../protocol/schema/ui-tree.schema.json" LogicalName="Gua.Trace.UiTree.schema.json" />
@@ -41,6 +42,8 @@
     <EmbeddedResource Include="../../../../protocol/schema/world-object-tree.schema.json" LogicalName="Gua.Trace.WorldTree.schema.json" />
     <None Include="../../../../artifacts/trace-viewer/index.html" Pack="true" PackagePath="trace/"
           Condition="Exists('../../../../artifacts/trace-viewer/index.html')" />
+    <None Include="../../../../artifacts/trace-viewer/viewer.js;../../../../artifacts/trace-viewer/version.json" Pack="true" PackagePath="trace/"
+          Condition="Exists('../../../../artifacts/trace-viewer/viewer.js')" />
   </ItemGroup>
   <Target Name="RequireTraceViewerForPack" BeforeTargets="GenerateNuspec">
     <Error Condition="!Exists('../../../../artifacts/trace-viewer/viewer.js')"

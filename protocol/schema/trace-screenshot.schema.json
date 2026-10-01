@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.orizika.com/schema/trace-screenshot-v1.json",
+  "title": "Caller-authorized Trace screenshot attachment",
+  "type": "object",
+  "required": ["schemaVersion", "profile", "pixelPolicy", "observationId", "screenshot"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "profile": { "enum": ["debug", "player"] },
+    "pixelPolicy": { "const": "caller-authorized" },
+    "observationId": { "type": "string", "minLength": 1 },
+    "screenshot": {
+      "type": "object",
+      "required": ["dataUri", "width", "height"],
+      "properties": {
+        "dataUri": { "type": "string", "maxLength": 4194304, "pattern": "^data:image/png;base64,[A-Za-z0-9+/]+={0,2}$" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 8192 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 8192 }
+      }
+    }
+  },
+  "$comment": "PNG signature and IHDR dimensions must match, and width*height must be <=16777216. Caller authorizes and masks pixels before retention; this declaration does not grant host access or inspect image secrets. observationId references one retained UI observation for optional bounds overlay; no frame synchronization is inferred."
+}
