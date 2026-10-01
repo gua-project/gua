@@ -47,18 +47,19 @@ public sealed class GuaDiagnosticsSession
     {
         Guard.NotNull(primaryException, nameof(primaryException));
         var version = new Lazy<GuaVersion>(_context.GetVersion);
-        var capture = GuaDiagnosticWriter.Capture(_context, primaryException.ToString(), _options, initialUiTreeJson,
-            () => version.Value, recordTraceFailure: false);
-        var errors = new List<GuaDiagnosticError>();
-        if (capture.Error is not null) errors.Add(new("diagnostics", "CaptureError", capture.Error));
-        var files = new List<GuaDiagnosticFile>();
         bool failureRecorded = false;
-        void RecordFailure()
+        void RecordFailure(string reason = "diagnostics-failed")
         {
+            _options.Trace?.ObservationIssue(reason);
             if (failureRecorded) return;
             GuaDiagnosticWriter.RecordTraceFailure(_options);
             failureRecorded = true;
         }
+        var capture = GuaDiagnosticWriter.Capture(_context, primaryException.ToString(), _options, initialUiTreeJson,
+            () => version.Value, reason => RecordFailure(reason));
+        var errors = new List<GuaDiagnosticError>();
+        if (capture.Error is not null) errors.Add(new("diagnostics", "CaptureError", capture.Error));
+        var files = new List<GuaDiagnosticFile>();
         if (errors.Count > 0) RecordFailure();
         if (capture.ArtifactPath is not null)
         {
@@ -129,11 +130,20 @@ public static class GuaDiagnosticWriter
 {
     public static GuaDiagnosticCapture Capture(
         IGuaContext context, string failureMessage, GuaDiagnosticOptions options, string? initialUiTreeJson = null)
-        => Capture(context, failureMessage, options, initialUiTreeJson, () => context.GetVersion(), recordTraceFailure: true);
+    {
+        bool recorded = false;
+        void Failure(string reason)
+        {
+            options.Trace?.ObservationIssue(reason);
+            if (recorded) return;
+            RecordTraceFailure(options); recorded = true;
+        }
+        return Capture(context, failureMessage, options, initialUiTreeJson, () => context.GetVersion(), Failure);
+    }
 
     internal static GuaDiagnosticCapture Capture(
         IGuaContext context, string failureMessage, GuaDiagnosticOptions options, string? initialUiTreeJson,
-        Func<GuaVersion> getVersion, bool recordTraceFailure)
+        Func<GuaVersion> getVersion, Action<string> failure)
     {
         Guard.NotNull(context, nameof(context));
         Guard.NotNull(options, nameof(options));
@@ -145,21 +155,22 @@ public static class GuaDiagnosticWriter
         }
         catch (Exception error)
         {
-            if (recordTraceFailure) RecordTraceFailure(options);
+            failure("diagnostics-failed");
             return new GuaDiagnosticCapture(null, $"{error.GetType().Name}: {error.Message}");
         }
 
         if (options.Trace is { } trace)
         {
             // Both outputs describe this one read, not two potentially different live snapshots.
-            GuaTraceCapture.Diagnostics(trace, options.TraceStepId ?? "", () =>
-                options.TraceProfile == GuaObservationProfile.Debug ? diagnosticsJson : throw new NotSupportedException(),
-                GuaObservationProfile.Debug);
-            GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
-                options.TraceProfile == GuaObservationProfile.Debug
-                    ? JsonSerializer.Serialize(new { version = getVersion(), environment = options.Environment,
-                        callerMetadata = options.CallerMetadata }, GuaTraceJson.Options) : throw new NotSupportedException(),
-                GuaObservationProfile.Debug);
+            if (options.TraceProfile != GuaObservationProfile.Debug) failure("profile-mismatch");
+            else
+            {
+                GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.diagnostics.v1", () =>
+                    GuaTraceCapture.PrepareDiagnosticsJson(diagnosticsJson), GuaObservationProfile.Debug, failure);
+                GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
+                    JsonSerializer.Serialize(new { version = getVersion(), environment = options.Environment,
+                        callerMetadata = options.CallerMetadata }, GuaTraceJson.Options), GuaObservationProfile.Debug, failure);
+            }
         }
 
         try
@@ -205,14 +216,14 @@ public static class GuaDiagnosticWriter
             }
             if (errors.Count > 0)
             {
-                if (recordTraceFailure) RecordTraceFailure(options);
+                failure("diagnostics-failed");
                 WriteNew(Path.Combine(directory, "capture-errors.json"), JsonSerializer.Serialize(errors, JsonOptions));
             }
             return new GuaDiagnosticCapture(Path.GetFullPath(directory), errors.Count == 0 ? null : string.Join("; ", errors));
         }
         catch (Exception error)
         {
-            if (recordTraceFailure) RecordTraceFailure(options);
+            failure("diagnostics-failed");
             return new GuaDiagnosticCapture(null, $"{error.GetType().Name}: {error.Message}");
         }
     }

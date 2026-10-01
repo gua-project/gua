@@ -12,8 +12,8 @@ Trace は操作と観測の事実を保存する。Goal、条件の時間的採�
 `protocol/schema/trace.schema.json` を envelope の契約とする。
 一つの生成済み `traceId` ディレクトリに `manifest.json`、`events.jsonl`、
 `snapshots/<sha256>.json`、`attachments/<sha256>.json` を置く。
-Recording は `gua.recording.v1` 等の schema を持つ添付として元形式のまま
-保存できる。Trace は Recording の再生可能性を保証しない。
+Recordingは別Save/Load形式を維持する。Trace添付は`gua.trace.recording.v1`のredacted envelopeで、
+元Recordingのparserへ渡さない。Traceは再生可能性を保証しない。
 
 schemaVersion は 1。未知の major version は reader が拒否する。
 同じ version の未知の追加フィールド・event type・添付 schema・注釈 namespace は
@@ -327,7 +327,9 @@ TraceProfileは既に認可された取得元のprofileで、DebugからPlayer�
 context/World getterの認可、profile/build別のBaselineVariantとmask rulesは呼出側の責務。
 
 `GuaRecordingTrace.Attach` は `GuaRecordingFile.Validate` 済みRecordingを
-`gua.recording.v1` 添付にし、元のRecording Save/Load形式を変更しない。
+`gua.trace.recording.v1` 添付にし、元のRecording Save/Load形式を変更しない。
+`trace-recording.schema.json`のschemaVersion=1/recording envelopeを使う。recording内は
+redaction済みのopaque JSONで、敏感Stepの`{redacted:true}`も含む。元Recording parserで読み込まない。
 Trace側のwhole-object redactionによりsensitive stepは伏せられる。
 `gua.recording.references.v1` は元stepのindex、十進文字列requestId/eventIdと安全なsecretKey参照を
 別に保持する。source/epochは関連Trace Stepの実測要求相関を使い、RecordingのrequestIdだけから
@@ -340,6 +342,9 @@ Trace Eventへ残し、Recordingの成功stepを捏造しない。
 未profile選択の既存getterを使う自動添付はDebug限定。Playerは下記の認可済みgetter
 overloadを使う。ラベルだけでDebug payloadをPlayerとして保存しない。
 logs/pendingRequests/environment等を保ち、Screenshotは常に取り除く。
+元payloadを全`diagnostics.schema.json`（version/UI/logs等の参照を含む）で先にvalidateする。
+既存`gua.diagnostics.v1`は互換性を保つTrace projectionで、`trace-diagnostics.schema.json`を契約にする。
+Screenshot省略とnested redactionを許し、元runtime diagnostics形式とは区別する。
 version、呼出側environment/callerMetadataは `gua.environment.v1` の別添付にする。
 このlegacy自動コピーもDebug限定。Playerへ既存environment/callerMetadataをラベルだけで移さず、
 明示的に認可済みdataを渡す`GuaTraceCapture.Environment` APIを使う。

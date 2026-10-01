@@ -15,10 +15,10 @@ public static class GuaRecordingTrace
     public static bool Attach(GuaTraceSession trace, string stepId, GuaRecording recording,
         GuaObservationProfile profile = GuaObservationProfile.Debug)
     {
-        var attached = GuaTraceCapture.JsonAttachment(trace, stepId, "gua.recording.v1", () =>
+        var attached = GuaTraceCapture.JsonAttachment(trace, stepId, "gua.trace.recording.v1", () =>
         {
             GuaRecordingFile.Validate(recording);
-            return JsonSerializer.Serialize(recording, Options);
+            return JsonSerializer.Serialize(new { schemaVersion = 1, recording }, Options);
         }, profile);
         if (!attached) return false;
         return GuaTraceCapture.JsonAttachment(trace, stepId, "gua.recording.references.v1", () =>

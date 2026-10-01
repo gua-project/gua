@@ -340,8 +340,8 @@ Player fixtureへSecrets未登録のPRIVATE-CONFIG/PRIVATE-METADATAを渡し、D
 limitでdetail停止した後のattachment failureは、通常のevent/queue/byte予算内でterminal factを
 保存する。大きなattachment/artifact拒否では小さなcapture.failureのStep/channelを保持する。
 満杯queueでは無制限追記せず、最大64件の品質summaryへretained Step/channel/reasonを残す。
-実attachment limit（Recent/Streaming）、artifact limit（両方式）、writer gateで実queue飽和の
-5caseを追加し、主結果Passedの保持、OnFailure保存、secret blobなし、payload/manifest上限と
+実attachment limit（Recent/Streaming）、artifact limit（両方式）、writer gateで実queue byte/item飽和の
+6caseを追加し、主結果Passedの保持、OnFailure保存、secret blobなし、payload/manifest上限と
 eventまたはsummaryの相関を確認。統合22/22、全Visual128/128（skip0）。
 
 session補助取得故障はerror-summary保存/列挙より前にTraceへ記録し、両bookkeepingもguardする。
@@ -349,3 +349,16 @@ fixtureの生成済みlegacy directoryだけを補助getter内で削除して実
 error-summary保存と列挙の実故障がCaptureErrorsへ残り、元例外identityと単一故障eventを保つ。
 自動/明示Environment両APIのversion JSONをcase-sensitiveに比較し、共通camelCaseを確認。
 legacy version.jsonのPascalCaseを保ち同じversion値であることも検証。統合23件。
+queue byte飽和はwriter gate下でqueued bytesを減らせずterminal eventも入らないことを決定的に確認。
+item飽和はwriterがitemをtakeしてslotを空ける場合があるため、eventまたはsummaryの実相関を
+両scheduleで要求する。mainのdeadline assertionは変更しない。統合24件。
+
+diagnosticsは全source schema（UI/version/logs/screenshot/lifecycle参照を含む）をvalidateしてから
+pixel省略・redactionする。既存gua.diagnostics.v1のprojection形は維持し、専用schemaを定義した。
+必須metadata欠損、major違い、UI bounds型違い、未知request actionの実getterは添付を拒否する。
+Recordingはgua.trace.recording.v1のredacted envelopeへ変更。元Save/Loadのfile形式は変更しない。
+Sensitive placeholderを元Recording schemaとして表示しない。両projectionはredaction後にもschema検証する。
+version故障もsessionのonce guardへ集約し、実IOException/host read1回/単一capture.failureを確認。
+全Visual135/135、統合29件、JS schema3/3。実.NET生成projection2件を独立AJVで検証し、
+redacted Recordingが元Recording schemaを満たさないことも確認した。
+再現: `bun packages/value/scripts/verify-trace-attachment-schemas.ts <evidence>/schema`。

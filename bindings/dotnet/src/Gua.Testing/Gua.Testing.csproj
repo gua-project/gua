@@ -40,6 +40,8 @@
     <EmbeddedResource Include="../../../../protocol/schema/ui-tree.schema.json" LogicalName="Gua.Trace.UiTree.schema.json" />
     <EmbeddedResource Include="../../../../protocol/schema/value-v1.schema.json;../../../../protocol/schema/enum-catalog-v1.schema.json;../../../../protocol/schema/observe-v1.schema.json;../../../../protocol/schema/observe-transport-v1.schema.json" LogicalName="Gua.Trace.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../../../protocol/schema/world-object-tree.schema.json" LogicalName="Gua.Trace.WorldTree.schema.json" />
+    <EmbeddedResource Include="../../../../protocol/schema/diagnostics.schema.json;../../../../protocol/schema/version.schema.json;../../../../protocol/schema/logs.schema.json;../../../../protocol/schema/screenshot.schema.json;../../../../protocol/schema/trace-lifecycle.schema.json;../../../../protocol/schema/trace-diagnostics.schema.json;../../../../protocol/schema/trace-recording.schema.json" LogicalName="Gua.Trace.%(Filename)%(Extension)" />
+    <None Include="../../../../protocol/schema/diagnostics.schema.json;../../../../protocol/schema/version.schema.json;../../../../protocol/schema/logs.schema.json;../../../../protocol/schema/screenshot.schema.json;../../../../protocol/schema/ui-tree.schema.json;../../../../protocol/schema/trace-diagnostics.schema.json;../../../../protocol/schema/trace-recording.schema.json" Pack="true" PackagePath="trace/" />
     <None Include="../../../../artifacts/trace-viewer/index.html" Pack="true" PackagePath="trace/"
           Condition="Exists('../../../../artifacts/trace-viewer/index.html')" />
     <None Include="../../../../artifacts/trace-viewer/viewer.js;../../../../artifacts/trace-viewer/version.json" Pack="true" PackagePath="trace/"

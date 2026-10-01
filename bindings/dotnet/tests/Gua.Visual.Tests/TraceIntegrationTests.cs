@@ -92,7 +92,7 @@ public sealed class TraceIntegrationTests
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo(primary.ToString().ToLowerInvariant()));
         Assert.That(read.Issues, Is.Empty);
         var attachments = read.Events.Where(e => e.Type == "attachment").ToArray();
-        Assert.That(attachments.Select(e => e.Data.GetProperty("schema").GetString()), Does.Contain("gua.semantic-lint.v1").And.Contain("gua.semantic-comparison.v1").And.Contain("gua.recording.v1").And.Contain("gua.diagnostics.v1").And.Contain("gua.environment.v1"));
+        Assert.That(attachments.Select(e => e.Data.GetProperty("schema").GetString()), Does.Contain("gua.semantic-lint.v1").And.Contain("gua.semantic-comparison.v1").And.Contain("gua.trace.recording.v1").And.Contain("gua.diagnostics.v1").And.Contain("gua.environment.v1"));
         Assert.That(attachments.Select(e => e.StepId), Is.All.EqualTo(step));
         var diagnostics = read.Blobs[attachments.Single(e => e.Data.GetProperty("schema").GetString() == "gua.diagnostics.v1").Data.GetProperty("blob").GetString()!];
         Assert.That(diagnostics.GetProperty("pendingRequests").GetArrayLength(), Is.GreaterThan(0));
@@ -108,6 +108,8 @@ public sealed class TraceIntegrationTests
         {
             Directory.CreateDirectory(evidence);
             File.Copy(report.Path!, Path.Combine(evidence, primary.ToString().ToLowerInvariant() + "-" + mode + ".html"), true);
+            Directory.CreateDirectory(Path.Combine(evidence, "schema"));
+            File.WriteAllText(Path.Combine(evidence, "schema", "diagnostics.json"), diagnostics.GetRawText());
         }
     }
 
@@ -124,6 +126,7 @@ public sealed class TraceIntegrationTests
         Assert.That(GuaTraceCapture.Lint(trace, step, GuaSemanticLinter.Analyze(context, new(GuaObservationProfile.Player))), Is.True);
         Assert.That(GuaTraceCapture.Environment(trace, step, context.GetVersion(),
             new Dictionary<string, string> { ["caller-approved"] = "public" }, GuaObservationProfile.Player), Is.True);
+        Assert.That(GuaTraceCapture.Diagnostics(trace, step, () => context.GetDiagnosticsJson(GuaObservationProfile.Player), GuaObservationProfile.Player), Is.True);
         await trace.CompleteAsync(GuaTraceOutcome.Passed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("passed"));
@@ -157,6 +160,31 @@ public sealed class TraceIntegrationTests
         var blocked = Path.Combine(_root, "blocked"); File.WriteAllText(blocked, "actual fault");
         Assert.That(GuaTraceReport.WriteHtml(trace.ArtifactPath, Path.Combine(blocked, "report.html")).Succeeded, Is.False);
         Assert.That(observed, Is.SameAs(primary));
+    }
+
+    [TestCase("missing")]
+    [TestCase("version")]
+    [TestCase("ui")]
+    [TestCase("request")]
+    public async Task MalformedDiagnosticsNeverAdvertisesValidProjection(string fault)
+    {
+        using var context = new GuaContext(); Publish(context, 0);
+        Assert.That(context.EnqueueClick("button"), Is.True);
+        var document = System.Text.Json.Nodes.JsonNode.Parse(context.GetDiagnosticsJson())!;
+        if (fault == "missing") document.AsObject().Remove("schemaVersion");
+        else if (fault == "version") document["schemaVersion"] = 9;
+        else if (fault == "ui") document["uiTree"]!["nodes"]![0]!["bounds"]!["x"] = "not-a-number";
+        else document["pendingRequests"]![0]!["action"] = "invented";
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, SavePolicy = GuaTraceSavePolicy.OnFailure });
+        var step = trace.Mark("Invalid diagnostics"); bool getterFired = false;
+        Assert.That(GuaTraceCapture.Diagnostics(trace, step, () => { getterFired = true; return document.ToJsonString(); }, GuaObservationProfile.Debug), Is.False);
+        Assert.That(getterFired, Is.True);
+        await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("passed"));
+        Assert.That(read.Events.Any(e => e.Type == "attachment"), Is.False);
+        Assert.That(read.Events.Count(e => e.Type == "capture.failure"), Is.EqualTo(1));
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-failed"));
     }
 
     [TestCase(GuaObservationProfile.Debug)]
@@ -197,6 +225,7 @@ public sealed class TraceIntegrationTests
     [TestCase("supplement")]
     [TestCase("live-read")]
     [TestCase("bookkeeping")]
+    [TestCase("version")]
     public async Task DownstreamDiagnosticsFaultsAreVisibleWithoutReplacingPrimary(string fault)
     {
         using var context = new GuaContext(); Publish(context, 0);
@@ -207,7 +236,8 @@ public sealed class TraceIntegrationTests
         var primary = new ApplicationException("PRIVATE-EXCEPTION");
         bool supplementFired = false;
         var source = new SingleReadDiagnostics(context, fault == "missing-property" ? () => "{}" :
-            fault == "live-read" ? () => throw new IOException("PRIVATE-FAULT") : null);
+            fault == "live-read" ? () => throw new IOException("PRIVATE-FAULT") : null,
+            fault == "version" ? () => throw new IOException("PRIVATE-FAULT") : null);
         var result = new GuaDiagnosticsSession(source, new()
         {
             TestName = "fault", OutputDirectory = fault == "directory" ? blocked : Path.Combine(_root, "legacy"),
@@ -227,12 +257,19 @@ public sealed class TraceIntegrationTests
         }).Capture(primary);
         Assert.That(source.Reads, Is.EqualTo(1)); Assert.That(result.PrimaryException, Is.SameAs(primary));
         Assert.That(result.CaptureErrors, Is.Not.Empty, "The downstream fault must actually fire.");
-        Assert.That(result.Succeeded, Is.EqualTo(fault is "supplement" or "bookkeeping"));
+        Assert.That(result.Succeeded, Is.EqualTo(fault is "supplement" or "bookkeeping" or "version"));
         Assert.That(supplementFired, Is.EqualTo(fault is "supplement" or "bookkeeping"));
         if (fault == "bookkeeping")
             Assert.That(result.CaptureErrors.Select(e => e.Stage), Does.Contain("error-summary").And.Contain("bookkeeping"), "Both actual bookkeeping faults must fire without replacing primary.");
         await trace.CompleteAsync(GuaTraceOutcome.Failed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
+        if (fault == "missing-property")
+            Assert.That(read.Events.Where(e => e.Type == "attachment").Select(e => e.Data.GetProperty("schema").GetString()), Does.Not.Contain("gua.diagnostics.v1"));
+        if (fault == "version")
+        {
+            Assert.That(source.VersionReads, Is.EqualTo(1), "Cached failure must avoid a second host request.");
+            Assert.That(result.CaptureErrors.Select(e => e.Stage), Does.Contain("version"));
+        }
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("failed"));
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("diagnostics-failed"));
         Assert.That(read.Events.Any(e => e.Type == "capture.failure" && e.Data.GetProperty("reason").GetString() == "diagnostics-failed"), Is.True);
@@ -313,13 +350,15 @@ public sealed class TraceIntegrationTests
     [TestCase(GuaTraceCaptureMode.Recent, "artifact")]
     [TestCase(GuaTraceCaptureMode.Streaming, "artifact")]
     [TestCase(GuaTraceCaptureMode.Streaming, "queue")]
+    [TestCase(GuaTraceCaptureMode.Streaming, "queue-items")]
     public async Task AttachmentLimitFailureKeepsCorrelationWithoutExceedingBudgets(GuaTraceCaptureMode mode, string limit)
     {
         await using var trace = new GuaTraceSession(new()
         {
             OutputDirectory = _root, CaptureMode = mode, SavePolicy = GuaTraceSavePolicy.OnFailure,
             MaxAttachmentBytes = limit == "attachment" ? 128 : 4096,
-            MaxArtifactBytes = limit == "artifact" ? 1024 : 16384, MaxMemoryBytes = 16384, MaxQueueItems = limit == "queue" ? 1 : 256,
+            MaxArtifactBytes = limit == "artifact" ? 1024 : 16384,
+            MaxMemoryBytes = limit == "queue" ? 1024 : 16384, MaxQueueItems = limit == "queue-items" ? 1 : 256,
             MaxEventBytes = 512, Secrets = new[] { "SECRET-MARKER" }
         });
         string step;
@@ -327,11 +366,11 @@ public sealed class TraceIntegrationTests
         lock (gate)
         {
             step = trace.BeginStep(GuaTraceStepKind.Mark, "Limit capture");
-            if (limit == "queue")
+            if (limit is "queue" or "queue-items")
             {
                 for (var i = 0; i < 10 && !trace.Status.DetailStopped; i++)
                     trace.Record(step, "detail", JsonSerializer.SerializeToElement(new { index = i }));
-                Assert.That(trace.Status.Issues, Does.Contain("queue-limit"), "The full queue fault must actually fire.");
+                Assert.That(trace.Status.Issues, Does.Contain(limit == "queue" ? "queue-byte-limit" : "queue-limit"), "The queue fault must actually fire.");
             }
             Assert.That(GuaTraceCapture.JsonAttachment(trace, step, "limit.fixture.v1", () =>
                 JsonSerializer.Serialize(new { secret = "SECRET-MARKER", payload = new string('x', 2048) }), GuaObservationProfile.Debug), Is.False);
@@ -345,6 +384,14 @@ public sealed class TraceIntegrationTests
         Assert.That(read.Blobs, Is.Empty);
         if (limit == "queue")
             Assert.That(read.Manifest.Quality.Issues, Does.Contain("capture-failure:" + step + ":attachment:attachment-unavailable"));
+        else if (limit == "queue-items")
+        {
+            // The writer may take an item while blocked on the gate, freeing a slot but not its byte budget.
+            // In either scheduling order, correlation must survive within the same finite queue contract.
+            Assert.That(read.Events.Any(e => e.Type == "capture.failure" && e.StepId == step &&
+                e.Data.GetProperty("channel").GetString() == "attachment") ||
+                read.Manifest.Quality.Issues.Contains("capture-failure:" + step + ":attachment:attachment-unavailable"), Is.True);
+        }
         else
         {
             var failure = read.Events.Single(e => e.Type == "capture.failure");
@@ -369,21 +416,27 @@ public sealed class TraceIntegrationTests
         Assert.That(GuaRecordingTrace.Attach(trace, step, recording with { SchemaVersion = 9 }), Is.False);
         await trace.CompleteAsync(GuaTraceOutcome.Passed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
-        var payload = read.Blobs[read.Events.Single(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.recording.v1").Data.GetProperty("blob").GetString()!];
-        Assert.That(payload.GetProperty("steps")[0].GetProperty("redacted").GetBoolean(), Is.True);
+        var payload = read.Blobs[read.Events.Single(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.trace.recording.v1").Data.GetProperty("blob").GetString()!];
+        Assert.That(payload.GetProperty("recording").GetProperty("steps")[0].GetProperty("redacted").GetBoolean(), Is.True);
         Assert.That(payload.GetRawText(), Does.Not.Contain("private-target"));
+        var evidence = System.Environment.GetEnvironmentVariable("GUA_TRACE_INTEGRATION_EVIDENCE");
+        if (evidence is not null)
+        {
+            Directory.CreateDirectory(Path.Combine(evidence, "schema"));
+            File.WriteAllText(Path.Combine(evidence, "schema", "recording.json"), payload.GetRawText());
+        }
         var reference = read.Blobs[read.Events.Single(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.recording.references.v1").Data.GetProperty("blob").GetString()!];
         Assert.That(reference.GetProperty("steps")[0].GetProperty("secretKey").GetString(), Is.EqualTo("login-password"));
         Assert.That(reference.GetProperty("steps")[0].GetProperty("requestId").GetString(), Is.EqualTo(ulong.MaxValue.ToString()));
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-failed"));
     }
 
-    private sealed class SingleReadDiagnostics(GuaContext context, Func<string>? payload = null) : IGuaContext
+    private sealed class SingleReadDiagnostics(GuaContext context, Func<string>? payload = null, Func<GuaVersion>? versionPayload = null) : IGuaContext
     {
         public int Reads;
         public int VersionReads;
         public string GetDiagnosticsJson() => ++Reads == 1 ? payload?.Invoke() ?? context.GetDiagnosticsJson() : throw new IOException("second live read fired");
-        public GuaVersion GetVersion() => ++VersionReads == 1 ? context.GetVersion() : throw new IOException("second version read fired");
+        public GuaVersion GetVersion() => ++VersionReads == 1 ? versionPayload?.Invoke() ?? context.GetVersion() : throw new IOException("second version read fired");
         public string GetUiTreeJson() => context.GetUiTreeJson();
         public GuaNodeState GetNodeState(string id) => context.GetNodeState(id);
         public string FindNodeById(string id) => context.FindNodeById(id);

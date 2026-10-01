@@ -72,7 +72,7 @@ try {
     await evaluate("document.querySelectorAll('details').forEach(d=>d.open=true)");
     const text = await evaluate("document.body.innerText") as string;
     require(text.includes("Primary result: " + outcome), "primary result " + file);
-    for (const schema of ["gua.semantic-lint.v1", "gua.semantic-comparison.v1", "gua.recording.v1", "gua.recording.references.v1", "gua.diagnostics.v1", "gua.environment.v1"])
+    for (const schema of ["gua.semantic-lint.v1", "gua.semantic-comparison.v1", "gua.trace.recording.v1", "gua.recording.references.v1", "gua.diagnostics.v1", "gua.environment.v1"])
       require(text.includes(schema), "missing real attachment " + schema);
     require(text.includes('"matched": true') && text.includes('"baselineUpdated": false'), "explicit comparison and no automatic update");
     require(text.includes("Assertion truth: true") && text.includes("caller execution result: " + outcome), "truth separate from caller result");
