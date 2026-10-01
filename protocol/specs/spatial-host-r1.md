@@ -85,6 +85,11 @@ success. Limits are cooperative bounds, never hard real-time guarantees.
 At completion an already elapsed deadline/work budget is checked before
 result-specific validation, so malformed late evidence cannot overwrite the
 elapsed-time termination reason with `internal`.
+Grant changes revoke individual affected queries. Still-authorized in-flight
+work remains completable and later authorized items continue in order, skipping
+revoked never-dispatched items. A selectively revoked consumed item keeps the
+lease occupied until its correlated completion is discarded or the boundary
+ends; a fully terminated batch rejects late completions as stale.
 
 ## Results and compatibility
 

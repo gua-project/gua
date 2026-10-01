@@ -44,6 +44,14 @@ struct Fixture {
         gua::SpatialDocument d(10,wire(r)); return gua_spatial_host_complete(h,lease,d.get(),&e);
     }
     void set_owner(json j) { gua::SpatialDocument d(8,wire(j)); assert(gua_spatial_host_set_owner(h,o,d.get(),&e)==0); }
+    void dual_policies() {
+        assert(gua_spatial_host_unregister(h,p,&e)==0);
+        reg.fields.at("provider").fields.at("policies").items.push_back(parse("\"other\""));
+        auto pol=reg.at("policies").items[0]; pol.fields["id"]=parse("\"other\""); reg.fields.at("policies").items.push_back(pol);
+        owner.fields.at("policies").items.push_back(parse("\"other\"")); set_owner(owner);
+        batch.fields.at("queries").items[1].fields["queryPolicyId"]=parse("\"other\"");
+        gua::SpatialDocument registration(7,wire(reg)); assert(gua_spatial_host_register(h,registration.get(),&p,&e)==0);
+    }
 };
 int main() {
     {
@@ -108,6 +116,21 @@ int main() {
         assert(r.at("items").items[0].at("state").text=="failed"&&r.at("items").items[0].at("reason").text=="provider_unregistered");
         assert(r.at("items").items[1].at("state").text=="notExecuted"&&r.at("items").items[1].at("reason").text=="provider_unregistered");
         assert(gua_spatial_host_end(x.h,l,&x.e)==GUA_SPATIAL_STALE);
+    }
+    for(bool completed:{false,true}) {
+        Fixture x; x.dual_policies(); auto third=x.batch.at("queries").items[0]; third.fields["requestId"]=parse("3"); third.fields["queryId"]=parse("\"third\""); x.batch.fields.at("queries").items.push_back(third);
+        assert(x.enqueue()==0); auto l=x.begin(); auto first=x.take(l); if(completed) assert(x.complete(l,first)==0);
+        auto grants=x.owner; grants.fields["policies"].items={parse("\"safe\"")}; x.set_owner(grants);
+        if(!completed) assert(x.complete(l,first)==0);
+        auto last=x.take(l); assert(last.at("queryId").text=="third"); assert(x.complete(l,last)==0);
+        auto r=x.poll(); assert(r.at("items").items[0].at("state").text=="completed"); assert(r.at("items").items[1].at("state").text=="notExecuted"&&r.at("items").items[1].at("reason").text=="not_authorized"); assert(r.at("items").items[2].at("state").text=="completed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
+    }
+    {
+        Fixture x; x.dual_policies(); assert(x.enqueue()==0); auto l=x.begin(); auto first=x.take(l);
+        auto grants=x.owner; grants.fields["policies"].items={parse("\"other\"")}; x.set_owner(grants);
+        gua_spatial_document_t* no_work=nullptr; assert(gua_spatial_host_take(x.h,l,&no_work,&x.e)==GUA_SPATIAL_NOT_READY&&no_work==nullptr);
+        assert(x.complete(l,first)==GUA_SPATIAL_NOT_READY); auto second=x.take(l); assert(x.complete(l,second)==0);
+        auto r=x.poll(); assert(r.at("items").items[0].at("state").text=="failed"&&r.at("items").items[0].at("reason").text=="not_authorized"); assert(r.at("items").items[1].at("state").text=="completed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
     }
     {
         Fixture x; assert(x.enqueue()==0); assert(gua_spatial_host_unregister(x.h,x.p,&x.e)==0);

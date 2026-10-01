@@ -164,15 +164,19 @@ void terminate(host_batch& b,const char* reason) {
         b.items[i]=item(qs[i],b.dispatched[i]?"failed":"notExecuted",reason);
     b.done=true; b.inflight=false;
 }
+void advance(host_batch& b) {
+    if(!b.inflight) while(b.next<b.items.size()&&b.items[b.next].type!=json::null) ++b.next;
+    b.done=std::all_of(b.items.begin(),b.items.end(),[](const json& i) { return i.type!=json::null; });
+}
 void revoke(gua_spatial_host_t& h,host_batch& b) {
     const auto& qs=b.input.at("queries").items;
     for(size_t i=0;i<qs.size();++i) if(h.providers.contains(b.provider)?!authorized(h,b,qs[i]):!owner_authorized(h,b,qs[i])) b.items[i]=item(qs[i],b.dispatched[i]?"failed":"notExecuted","not_authorized");
-    terminate(b,"not_authorized");
+    advance(b);
 }
 const char* stopped(gua_spatial_host_t& h,host_batch& b) {
     if(b.cancelled) return "cancelled";
     if(!h.providers.contains(b.provider)) return "provider_unregistered";
-    for(const auto& q:b.input.at("queries").items) if(!authorized(h,b,q)) return "not_authorized";
+    if(b.next<b.items.size()&&!authorized(h,b,b.input.at("queries").items[b.next])) return "not_authorized";
     auto t=now(h);
     if(b.lease&&t-b.started>=h.limits.max_batch_work_ms) return "work_budget";
     if(b.next<b.items.size()&&t-b.accepted>=num(b.input.at("queries").items[b.next].at("deadlineMs"))) return "deadline_exceeded";
@@ -315,10 +319,11 @@ int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spa
         host(h); document(d,10); std::lock_guard lock(h->mutex); auto& b=leased(*h,lease); require(b.inflight,GUA_SPATIAL_NOT_READY);
         // Expired backend work is discarded before its result facts can turn
         // the truthful stop reason into a payload validation failure.
-        if(!b.owner_closed) if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
+        if(!b.owner_closed&&b.items[b.next].type==json::null) if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
         const auto& q=b.input.at("queries").items[b.next]; gua_spatial_document_t qd{1,q,{}}; gua_spatial_error_t error{};
         if(gua_spatial_check_result(&qd,d,&error)!=0) { finish(*h,b,"internal"); fail(error.code); }
         if(b.owner_closed) { b.inflight=false; b.done=true; return; }
+        if(b.items[b.next].type!=json::null) { b.inflight=false; ++b.next; advance(b); fail(GUA_SPATIAL_NOT_READY); }
         if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
         if(text(d->value,"status")!="completed") {
             auto code=text(d->value.at("error"),"code"); if(code=="invalid_request"||code=="unsupported_policy") code="internal";
@@ -338,7 +343,7 @@ int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spa
             b.retained_bytes+=extra; b.items[b.next]=std::move(completed);
         }
         b.inflight=false; ++b.next;
-        if(b.next==b.items.size()) b.done=true;
+        advance(b);
     });
 }
 int gua_spatial_host_end(gua_spatial_host_t* h,uint64_t lease,gua_spatial_error_t* e) {

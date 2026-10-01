@@ -90,6 +90,27 @@ public sealed class SpatialHostTests
     }
     [TestCase(false)]
     [TestCase(true)]
+    public void SelectiveRevocationPreservesOtherQueries(bool revokeInFlight)
+    {
+        using var h=Host(); using var originalRegistration=Doc(0); using var originalGrants=Doc(1); using var originalBatch=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var registration=JsonNode.Parse(originalRegistration.ToJson())!; registration["provider"]!["policies"]!.AsArray().Add("other");
+        var policy=registration["policies"]![0]!.DeepClone(); policy["id"]="other"; registration["policies"]!.AsArray().Add(policy);
+        var grants=JsonNode.Parse(originalGrants.ToJson())!; grants["policies"]!.AsArray().Add("other");
+        var batch=originalBatch.ReadBatch(); batch.Queries[1].QueryPolicyId="other";
+        using var reg=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Registration,registration.ToJsonString()); using var owner=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Owner,grants.ToJsonString()); using var input=GuaSpatialDocument.FromBatch(batch);
+        var p=h.Register(reg); var o=h.OpenOwner(owner); h.Enqueue(o,input); var l=h.Begin(p,boundary)!.Value; using var first=h.Take(l);
+        grants["policies"]=new JsonArray(revokeInFlight?"other":"safe"); using var changed=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Owner,grants.ToJsonString()); h.SetOwner(o,changed);
+        if(revokeInFlight) {
+            Assert.That(h.Take(l),Is.Null);
+            Assert.That(Assert.Throws<GuaSpatialException>(()=>h.Complete(l,execution))!.Code,Is.EqualTo(GuaSpatialErrorCode.NotReady));
+            using var second=h.Take(l)!; var q=second.ReadRequest(); var r=execution.ReadExecution(); r.RequestId=q.RequestId; r.QueryId=q.QueryId; using var result=GuaSpatialDocument.FromExecution(r); h.Complete(l,result);
+        } else Assert.DoesNotThrow(()=>h.Complete(l,execution));
+        using var output=h.Poll(o,1)!; var items=output.ReadBatchResult().Items;
+        Assert.That(items[revokeInFlight?0:1].Reason,Is.EqualTo("not_authorized")); Assert.That(items[revokeInFlight?0:1].Result,Is.Null);
+        Assert.That(items[revokeInFlight?1:0].State,Is.EqualTo("completed")); h.End(l);
+    }
+    [TestCase(false)]
+    [TestCase(true)]
     public void LateMiscorrelatedCompletionPreservesElapsedBudgetReason(bool deadline)
     {
         using var h=new GuaSpatialHost(new GuaSpatialHostOptions { MaxProviders=2,MaxOwners=2,MaxQueueDepth=2,MaxQueriesPerBatch=64,MaxHitsPerQuery=2,QueryDeadlineMs=deadline?50:1000,MaxBatchWorkMs=deadline?1000:50 },"managed-clock");
