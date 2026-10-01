@@ -377,3 +377,26 @@ trace.Assert("メニュー表示", () => GuaAssertions.GetById(context, "menu").
 native側のホスト成功とAssertionの期待状態成立は別の事実である。未対応contextでは
 native-lifecycle-not-provided、履歴切り詰めではnative-lifecycle-gapを品質に残す。
 source/epoch/domain/owner/request単位で相関し、source locationなしのraw操作も記録する。
+
+### Lint / comparison / Recording / diagnostics の明示接続
+
+```csharp
+var step = trace.BeginStep(GuaTraceStepKind.Assertion, "回帰確認");
+var lint = GuaSemanticLinter.Analyze(localContext); // 明示実行のまま
+GuaTraceCapture.Lint(trace, step, lint);
+var comparison = GuaSemanticSnapshots.CompareSnapshot(context, "menu", new() {
+    Trace = trace, TraceStepId = step, BaselineVariant = "debug-build-a"
+}); // UpdateBaselines は自動で有効にしない
+GuaRecordingTrace.Attach(trace, step, recorder.Recording);
+// context解放前。Screenshotはこのhelperでは取り込まない。
+GuaTraceCapture.Diagnostics(trace, step, context);
+trace.EndStep(step, comparison.Matched ? GuaTraceOutcome.Passed : GuaTraceOutcome.Failed);
+```
+
+comparisonは `Gua.Testing.Snapshots`、Recordingは `Gua.Testing.Recording` の任意依存で、
+coreのTrace writerに逆依存を追加しない。既存比較とdiagnostics sessionの自動添付は
+未profile選択のgetterと保存baselineを扱うためDebug限定。`TraceProfile = Player` は
+データを投影しないのでPlayer Traceへの添付を拒否する。既存動作は維持する。
+Player diagnosticsは認可済みgetter/profileを明示する`GuaTraceCapture.Diagnostics` overloadを使う。
+既存diagnostics sessionは`GuaDiagnosticOptions.Trace/TraceStepId`でDebug Stepへ接続できる。
+Lintはreport添付のみ、比較は呼出側の明示呼出しだけで、TraceはScenario成否やReplayを決めない。

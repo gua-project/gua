@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/trace-diagnostics.schema.json",
+  "title": "gua.diagnostics.v1 Trace projection",
+  "description": "Original diagnostics is schema-validated before projection. Screenshot is omitted and nested values may be replaced by Trace redaction. This is not the original runtime diagnostics format.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sessionEpoch", "frameSequence", "revision", "historyLimit", "pendingRequestCount", "inFlightRequestCount", "unconsumedEventCount", "environment", "version", "uiTree", "pendingRequests", "operations", "events", "logs"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sessionEpoch": { "type": "integer", "minimum": 1 },
+    "frameSequence": { "type": "integer", "minimum": 0 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "historyLimit": { "type": "integer", "minimum": 0 },
+    "pendingRequestCount": { "type": "integer", "minimum": 0 },
+    "inFlightRequestCount": { "type": "integer", "minimum": 0 },
+    "unconsumedEventCount": { "type": "integer", "minimum": 0 },
+    "environment": { "type": "object" },
+    "version": { "type": "object" },
+    "uiTree": { "type": "object" },
+    "pendingRequests": { "type": "array" },
+    "operations": { "type": "array" },
+    "events": { "type": "array" },
+    "logs": { "type": "array" },
+    "traceLifecycle": { "type": "object" }
+  }
+}

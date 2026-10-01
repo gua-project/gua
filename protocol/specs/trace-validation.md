@@ -256,3 +256,109 @@ and failed-to-valid screenshot switching across reused event IDs. Missing
 interruption fixtures are rejected before any browser connection. Evidence is under
 ignored `artifacts/trace-viewer-qa-review`. The earlier audit passes remain the bounded
 independent audit gate; automated review fixes receive focused tests and review replies.
+
+## #128 T-06 実API統合（2026-10-01）
+
+Windows x64、MSVC 19.51.36260、.NET 10.0.401、Bun 1.4.0、Chrome 154.0.8037.59。
+nativeはこのisolated worktreeの `build/msvc` で新規ビルドした。
+
+| 検証 | 結果 |
+| --- | --- |
+| native C/C++ 全target | 13/13 |
+| Visual/Recording/Trace全suite | 117/117、skip 0（新規実API統合11件を含む） |
+| Snapshot全suite | 32/32、skip 0 |
+| Selector/remote/Observe/lifecycle全suite | 360/360、skip 0（HTTP listener権限、NUnit worker 1） |
+| Workspace TypeScript check | 全て成功 |
+| 共通Viewer focused regression | 26/26、98 assertions |
+| Gua.Testing / Snapshots / Recording netstandard2.1 | Release build、warning/error 0 |
+| 実.NET fixtureの静的reportをChromeで確認 | success/failure/interruption、4 reports、外部通信/例外 0 |
+
+統合fixtureは実 `GuaContext`、`GuaSemanticLinter.Analyze`、明示baseline更新後の
+`CompareSnapshot`、実 `GuaRecorder.ClickAsync`、公開diagnostics/version、独立Observe購読を使う。
+関連Stepから全添付を読めること、秘密markerのredaction、pending/logsの実内容、
+中間Changeとbounds位置変化、比較の既定geometry/frame除外との分離、baseline byte不変を確認した。
+Recent/StreamingとAlways/OnFailureで成功の破棄・失敗/中断の保持を確認する。
+12並列Traceの独立artifactとDispose時のInterrupted、profile不一致時のgetter未実行、
+Player lintのprivate非露出、sensitive Recordingの安全なsecretKey/request参照を検証した。
+既存diagnostics sessionをcontext解放前に接続し、例外本文や既存ファイルをimportしない。
+getterのIOExceptionとreport出力のfilesystem故障は実際に発火させ、元例外identity/stackを維持した。
+truth=true、caller結果Failed/Interrupted、正常host完了、cleanup Passedを別に表示する。
+
+default並列Selectorの既存30ms deadline試験は失敗した（1秒完了期限）。
+restricted sandboxでは別に18 HTTP listener起動失敗があった。
+同じbranch/nativeでlistener権限とworker 1の全360件が成功した。
+既知のmain並列deadline回帰と区別し、assertion変更やskipで成功にしていない。
+remote CIはPRの最終headで別に確認する。
+
+再現: Viewerを `bun scripts/build-trace-viewer.ts` でbuildし、
+`GUA_NATIVE_DIR=build/msvc/native/gua-core/Release` と
+`GUA_TRACE_INTEGRATION_EVIDENCE=<absolute artifacts/integration-browser>` を指定して
+`dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj -c Release`。
+専用profileのChromeをheadless/CDP port 9228で起動し、
+`bun scripts/verify-trace-integration-browser.ts artifacts/integration-browser 9228` を実行する。
+生成report/screenshot/browser-evidence.jsonはignored artifactで、手書きJSON fixtureを
+実機能接続の証拠にしていない。Browserは悪意あるHTML/URL添付を実行/fetchせず、
+成功/失敗/中断の主結果、比較matchedとbaselineUpdated=false、各添付とcleanupを検証した。
+
+既存Trace/Observe/owner/privacy/Screenshot/retention故障試験も上記全suiteに含む。
+Screenshotのpixel保護、認可済みgetter、取得時点の相関、baselineのprofile/build variantは
+呼出側の責務。実ゲームE2EやPlaytest P-16、未公開の内部変化、失われた履歴の復元は
+このGua-only統合fixtureの証拠に含めない。親#109の製品E2Eを完了扱いにしない。
+
+### #128 automated review follow-up
+
+既存diagnostics sessionのTrace接続はlive diagnosticsを一度だけ読む。
+同じpayloadからTraceと既存ファイルを作り、二度目の読取による状態差や追加故障を避ける。
+regression fixtureで二度目のIOExceptionを実際に発火させ、最初のcaptureは一度のreadで成功、
+両出力のUI内容は同一、二度目のcaptureはfailure品質と元例外identityを維持すると確認した。
+
+Browser verifierはmonitor接続上でNetwork/Runtime/Page各domainの成功応答を待ってから
+別command接続からnavigateする。startup時のlocalhostへの無害な404画像要求と
+`MONITOR-FIXTURE-FAILURE`例外を実際に発火させ、両方をmonitorが受信したことを検証する。
+probeと実reportの結果を分けて保存し、実report4件の外部要求/例外は0だった。
+修正後の全Visual117/117、独立最終auditの統合11/11（skip0）に成功し、actionable findingsなし。
+
+後続のGitHub reviewで判明した2件も再現し修正した。legacy Debug比較は保存済みprivate
+baselineを含めPlayer Traceへ添付しない（TraceProfileのDebug/Player両指定で拒否）。
+同じ未profile選択getterを使う既存diagnosticsの自動添付もDebug限定にした。
+比較/診断の既存結果と元例外identityはそのまま。Playerの認可済みdiagnosticsは明示getter APIを使う。
+live取得後の実file衝突、必須property欠損、実supplement IOExceptionはTrace品質の
+diagnostics-failed/capture.failureに記録し、path/例外本文をコピーしない。
+新規5件を含む統合16/16、全Visual122/122（skip0）で確認。独立auditの証拠範囲は前段の11件であり、
+この後続修正の再監査とは扱わない（AGENTSの最大2pass制限を維持）。
+
+version取得もsessionごとのLazyでTrace環境添付とversion.jsonへ同じ成功値/故障を共有する。
+二度目でIOExceptionを起こす実context wrapperでcaptureはread1回だけで成功、両出力が同一、
+明示的な二度目readでは故障が実際に発火すると確認する。session内のwriter/supplement/sink故障の
+diagnostics-failed eventはcaptureごとに1件だけ（direct Writerの品質記録も維持）と確認する。
+live diagnostics readの実IOExceptionも同じ集約に含め、adapter別に二重のcapture.failureを
+生成しない。追加caseを含む統合17件で全capture.failure数が各fault1件と確認する。
+legacy environment/version/callerMetadataの自動添付もDebug限定に統一した。
+Player fixtureへSecrets未登録のPRIVATE-CONFIG/PRIVATE-METADATAを渡し、Debug/Playerの両labelで
+すべての自動添付が拒否されることを確認する。明示Environment APIは認可済みdata専用のまま。
+
+limitでdetail停止した後のattachment failureは、通常のevent/queue/byte予算内でterminal factを
+保存する。大きなattachment/artifact拒否では小さなcapture.failureのStep/channelを保持する。
+満杯queueでは無制限追記せず、最大64件の品質summaryへretained Step/channel/reasonを残す。
+実attachment limit（Recent/Streaming）、artifact limit（両方式）、writer gateで実queue byte/item飽和の
+6caseを追加し、主結果Passedの保持、OnFailure保存、secret blobなし、payload/manifest上限と
+eventまたはsummaryの相関を確認。統合22/22、全Visual128/128（skip0）。
+
+session補助取得故障はerror-summary保存/列挙より前にTraceへ記録し、両bookkeepingもguardする。
+fixtureの生成済みlegacy directoryだけを補助getter内で削除して実IOExceptionを起こし、
+error-summary保存と列挙の実故障がCaptureErrorsへ残り、元例外identityと単一故障eventを保つ。
+自動/明示Environment両APIのversion JSONをcase-sensitiveに比較し、共通camelCaseを確認。
+legacy version.jsonのPascalCaseを保ち同じversion値であることも検証。統合23件。
+queue byte飽和はwriter gate下でqueued bytesを減らせずterminal eventも入らないことを決定的に確認。
+item飽和はwriterがitemをtakeしてslotを空ける場合があるため、eventまたはsummaryの実相関を
+両scheduleで要求する。mainのdeadline assertionは変更しない。統合24件。
+
+diagnosticsは全source schema（UI/version/logs/screenshot/lifecycle参照を含む）をvalidateしてから
+pixel省略・redactionする。既存gua.diagnostics.v1のprojection形は維持し、専用schemaを定義した。
+必須metadata欠損、major違い、UI bounds型違い、未知request actionの実getterは添付を拒否する。
+Recordingはgua.trace.recording.v1のredacted envelopeへ変更。元Save/Loadのfile形式は変更しない。
+Sensitive placeholderを元Recording schemaとして表示しない。両projectionはredaction後にもschema検証する。
+version故障もsessionのonce guardへ集約し、実IOException/host read1回/単一capture.failureを確認。
+全Visual135/135、統合29件、JS schema3/3。実.NET生成projection2件を独立AJVで検証し、
+redacted Recordingが元Recording schemaを満たさないことも確認した。
+再現: `bun packages/value/scripts/verify-trace-attachment-schemas.ts <evidence>/schema`。
