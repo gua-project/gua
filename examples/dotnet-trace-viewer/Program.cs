@@ -88,4 +88,3 @@ static string Png()
     Chunk("IDAT", pixels.ToArray()); Chunk("IEND", Array.Empty<byte>());
     return "data:image/png;base64," + Convert.ToBase64String(png.ToArray());
 }
-
