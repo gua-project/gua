@@ -292,6 +292,15 @@ var report = GuaTraceReport.WriteHtml(trace.ArtifactPath, "artifacts/report.html
 `BeginStep`/`EndStep`/`Mark`/`Correlate`/`RecordRequest`/`Observe`/`Change`/
 `Evaluate`/`Annotate`/`Attach`/`FlushAsync` は外部 Runner から使用できる。
 
+主結果・評価truth・cleanup結果は別々に記録する。例えばfailure条件がtrueなら、
+Runnerが主結果をFailedと決定し、`Evaluate(..., "true", "failure-condition", ..., Failed)`
+へ渡す。Traceが条件を採点し直すことはない。
+`SetPrimaryOutcome`で主結果を固定した後、独立したLifecycle Stepへcleanupの結果と
+after-cleanup観測を追記する。競合理由やAI要求/提案/採否は未知schemaのJSON添付として
+表現できる。公開済み観測IDは`Observe`の戻り値を使い、未知usageは省略する。
+`FlushAsync`/`CompleteAsync`のfalseと`Status`のissueは記録品質であり、元の結果や
+例外を上書きしない。`catch`では`throw;`で元例外を維持する。
+
 Observeの実購読を保存する場合は独立した`GuaTraceObservations`を使う。
 購読はTraceのprofileと一致する応答だけを保存する。各取得契機は呼出側が指定する:
 
@@ -330,7 +339,13 @@ bun run --filter @gua/inspector build:trace
 dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj
 # native Value を使う外部 writer の実例（GUA_NATIVE_DIR をビルド先へ設定）
 dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj -- artifacts/trace-example
+# 配布NuGetだけに依存する同じwriter（CIでは4 RIDで実行）
+dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj -p:TracePackageVersion=<version> -- artifacts/trace-package-example
 ```
+
+console writerは未知注釈/schema添付の読取、redaction後のhash、主結果とcleanup分離、
+実filesystem故障時の元例外/戻り値の維持も検証する。実local/WebSocketのnative lifecycleと
+Observeを一緒に確認する通常/異常fixtureは`TraceExternalRunnerTests`にある。
 
 完全な契約、上限と親 #109 の未完了条件は
 [Trace v1](../../../../protocol/specs/trace-v1.md) を参照。
