@@ -16,6 +16,11 @@ enum member/構造語に一致する既知秘密文字列、unsubscribe拒否/ti
 
 これらはローカル検証記録であり、最終HEADのremote CI・他OS・engine E2E成功を意味しない。
 
+追加レビューではUI/World Treeのredaction後schema検証と、正規化Observe Changeの
+未知field拒否を追加した。構造値button/world2dの置換はfailed・Blobなし、labelの安全な
+マスクはavailableとして保持する。Tree focused 8/8、Trace schema 9/9、Visual全100/100、
+Inspector/Value全224/224、両.NET target、型検査とNuGet offline検証が成功した。
+
 ## #125 T-03 の追加検証（2026-09-30）
 
 Windows x64、MSVC 19.51 / Ninja、.NET SDK 10.0.401、Bun 1.4.0。

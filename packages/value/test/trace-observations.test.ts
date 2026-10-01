@@ -68,6 +68,14 @@ test("Trace rejects missing/dummy values and imprecise identities", () => {
     expect(validate(event("observation.change", data))).toBe(false);
   }
 });
+test("Trace rejects unknown fields in the closed Observe change contract", () => {
+  for (const received of fixture.transitions) {
+    const data = transition(received);
+    expect(validate(event("observation.change", data))).toBe(true);
+    data.received.unexpected = true;
+    expect(validate(event("observation.change", data))).toBe(false);
+  }
+});
 test("Trace keeps explicit unavailable observations without a fabricated snapshot blob", () => {
   for (const unavailable of fixture.unavailable)
     expect(validate(event("observation", { observationId: fixture.intervalId, channel: "observe", ...unavailable,

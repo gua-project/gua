@@ -169,6 +169,8 @@ Dispose は結果未確定なら Interrupted で閉じる。強制終了時の R
 明示 sensitive=true/mask=true の object 全体、または API の sensitive 引数を
 マスクしてから session buffer/queue/hash に入れる。追加の既知秘密文字列は
 Secrets に登録できる。heuristic による完全検出は約束しない。
+UI/World Tree helperはredaction後にもchannel schemaを検証し、構造語の置換で
+無効になったTreeをfailedとして扱う。schemaを維持するlabel等のマスクはavailableを維持する。
 Observe transportはdocumentの全要素と対応catalogをprotocol schemaで検証してから保持する。
 typed Observe payloadに既知秘密文字列の置換が必要な場合は、その観測区間全体をfailedとして
 記録し、Value・catalog・中間Changeを保持しない。enum memberや構造語の置換でschemaを壊さず、

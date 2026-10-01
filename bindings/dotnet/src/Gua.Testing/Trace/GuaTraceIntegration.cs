@@ -134,6 +134,10 @@ public static class GuaTraceCapture
             };
             if (!schema.Evaluate(root).IsValid || root.GetProperty("sessionEpoch").GetUInt64() == 0)
                 throw new JsonException();
+            // Validate the same transformation that will enter the snapshot buffer.
+            // Safe text masking remains available; masked structural values do not.
+            using var redacted = JsonDocument.Parse(trace.RedactObservation(root));
+            if (!schema.Evaluate(redacted.RootElement).IsValid) throw new JsonException();
             string Number(string key) => root.GetProperty(key).GetUInt64().ToString(System.Globalization.CultureInfo.InvariantCulture);
             var host = new GuaTraceHost(sourceId, Number("sessionEpoch"), Number("frameSequence"), Number("revision"));
             if (expectedSessionEpoch is not null && expectedSessionEpoch != host.SessionEpoch)

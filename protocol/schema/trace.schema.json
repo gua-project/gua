@@ -26,6 +26,7 @@
         },
         "catalogs": { "$ref": "https://gua.dev/schema/observe-transport-v1.schema.json#/properties/catalogs/items" },
         "received": {
+          "additionalProperties": false,
           "type": "object", "required": ["schemaVersion", "sourceId", "sessionEpoch", "profile", "sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision", "ownerId", "registrationId", "source", "runtimeId", "name", "kind", "boundary"],
           "properties": {
             "schemaVersion": { "const": 1 }, "sourceId": { "type": "string", "minLength": 1 },

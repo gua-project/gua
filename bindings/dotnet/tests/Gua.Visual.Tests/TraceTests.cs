@@ -33,6 +33,30 @@ public sealed class TraceTests
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("tree-failed"));
     }
 
+    [TestCase("ui", "button", false)]
+    [TestCase("world", "world2d", false)]
+    [TestCase("ui", "SecretLabel", true)]
+    [TestCase("world", "SecretLabel", true)]
+    public async Task RedactedTreeMustStillFollowItsChannelSchema(string channel, string secret, bool available)
+    {
+        var tree = channel == "ui"
+            ? "{\"schemaVersion\":2,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"screen\":\"s\",\"nodes\":[{\"id\":\"n\",\"role\":\"button\",\"label\":\"SecretLabel\",\"visible\":true,\"enabled\":true,\"bounds\":{},\"actions\":[\"click\"]}]}"
+            : "{\"schemaVersion\":1,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"scene\":\"s\",\"objects\":[{\"id\":\"o\",\"kind\":\"actor\",\"label\":\"SecretLabel\",\"space\":\"world2d\",\"position\":{\"x\":1},\"visibleToPlayer\":true,\"active\":true,\"agentExposure\":\"auto\",\"state\":{}}]}";
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, SavePolicy = GuaTraceSavePolicy.Always, Secrets = new[] { secret } });
+        var step = trace.BeginStep(GuaTraceStepKind.Assertion, "redacted-tree");
+        GuaTraceCapture.Tree(trace, step, channel, "game", "capture", () => tree);
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        var observation = read.Events.Single(e => e.Type == "observation");
+        Assert.That(observation.Data.GetProperty("availability").GetString(), Is.EqualTo(available ? "available" : "failed"));
+        Assert.That(read.Blobs.Count, Is.EqualTo(available ? 1 : 0));
+        if (available) Assert.That(read.Blobs.Single().Value.GetRawText(), Does.Contain("[redacted]").And.Not.Contain(secret));
+        else {
+            Assert.That(observation.Data.TryGetProperty("blob", out _), Is.False);
+            Assert.That(read.Manifest.Quality.Issues, Does.Contain("tree-failed"));
+        }
+    }
+
     [TestCase("ui", 2, "screen", "nodes")]
     [TestCase("world", 1, "scene", "objects")]
     public async Task TreeEnvelopeRejectsInvalidStructureAndPreservesGenuinelyEmptyTrees(string channel,
