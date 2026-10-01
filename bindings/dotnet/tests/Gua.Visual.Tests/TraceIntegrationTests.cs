@@ -216,6 +216,7 @@ public sealed class TraceIntegrationTests
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("failed"));
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("diagnostics-failed"));
         Assert.That(read.Events.Any(e => e.Type == "capture.failure" && e.Data.GetProperty("reason").GetString() == "diagnostics-failed"), Is.True);
+        Assert.That(read.Events.Count(e => e.Type == "capture.failure" && e.Data.GetProperty("reason").GetString() == "diagnostics-failed"), Is.EqualTo(1));
         Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())) + string.Join("", read.Events.Select(e => e.Data.GetRawText())),
             Does.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain("PRIVATE-FAULT"));
     }
@@ -232,7 +233,10 @@ public sealed class TraceIntegrationTests
         var singleRead = new SingleReadDiagnostics(context);
         var result = new GuaDiagnosticsSession(singleRead, options).Capture(primary);
         Assert.That(singleRead.Reads, Is.EqualTo(1), "A second live diagnostics read fails in this fixture.");
+        Assert.That(singleRead.VersionReads, Is.EqualTo(1), "A second live version read also fails in this fixture.");
         Assert.That(result.PrimaryException, Is.SameAs(primary)); Assert.That(result.Succeeded, Is.True);
+        Assert.Throws<IOException>(() => singleRead.GetVersion(), "The second version read fault is real but capture must avoid it.");
+        Assert.That(singleRead.VersionReads, Is.EqualTo(2));
         var failedCapture = new GuaDiagnosticsSession(singleRead, options).Capture(primary);
         Assert.That(singleRead.Reads, Is.EqualTo(2));
         Assert.That(failedCapture.Succeeded, Is.False, "The second-read IOException must actually fire.");
@@ -246,6 +250,10 @@ public sealed class TraceIntegrationTests
         Assert.That(System.Text.Json.Nodes.JsonNode.DeepEquals(
             System.Text.Json.Nodes.JsonNode.Parse(diagnosticCopy.GetProperty("uiTree").GetRawText()),
             System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath!, "ui-tree.json")))), Is.True);
+        var environmentCopy = read.Blobs[read.Events.Single(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.environment.v1").Data.GetProperty("blob").GetString()!];
+        Assert.That(System.Text.Json.Nodes.JsonNode.DeepEquals(
+            System.Text.Json.Nodes.JsonNode.Parse(environmentCopy.GetProperty("version").GetRawText()),
+            System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath!, "version.json")))), Is.True);
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-failed"));
         Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())), Does.Not.Contain("SECRET-MARKER").And.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain(result.ArtifactPath!));
     }
@@ -294,8 +302,9 @@ public sealed class TraceIntegrationTests
     private sealed class SingleReadDiagnostics(GuaContext context, Func<string>? payload = null) : IGuaContext
     {
         public int Reads;
+        public int VersionReads;
         public string GetDiagnosticsJson() => ++Reads == 1 ? payload?.Invoke() ?? context.GetDiagnosticsJson() : throw new IOException("second live read fired");
-        public GuaVersion GetVersion() => context.GetVersion();
+        public GuaVersion GetVersion() => ++VersionReads == 1 ? context.GetVersion() : throw new IOException("second version read fired");
         public string GetUiTreeJson() => context.GetUiTreeJson();
         public GuaNodeState GetNodeState(string id) => context.GetNodeState(id);
         public string FindNodeById(string id) => context.FindNodeById(id);

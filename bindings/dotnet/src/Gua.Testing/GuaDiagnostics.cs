@@ -46,13 +46,15 @@ public sealed class GuaDiagnosticsSession
     public GuaDiagnosticsResult Capture(Exception primaryException, string? initialUiTreeJson = null)
     {
         Guard.NotNull(primaryException, nameof(primaryException));
-        var capture = GuaDiagnosticWriter.Capture(_context, primaryException.ToString(), _options, initialUiTreeJson);
+        var version = new Lazy<GuaVersion>(_context.GetVersion);
+        var capture = GuaDiagnosticWriter.Capture(_context, primaryException.ToString(), _options, initialUiTreeJson,
+            () => version.Value, recordTraceFailure: false);
         var errors = new List<GuaDiagnosticError>();
         if (capture.Error is not null) errors.Add(new("diagnostics", "CaptureError", capture.Error));
         var files = new List<GuaDiagnosticFile>();
         if (capture.ArtifactPath is not null)
         {
-            AddSupplementalArtifacts(capture.ArtifactPath, errors);
+            AddSupplementalArtifacts(capture.ArtifactPath, errors, () => version.Value);
             if (errors.Count > 0)
                 File.WriteAllText(Path.Combine(capture.ArtifactPath, "session-capture-errors.json"), JsonSerializer.Serialize(errors, GuaDiagnosticWriter.JsonOptions), new UTF8Encoding(false));
             foreach (var path in Directory.EnumerateFiles(capture.ArtifactPath).OrderBy(path => path, StringComparer.Ordinal))
@@ -67,12 +69,12 @@ public sealed class GuaDiagnosticsSession
         return new(primaryException, capture.ArtifactPath, files, errors);
     }
 
-    private void AddSupplementalArtifacts(string directory, List<GuaDiagnosticError> errors)
+    private void AddSupplementalArtifacts(string directory, List<GuaDiagnosticError> errors, Func<GuaVersion> getVersion)
     {
         WriteJson(directory, "caller-metadata.json", _options.CallerMetadata, errors, "caller-metadata");
         try
         {
-            File.WriteAllText(Path.Combine(directory, "version.json"), JsonSerializer.Serialize(_context.GetVersion(), GuaDiagnosticWriter.JsonOptions), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(directory, "version.json"), JsonSerializer.Serialize(getVersion(), GuaDiagnosticWriter.JsonOptions), new UTF8Encoding(false));
         }
         catch (Exception error) { errors.Add(new("version", error.GetType().Name, error.Message)); }
         foreach (var (name, read) in _options.TextArtifacts)
@@ -112,6 +114,11 @@ public static class GuaDiagnosticWriter
 {
     public static GuaDiagnosticCapture Capture(
         IGuaContext context, string failureMessage, GuaDiagnosticOptions options, string? initialUiTreeJson = null)
+        => Capture(context, failureMessage, options, initialUiTreeJson, () => context.GetVersion(), recordTraceFailure: true);
+
+    internal static GuaDiagnosticCapture Capture(
+        IGuaContext context, string failureMessage, GuaDiagnosticOptions options, string? initialUiTreeJson,
+        Func<GuaVersion> getVersion, bool recordTraceFailure)
     {
         Guard.NotNull(context, nameof(context));
         Guard.NotNull(options, nameof(options));
@@ -136,7 +143,7 @@ public static class GuaDiagnosticWriter
                 options.TraceProfile == GuaObservationProfile.Debug ? diagnosticsJson : throw new NotSupportedException(),
                 GuaObservationProfile.Debug);
             GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
-                JsonSerializer.Serialize(new { version = context.GetVersion(), environment = options.Environment,
+                JsonSerializer.Serialize(new { version = getVersion(), environment = options.Environment,
                     callerMetadata = options.CallerMetadata }, JsonOptions), options.TraceProfile);
         }
 
@@ -183,14 +190,14 @@ public static class GuaDiagnosticWriter
             }
             if (errors.Count > 0)
             {
-                RecordTraceFailure(options);
+                if (recordTraceFailure) RecordTraceFailure(options);
                 WriteNew(Path.Combine(directory, "capture-errors.json"), JsonSerializer.Serialize(errors, JsonOptions));
             }
             return new GuaDiagnosticCapture(Path.GetFullPath(directory), errors.Count == 0 ? null : string.Join("; ", errors));
         }
         catch (Exception error)
         {
-            RecordTraceFailure(options);
+            if (recordTraceFailure) RecordTraceFailure(options);
             return new GuaDiagnosticCapture(null, $"{error.GetType().Name}: {error.Message}");
         }
     }

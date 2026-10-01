@@ -326,3 +326,8 @@ live取得後の実file衝突、必須property欠損、実supplement IOException
 diagnostics-failed/capture.failureに記録し、path/例外本文をコピーしない。
 新規5件を含む統合16/16、全Visual122/122（skip0）で確認。独立auditの証拠範囲は前段の11件であり、
 この後続修正の再監査とは扱わない（AGENTSの最大2pass制限を維持）。
+
+version取得もsessionごとのLazyでTrace環境添付とversion.jsonへ同じ成功値/故障を共有する。
+二度目でIOExceptionを起こす実context wrapperでcaptureはread1回だけで成功、両出力が同一、
+明示的な二度目readでは故障が実際に発火すると確認する。session内のwriter/supplement/sink故障の
+diagnostics-failed eventはcaptureごとに1件だけ（direct Writerの品質記録も維持）と確認する。
