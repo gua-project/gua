@@ -6,6 +6,9 @@ Trace は操作と観測の事実を保存する。Goal、条件の時間的採�
 
 ## 形式と互換性（OPEN-01）
 
+共通Viewer、静的report、任意のcaller-authorized Screenshot/overlayと版固定配布は
+[Trace Viewer](trace-viewer.md) に記載する。
+
 `protocol/schema/trace.schema.json` を envelope の契約とする。
 一つの生成済み `traceId` ディレクトリに `manifest.json`、`events.jsonl`、
 `snapshots/<sha256>.json`、`attachments/<sha256>.json` を置く。
@@ -301,7 +304,7 @@ unconfirmed として扱い、completion が返した epoch でのみ確定相�
 | #124 T-02 | Selector/解決ID、明示/自動Step、native UI/Input/cleanup lifecycle、遅い結果、非破壊履歴 | native履歴未提供hostのphaseは未提供と表示。ゲーム画面でのGodot/Unity E2Eは別途 |
 | #125 T-03 | Snapshot/観測の分離、Observeの実native/実WebSocket購読、Value/カタログ、中間Change、欠損、独立UI/World読取 | ゲーム内部の未公開変化、失われた履歴の復元は保証対象外。各Runnerが取得契機を明示する |
 | #126 T-04 | 外部 Runner API、共通 Value、未知注釈/添付、評価/主結果/cleanup分離、native/Observe横断fixture、framework-free配布consumer | 任意の外部Runnerの採点・非公開情報の自動判別・ゲーム画面のE2Eは保証対象外 |
-| #127 T-05 | 共通 React、静的 HTML、timeline/状態/JSON/区間差分、配布 | Screenshot pixel policy と bounds overlay、全端点の可視化 |
+| #127 T-05 | 共通 React、静的 HTML、timeline/状態/JSON/区間差分、caller-authorized PNGとbounds overlay、全端点・欠損表示、版固定資産/schema配布 | 同時pixel/snapshot取得とpixel秘密判別はcaller責務。ゲーム操作・Replay・外部添付fetchは対象外 |
 | #128 T-06 | diagnostics 添付、既存形式の汎用添付 | #106/#108 の Lint/comparison 実接続、全機能統合試験 |
 
 Gua は Gua Playtest に依存しない。Observe 本体、InputAction metadata、Replay 時間制御は

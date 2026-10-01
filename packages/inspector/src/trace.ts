@@ -166,7 +166,7 @@ export function pendingRequests(events: TraceEvent[]) {
     if ((e.type === "request.enqueue" && d.accepted === true) || (e.type === "request.phase" && d.phase === "enqueue"))
       pending.set(key, `${source} / epoch ${epoch ?? "unconfirmed"} / request ${id}`);
     if (e.type === "request.completion" || (e.type === "request.phase" && ["completion", "late-completion", "cancelled"].includes(text(d.phase))))
-      pending.delete(key);
+      { pending.delete(key); if (e.type === "request.completion") pending.delete(JSON.stringify([source, "unconfirmed", id])); }
   }
   return [...pending.values()];
 }

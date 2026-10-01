@@ -85,6 +85,7 @@ function Event({ event, trace }: { event: TraceEvent; trace: TraceDocument }) {
 
 function Screenshot({ value, trace }: { value: unknown; trace: TraceDocument }) {
   const [selected, select] = useState("");
+  const [decoded, setDecoded] = useState(false), [failed, setFailed] = useState(false);
   const image = traceScreenshot(value, trace.manifest.profile);
   if (!image) return <p role="alert">Screenshot unavailable: unsupported pixels, dimensions, profile or pixel policy.</p>;
   const observations = trace.events.filter(e => e.type === "observation" && object(e.data).observationId === image.observationId);
@@ -100,9 +101,9 @@ function Screenshot({ value, trace }: { value: unknown; trace: TraceDocument }) 
     {!nodes.length && <p>Matching UI snapshot unavailable or unverified; bounds overlay unavailable.</p>}
     {node && !validBounds && <p role="alert">Selected node bounds unavailable or unverified.</p>}
     <div style={{ position: "relative", width: image.width, maxWidth: "100%", overflow: "hidden" }}>
-      <img src={image.dataUri} alt="Recorded caller-authorized game screenshot" width={image.width} height={image.height} style={{ display: "block", width: "100%", height: "auto" }} onError={e => { e.currentTarget.hidden = true; e.currentTarget.nextElementSibling?.removeAttribute("hidden"); }} />
-      <p role="alert" hidden>Screenshot decode failed; pixels unavailable.</p>
-      {node && validBounds && <div aria-label={`Bounds overlay for ${selected}`} style={{ position: "absolute", boxSizing: "border-box", pointerEvents: "none", border: "2px solid #ffdd55", left: `${Number(bounds.x) / image.width * 100}%`, top: `${Number(bounds.y) / image.height * 100}%`, width: `${Number(bounds.w) / image.width * 100}%`, height: `${Number(bounds.h) / image.height * 100}%` }} />}
+      {!failed && <img src={image.dataUri} alt="Recorded caller-authorized game screenshot" width={image.width} height={image.height} style={{ display: "block", width: "100%", height: "auto" }} onLoad={() => setDecoded(true)} onError={() => { setDecoded(false); setFailed(true); }} />}
+      {failed && <p role="alert">Screenshot decode failed; pixels unavailable.</p>}
+      {decoded && node && validBounds && <div aria-label={`Bounds overlay for ${selected}`} style={{ position: "absolute", boxSizing: "border-box", pointerEvents: "none", border: "2px solid #ffdd55", left: `${Number(bounds.x) / image.width * 100}%`, top: `${Number(bounds.y) / image.height * 100}%`, width: `${Number(bounds.w) / image.width * 100}%`, height: `${Number(bounds.h) / image.height * 100}%` }} />}
     </div>
   </figure>;
 }

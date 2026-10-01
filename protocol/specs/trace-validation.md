@@ -191,3 +191,49 @@ Windows x64、.NET SDK 10.0.401、Bun 1.4.0。下記はこの変更のローカ�
 fixture は正常な Step 終了を捏造しない。強制終了時のメモリのみ・未flush分の完全保存、
 応答しない filesystem、敵対的な同時ファイル置換の保証は引き続き対象外である。
 この対応で親 #109 や他の子 Issue の接続・Viewer受け入れ条件を完了扱いにしない。
+
+## #127 common Viewer / static report (2026-10-01)
+
+Windows x64, Chrome 154.0.8037.59 headless, .NET 10.0.401, Bun 1.3.14
+(the existing workspace scripts also invoked installed Bun 1.4.0).
+The implementation extends the shared Inspector/offline component; it does not
+create a Playtest-specific viewer or acquire/control host data.
+
+| Verification | Result |
+| --- | --- |
+| Trace reader/viewer focused regression | 22/22, 80 assertions |
+| Full Inspector regression | 51/51 |
+| Full Visual/Recording regression | 106/106, including 6 screenshot policy/header/dimension/report cases |
+| Workspace TypeScript checks | All pass |
+| Gua.Testing net10.0 + netstandard2.1, Release pack | Pass, zero warnings |
+| Inspector Vite production build and standalone bundle | Pass |
+| Chrome real .NET static reports: success/failure/interruption | 3/3 |
+| Inspector offline panel using those same directories | 3/3 |
+| Standalone picker/error/recovery/loading race | Pass |
+| Extracted NuGet standalone HTML + report from extracted DLL consumer without source project references | Pass in Chrome |
+| Independent read-only audit, initial and final fixes/additions | No actionable findings |
+
+Browser QA exercises repeated labels with distinct IDs/requests; visible filtering
+and no-match detail clearing; hold-pending/started, release requested/confirmed,
+timeout/late-completion semantics; false goal truth versus caller/step/primary
+result; result-decision versus cleanup snapshots; intermediate First/Second/Third
+changes and position differences; responsive physical-pixel overlay, incomplete
+bounds and missing UI reference; failed/partial/stale/gap/outsideRetention/no Trace;
+unknown namespaces and schema attachments; hostile HTML/URL/pixel inputs and
+redacted secret/path markers. The browser recorded zero external requests and zero
+exceptions. The selected overlay and separate assertion/caller results were also
+visually inspected. Generated screenshots/logs/evidence remain under ignored
+`artifacts/trace-viewer-qa-final`; reproducible commands are in [trace-viewer.md](trace-viewer.md).
+
+The standalone bundle's SHA-256 matches `version.json`. The extracted package
+includes Trace/lifecycle/screenshot, Observe/Value schema dependencies and the
+semantic validator. The source-free consumer loads its embedded component; opening
+the generated HTML requires no .NET process, Gua checkout or web development tools.
+
+Managed regression used the unchanged-main MSVC native baseline from the parallel
+checkout; this task changes no native runtime files. The previously reported
+unrelated default-parallel deadline flake was not retried or weakened. Remote
+final-head CI remains a separate merge gate. Screenshot pixel authorization,
+masking and truthful association to the UI observation remain caller duties;
+PNG header checks do not prove simultaneous capture or discover secrets in pixels.
+Real game acquisition/E2E and T-06 Lint/comparison integration are outside T-05.
