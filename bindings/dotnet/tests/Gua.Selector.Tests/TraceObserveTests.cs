@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Gua.Core;
 using Gua.Runtime;
 using Gua.Testing;
@@ -17,6 +20,137 @@ public sealed class TraceObserveTests
     private GuaTraceOptions Options(string profile = "debug") => new() { OutputDirectory = _root, Profile = profile, SavePolicy = GuaTraceSavePolicy.Always };
     private static int Port() { var l = new TcpListener(IPAddress.Loopback, 0); l.Start(); var p = ((IPEndPoint)l.LocalEndpoint).Port; l.Stop(); return p; }
     private static JsonElement Received(GuaTraceEvent e) => e.Data.GetProperty("received");
+
+    [TestCase("snapshot-entry")]
+    [TestCase("snapshot-catalog")]
+    [TestCase("change-kind")]
+    [TestCase("change-catalog")]
+    [TestCase("snapshot-enum-missing")]
+    [TestCase("snapshot-enum-type")]
+    [TestCase("snapshot-enum-member")]
+    [TestCase("snapshot-empty-enum-type")]
+    [TestCase("change-enum-type")]
+    public async Task MalformedRemotePayloadNeverRetainsPartialInterval(string defect)
+    {
+        using var runtime = new GuaRuntime();
+        using var owner = runtime.CreateObserveOwner(GuaObserveSource.World);
+        using var catalog = new GuaEnumCatalog(); catalog.Register("game.Phase", "First", "Second", "Third");
+        int number = 1; using var value = owner.Property("count", () => defect.Contains("enum")
+            ? defect.Contains("empty") ? GuaValue.FromJson("{\"type\":\"list\",\"elementType\":\"enum\",\"enumType\":\"game.Phase\",\"value\":[]}", catalog)
+                : GuaValue.Enum("game.Phase", number == 1 ? "First" : number == 2 ? "Second" : "Third", catalog)
+            : GuaValue.Integer(number)); value.Notify();
+        int port = Port(); using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var host = Task.Run(async () => {
+            var connection = await listener.GetContextAsync().WaitAsync(timeout.Token);
+            using var socket = (await connection.AcceptWebSocketAsync(null)).WebSocket;
+            using var client = runtime.CreateObserveClient();
+            try {
+                while (true) {
+                    byte[] bytes = new byte[65536]; var received = await socket.ReceiveAsync(bytes.AsMemory(), timeout.Token);
+                    if (received.MessageType == WebSocketMessageType.Close) break;
+                    var request = JsonNode.Parse(Encoding.UTF8.GetString(bytes, 0, received.Count))!;
+                    var type = request["type"]!.GetValue<string>();
+                    string result = type switch {
+                        "get_version" => runtime.GetVersionJson(),
+                        "subscribe_observations" => client.CommandJson(2),
+                        "poll_observations" => client.CommandJson(3, request["subscriptionId"]!.GetValue<ulong>()),
+                        "unsubscribe_observations" => client.CommandJson(4, request["subscriptionId"]!.GetValue<ulong>()),
+                        _ => throw new InvalidOperationException()
+                    };
+                    var payload = JsonNode.Parse(result)!;
+                    if (type == "subscribe_observations" && defect.StartsWith("snapshot")) {
+                        var snapshot = payload["snapshot"]!;
+                        if (defect == "snapshot-entry") snapshot["document"]!["entries"]![0] = new JsonObject();
+                        else if (defect == "snapshot-catalog") snapshot["catalogs"]![0]!["value"] = new JsonObject { ["enums"] = new JsonArray(new JsonObject()) };
+                        else if (defect == "snapshot-enum-missing") snapshot["catalogs"]![0]!.AsObject().Remove("value");
+                        else if (defect == "snapshot-enum-member") snapshot["catalogs"]![0]!["value"]!["enums"]![0]!["members"] = new JsonArray("Different");
+                        else snapshot["catalogs"]![0]!["value"]!["enums"]![0]!["enumType"] = "game.Other";
+                    }
+                    if (type == "poll_observations") {
+                        // A valid first event cannot be retained before a malformed second event is checked.
+                        if (defect == "change-kind") payload["document"]!["events"]![1]!["kind"] = "unsupported";
+                        else if (defect == "change-enum-type") payload["catalogs"]![1]!["after"]!["enums"]![0]!["enumType"] = "game.Other";
+                        else payload["catalogs"]![1]!["unexpected"] = true;
+                    }
+                    var reply = new JsonObject { ["id"] = request["id"]!.DeepClone(), ["ok"] = true, ["result"] = payload };
+                    await socket.SendAsync(Encoding.UTF8.GetBytes(reply.ToJsonString()).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+                }
+            } catch (WebSocketException) { }
+        });
+        await using var trace = new GuaTraceSession(Options()); var step = trace.BeginStep(GuaTraceStepKind.Mark, "invalid-payload");
+        using var remote = new GuaWebSocketContext($"ws://127.0.0.1:{port}/", TimeSpan.FromSeconds(2));
+        using var capture = GuaTraceObservations.Subscribe(trace, step, remote);
+        if (defect.StartsWith("change")) { number = 2; value.Notify(); number = 3; value.Notify(); Assert.That(capture.Poll(step), Is.False); }
+        Assert.That(trace.Status.Issues, Does.Contain("observe-failed"));
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Any(e => e.Type == "observation.change"), Is.False);
+        if (defect.StartsWith("snapshot")) Assert.That(read.Blobs, Is.Empty);
+        capture.Dispose(); remote.Dispose(); await host.WaitAsync(TimeSpan.FromSeconds(3));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task RedactionCannotInvalidateTypedObservePayload(bool structural)
+    {
+        using var context = new GuaContext(); using var owner = context.CreateObserveOwner(GuaObserveSource.World);
+        using var catalog = new GuaEnumCatalog(); catalog.Register("game.Phase", "SecretFirst", "SecretSecond");
+        string phase = "SecretFirst"; using var value = owner.Property("phase", () => GuaValue.Enum("game.Phase", phase, catalog)); value.Notify();
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, SavePolicy = GuaTraceSavePolicy.Always,
+            Secrets = structural ? new[] { "changed" } : new[] { "SecretFirst", "SecretSecond" } });
+        var step = trace.BeginStep(GuaTraceStepKind.Mark, "redaction");
+        using var capture = GuaTraceObservations.Subscribe(trace, step, context);
+        phase = "SecretSecond"; value.Notify(); Assert.That(capture.Poll(step), Is.False);
+        Assert.That(trace.Status.Issues, Does.Contain("observe-failed"));
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Any(e => e.Type == "observation.change"), Is.False);
+        if (!structural) {
+            Assert.That(read.Blobs, Is.Empty);
+            var artifact = string.Join("", Directory.GetFiles(trace.ArtifactPath, "*", SearchOption.AllDirectories).Select(File.ReadAllText));
+            Assert.That(artifact, Does.Not.Contain("SecretFirst").And.Not.Contain("SecretSecond"));
+        }
+    }
+
+    [TestCase("rejection")]
+    [TestCase("timeout")]
+    [TestCase("malformed-success")]
+    public async Task FailedUnsubscribeClosesConnectionOwner(string failure)
+    {
+        using var runtime = new GuaRuntime(); int port = Port();
+        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var host = Task.Run(async () => {
+            var connection = await listener.GetContextAsync().WaitAsync(timeout.Token);
+            using var socket = (await connection.AcceptWebSocketAsync(null)).WebSocket;
+            using var client = runtime.CreateObserveClient();
+            try {
+                while (true) {
+                    byte[] bytes = new byte[65536]; var received = await socket.ReceiveAsync(bytes.AsMemory(), timeout.Token);
+                    if (received.MessageType == WebSocketMessageType.Close) break;
+                    var request = JsonNode.Parse(Encoding.UTF8.GetString(bytes, 0, received.Count))!;
+                    bool unsubscribe = request["type"]!.GetValue<string>() == "unsubscribe_observations";
+                    if (unsubscribe && failure == "timeout") continue;
+                    var reply = unsubscribe
+                        ? failure == "malformed-success"
+                            ? new JsonObject { ["id"] = request["id"]!.DeepClone(), ["ok"] = true, ["result"] = new JsonObject() }
+                            : new JsonObject { ["id"] = request["id"]!.DeepClone(), ["ok"] = false, ["error"] = "rejected" }
+                        : new JsonObject { ["id"] = request["id"]!.DeepClone(), ["ok"] = true,
+                            ["result"] = JsonNode.Parse(request["type"]!.GetValue<string>() == "get_version" ? runtime.GetVersionJson() : client.CommandJson(2)) };
+                    await socket.SendAsync(Encoding.UTF8.GetBytes(reply.ToJsonString()).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+                }
+            } catch (WebSocketException) { }
+        });
+        await using var trace = new GuaTraceSession(Options()); var step = trace.BeginStep(GuaTraceStepKind.Mark, "unsubscribe");
+        using var remote = new GuaWebSocketContext($"ws://127.0.0.1:{port}/", TimeSpan.FromMilliseconds(500));
+        var capture = GuaTraceObservations.Subscribe(trace, step, remote);
+        capture.Dispose();
+        Assert.That(trace.Status.Issues, Does.Contain("observe-unsubscribe-failed"));
+        // Disposal must close the owning socket even while the context remains live.
+        await host.WaitAsync(TimeSpan.FromSeconds(3));
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+    }
 
     [TestCase(false)]
     [TestCase(true)]

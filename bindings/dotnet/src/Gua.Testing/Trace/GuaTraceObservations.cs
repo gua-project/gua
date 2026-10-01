@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Json.Schema;
 using Gua.Core;
 
 namespace Gua.Testing;
@@ -9,6 +10,18 @@ namespace Gua.Testing;
 /// No background polling or completion-queue consumption.</summary>
 public sealed class GuaTraceObservations : IDisposable
 {
+    private static readonly Lazy<(JsonSchema Schema, EvaluationOptions Options)> Contract = new(() => {
+        var options = new EvaluationOptions();
+        JsonSchema? transport = null;
+        foreach (var name in new[] { "value-v1", "enum-catalog-v1", "observe-v1", "observe-transport-v1" }) {
+            using var stream = typeof(GuaTraceObservations).Assembly.GetManifestResourceStream($"Gua.Trace.{name}.schema.json")!;
+            using var reader = new StreamReader(stream);
+            var schema = JsonSchema.FromText(reader.ReadToEnd());
+            options.SchemaRegistry.Register(schema);
+            transport = schema;
+        }
+        return (transport!, options);
+    });
     private readonly object _gate = new();
     private readonly GuaTraceSession _trace;
     private readonly Func<(IDisposable Token, string Snapshot, Func<string> Poll)> _subscribe;
@@ -174,6 +187,11 @@ public sealed class GuaTraceObservations : IDisposable
 
     private (JsonElement Document, JsonElement Catalogs) Envelope(JsonElement root, string kind)
     {
+        var contract = Contract.Value;
+        if (!contract.Schema.Evaluate(root, contract.Options).IsValid ||
+            !_trace.ObservationRedactionIsUnchanged(root) ||
+            !_trace.ObservationRedactionIsUnchanged(Normalize(root)))
+            throw new JsonException();
         var doc = root.GetProperty("document"); var catalogs = root.GetProperty("catalogs");
         if (doc.GetProperty("schemaVersion").GetInt32() != 1 || doc.GetProperty("kind").GetString() != kind ||
             doc.GetProperty("profile").GetString() != _trace.ObservationProfile ||
@@ -182,6 +200,25 @@ public sealed class GuaTraceObservations : IDisposable
         var items = doc.GetProperty(kind == "snapshot" ? "entries" : "events");
         if (items.ValueKind != JsonValueKind.Array || catalogs.ValueKind != JsonValueKind.Array || items.GetArrayLength() != catalogs.GetArrayLength())
             throw new JsonException();
+        var index = 0;
+        foreach (var item in items.EnumerateArray()) {
+            var paired = catalogs[index++];
+            foreach (var field in new[] { "value", "before", "after" }) {
+                var hasValue = item.TryGetProperty(field, out var value);
+                var hasCatalog = paired.TryGetProperty(field, out var catalog);
+                var isEnum = hasValue && value.TryGetProperty("enumType", out _);
+                if (hasCatalog != isEnum) throw new JsonException();
+                if (!isEnum) continue;
+                var definition = catalog.GetProperty("enums")[0];
+                if (definition.GetProperty("enumType").GetString() != value.GetProperty("enumType").GetString())
+                    throw new JsonException();
+                var members = definition.GetProperty("members").EnumerateArray().Select(m => m.GetString()).ToHashSet(StringComparer.Ordinal);
+                var payload = value.GetProperty("value");
+                if (payload.ValueKind == JsonValueKind.Array) {
+                    if (payload.EnumerateArray().Any(m => !members.Contains(m.GetString()))) throw new JsonException();
+                } else if (!members.Contains(payload.GetString())) throw new JsonException();
+            }
+        }
         // Require host references before any part of the interval is stored.
         _ = Metadata(doc);
         return (doc, catalogs);
@@ -214,7 +251,7 @@ public sealed class GuaTraceObservations : IDisposable
                 if (property.Name is "sessionEpoch" or "sequence" or "revision" or "uiFrame" or "uiRevision" or
                     "worldFrame" or "worldRevision" or "ownerId" or "registrationId")
                     writer.WriteStringValue(property.Value.GetUInt64().ToString(CultureInfo.InvariantCulture));
-                else property.Value.WriteTo(writer);
+                else Write(property.Value, writer);
             }
             writer.WriteEndObject();
         }

@@ -34,6 +34,7 @@ export function GuaTraceViewer({ trace }: { trace: TraceDocument }) {
           <p>Differences are associated with this interval, not proof of causality. At most 1000 differences per pair are shown. Intermediate continuity is only as recorded.</p>
           {observations.map((after, i) => {
             const target = object(after.data), host = object(target.host);
+            if (![target.channel, host.sourceId, host.sessionEpoch].every(value => typeof value === "string" && value.length > 0)) return null;
             const before = observations.slice(0, i).reverse().find(e => {
               const candidate = object(e.data), candidateHost = object(candidate.host);
               return candidate.channel === target.channel && candidateHost.sourceId === host.sourceId && candidateHost.sessionEpoch === host.sessionEpoch;

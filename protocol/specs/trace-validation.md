@@ -1,5 +1,21 @@
 # #109 Trace 基盤の検証記録
 
+## #125 review追加検証（2026-10-01）
+
+独立checkoutでmainとの文書競合を解消し、MSVC Debug nativeを再ビルドした。
+Observeの不正なentry/change/catalog、enum Valueとcatalogの型・member対応、空enum collection、
+enum member/構造語に一致する既知秘密文字列、unsubscribe拒否/timeout/不正成功応答を検証した。
+型付きObserve payloadにredactionが必要な区間はfailedとなり、Value/catalogを保持しない。
+
+- TraceObserveTests + ObserveTransportTests: 37/37成功。
+- Selectorの独立回帰: 311/311成功。共有TraceLifecycleTestsは#152のrace修正取り込み後に別検証する。
+- Gua.Visual.Tests: 96/96成功。
+- Inspector/ValueのBun回帰: 223/223成功。未確認/空host identityではSnapshot差分を表示しない。
+- MSVC build、CTest 12/12、両.NET target build、workspace型検査、NuGet offline schema検証が成功。
+- 累積差分の読み取り専用監査後、対応するcatalogとunsubscribeの追加修正を最終監査し、追加指摘なし。
+
+これらはローカル検証記録であり、最終HEADのremote CI・他OS・engine E2E成功を意味しない。
+
 ## #125 T-03 の追加検証（2026-09-30）
 
 Windows x64、MSVC 19.51 / Ninja、.NET SDK 10.0.401、Bun 1.4.0。

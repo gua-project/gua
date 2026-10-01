@@ -36,6 +36,7 @@
     <None Include="../../../../protocol/schema/trace.schema.json" Pack="true" PackagePath="trace/" />
     <None Include="../../../../protocol/schema/observe-transport-v1.schema.json;../../../../protocol/schema/observe-v1.schema.json;../../../../protocol/schema/enum-catalog-v1.schema.json;../../../../protocol/schema/value-v1.schema.json" Pack="true" PackagePath="trace/" />
     <EmbeddedResource Include="../../../../protocol/schema/ui-tree.schema.json" LogicalName="Gua.Trace.UiTree.schema.json" />
+    <EmbeddedResource Include="../../../../protocol/schema/value-v1.schema.json;../../../../protocol/schema/enum-catalog-v1.schema.json;../../../../protocol/schema/observe-v1.schema.json;../../../../protocol/schema/observe-transport-v1.schema.json" LogicalName="Gua.Trace.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../../../protocol/schema/world-object-tree.schema.json" LogicalName="Gua.Trace.WorldTree.schema.json" />
     <None Include="../../../../artifacts/trace-viewer/index.html" Pack="true" PackagePath="trace/"
           Condition="Exists('../../../../artifacts/trace-viewer/index.html')" />

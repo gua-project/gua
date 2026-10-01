@@ -62,6 +62,10 @@ public sealed partial class GuaTraceSession : IDisposable, IAsyncDisposable
     }
 
     public GuaTraceStatus Status { get { lock (_gate) return StatusUnsafe(); } }
+    // Typed Observe payloads cannot use the generic redacted representation.
+    // Omit the entire affected interval before retaining any values or catalogs.
+    internal bool ObservationRedactionIsUnchanged(JsonElement payload) =>
+        _redaction.Json(payload).SequenceEqual(new GuaTraceRedaction(Array.Empty<string>()).Json(payload));
     private GuaTraceStatus StatusUnsafe() => new(_stopped, _evicted, _dropped, _issues.OrderBy(x => x, StringComparer.Ordinal).ToArray());
     private void Stop(string reason) { _stopped = true; _issues.Add(reason); }
     private GuaTraceManifest Manifest(bool finalized) => new(1, TraceId,

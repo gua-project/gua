@@ -38,8 +38,21 @@ public sealed partial class GuaWebSocketContext
             throw;
         }
     }
-    internal void UnsubscribeObservations(ulong subscription, long generation) =>
-        Raw(new { type = "unsubscribe_observations", subscriptionId = subscription }, observeGeneration: generation, ignoreStaleObserve: true);
+    internal void UnsubscribeObservations(ulong subscription, long generation)
+    {
+        try {
+            using var response = JsonDocument.Parse(Raw(new { type = "unsubscribe_observations", subscriptionId = subscription }, observeGeneration: generation, ignoreStaleObserve: true));
+            if (response.RootElement.ValueKind != JsonValueKind.Null) throw new JsonException();
+        }
+        catch {
+            // The token has no retry path. Disconnect its owner even after a rejection.
+            requestGate.Wait();
+            try {
+                if (connectionGeneration == generation) { socket?.Dispose(); socket = null; bufferedActionEvents.Clear(); }
+            } finally { requestGate.Release(); }
+            throw;
+        }
+    }
 }
 /// <summary>Connection-owned cursor. SnapshotJson/PollJson return the transport
 /// envelope; inspect document.status and resubscribe after gap/stale_session.

@@ -10,6 +10,17 @@ const manifest = { schemaVersion: 1, traceId, captureMode: "recent", savePolicy:
 function event(sequence: number, type: string, data: unknown) { return { schemaVersion: 1, traceId, sequence, eventId: `e${sequence}`, stepId, type, collectedMilliseconds: sequence, data }; }
 const lines = (...events: unknown[]) => events.map(e => JSON.stringify(e)).join("\n") + "\n";
 describe("Trace v1 offline reader/viewer", () => {
+  test("unknown or empty observation identity never establishes a snapshot comparison", () => {
+    for (const identity of [{}, { channel: "ui" }, { channel: "ui", host: {} },
+      { channel: "ui", host: { sourceId: "", sessionEpoch: "1" } },
+      { channel: "ui", host: { sourceId: "game", sessionEpoch: "" } },
+      { channel: "", host: { sourceId: "game", sessionEpoch: "1" } }]) {
+      const blobs = Object.fromEntries([1, 2].map(i => [`snapshots/${String(i).repeat(64)}.json`, { position: i }]));
+      const trace = parseTrace(JSON.stringify(manifest), lines(...[1, 2].map(i => event(i, "observation", {
+        ...identity, reason: `read-${i}`, availability: "available", blob: `snapshots/${String(i).repeat(64)}.json` }))), blobs);
+      expect(renderToStaticMarkup(<GuaTraceViewer trace={trace} />)).not.toContain('"path":');
+    }
+  });
   test("gaps and failed/partial/stale reads remain unverified after another snapshot", () => {
     for (const availability of ["gap", "failed", "partial", "stale", "outsideRetention"]) {
       const trace = parseTrace(JSON.stringify({ ...manifest, lastSequence: 3 }), lines(
