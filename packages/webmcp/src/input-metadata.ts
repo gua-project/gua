@@ -5,6 +5,78 @@ const finite = (value: unknown): value is number => typeof value === "number" &&
 const unicode = (text: string) => [...text].every(c => { const cp = c.codePointAt(0)!; return cp < 0xd800 || cp > 0xdfff; });
 const points = (text: string) => [...text].length;
 
+/** Keep original JSON spans for byte limits that decoding/re-encoding loses. */
+export function parseInputActionMetadataJson(source: string): unknown {
+  const parsed: unknown = JSON.parse(source); // Grammar validation precedes the span walk.
+  let cursor = 0;
+  const encoder = new TextEncoder();
+  const space = () => { while (/\s/.test(source[cursor] ?? "")) cursor++; };
+  const string = () => {
+    cursor++;
+    while (source[cursor] !== '"') cursor += source[cursor] === "\\" ? 2 : 1;
+    cursor++;
+  };
+  const value = () => {
+    if (source[cursor] === '"') { string(); return; }
+    if (source[cursor] === "{" || source[cursor] === "[") {
+      let depth = 1; cursor++;
+      // Skip arbitrary nested values iteratively; only the fixed map/action path
+      // is visited below, so unrelated nesting cannot grow the JS call stack.
+      while (depth) {
+        const token = source[cursor];
+        if (token === '"') { string(); continue; }
+        if (token === "{" || token === "[") depth++;
+        if (token === "}" || token === "]") depth--;
+        cursor++;
+      }
+    } else while (cursor < source.length && !/[\s,}\]]/.test(source[cursor]!)) cursor++;
+  };
+  const bounded = (start: number, maximum: number, exclusive = false) => {
+    const limit = maximum + (exclusive ? 0 : 1);
+    if (cursor - start >= limit || encoder.encode(source.slice(start, cursor)).length >= limit)
+      throw new Error("Oversized game input metadata literal.");
+  };
+  const array = (item: () => void) => {
+    cursor++; space();
+    while (source[cursor] !== "]") {
+      item(); space();
+      if (source[cursor] !== ",") break;
+      cursor++; space();
+    }
+    cursor++;
+  };
+  const object = (property: (key: string) => boolean) => {
+    cursor++; space();
+    while (source[cursor] !== "}") {
+      const start = cursor; string();
+      const key = JSON.parse(source.slice(start, cursor)) as string;
+      space(); cursor++; space(); // colon
+      if (!property(key)) value();
+      space();
+      if (source[cursor] !== ",") break;
+      cursor++; space();
+    }
+    cursor++;
+  };
+  space();
+  if (source[cursor] === "{") object(key => {
+    if (key !== "actions" || source[cursor] !== "[") return false;
+    array(() => {
+      if (source[cursor] !== "{") { value(); return; }
+      object(field => {
+        if (field === "valueSchema") { const start = cursor; value(); bounded(start, 16384); return true; }
+        if (field !== "examples" || source[cursor] !== "[") return false;
+        const start = cursor;
+        array(() => { const exampleStart = cursor; value(); bounded(exampleStart, 512, true); });
+        bounded(start, 16384);
+        return true;
+      });
+    });
+    return true;
+  });
+  return parsed;
+}
+
 export function validInputActionMetadata(action: RecordValue): boolean {
   if (action.valueSchema === undefined && action.examples === undefined) return true;
   try {

@@ -1,5 +1,8 @@
 #include "gua/gua.hpp"
+#include "../../gua-godot/include/gua/godot/copy_json.hpp"
+#include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <string>
 #ifdef _MSC_VER
 #include <crtdbg.h>
@@ -31,6 +34,24 @@ static void invalid(gua_context_t* context, const gua_game_input_action_descript
     assert(copy(context, true) == previous);
 }
 int main() {
+    // Deterministically change the map between the size probe and each copy.
+    // Never accept the truncated prefix, including when it grows twice.
+    int reads = 0;
+    const std::string grown = "{\"actions\":[{\"id\":\"larger_map\"}]}";
+    const auto copied = gua::godot_detail::copy_json_with_retry([&](char* output, int size) {
+        ++reads;
+        if (!output) return 3;
+        const std::string current = reads == 2 ? "{\"actions\":[]}" : grown;
+        const int required = static_cast<int>(current.size() + 1);
+        const int written = std::min(size - 1, static_cast<int>(current.size()));
+        std::memcpy(output, current.data(), static_cast<std::size_t>(written));
+        output[written] = '\0';
+        return required;
+    });
+    assert(reads == 4 && copied == grown);
+    assert(gua::godot_detail::copy_json_with_retry([](char*, int) { return 0; }).empty());
+    int revoked_reads = 0;
+    assert(gua::godot_detail::copy_json_with_retry([&](char*, int) { return ++revoked_reads == 1 ? 3 : 0; }).empty());
 #ifdef _MSC_VER
     _set_error_mode(_OUT_TO_STDERR);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);

@@ -5,7 +5,7 @@ import {
   type GuaGameInputState, type GuaScreenshot, type GuaUiTree, type GuaWebActionCompletion, type GuaWebActionRequest,
 } from "./index.js";
 import { parseObserveTransport, observeSubscriptionId, type ObserveSubscription } from "gua-value";
-import { validInputActionMetadata } from "./input-metadata.js";
+import { parseInputActionMetadataJson, validInputActionMetadata } from "./input-metadata.js";
 import {
   parseWorldObjectTree,
   parseWorldQueryResult,
@@ -400,25 +400,27 @@ function parseGameInputCapabilities(value: unknown): GuaGameInputCapability[] {
 }
 
 function parseGameInputActions(value: unknown, version = 1): GuaGameInputActionMap | import("./index.js").GuaGameInputActionMapV2 {
-  const parsed = parseJson(value);
+  const parsed = parseJson(value, version === 2);
   const record = asRecord(parsed);
   if (!record || record.schemaVersion !== version || !Number.isInteger(record.sessionEpoch) || (record.sessionEpoch as number) < 1 ||
       !Number.isInteger(record.revision) || (record.revision as number) < 0 || !isNonEmptyString(record.context) ||
       !Array.isArray(record.actions) || !record.actions.every(isGameInputAction) ||
-      (version === 2 && !record.actions.every(action => validInputActionMetadata(action as Record<string, unknown>)))) {
+      !record.actions.every(action => version === 2 ? validInputActionMetadata(action as Record<string, unknown>) :
+        !("valueSchema" in action) && !("examples" in action))) {
     throw new GuaWebError("invalid_request", "The engine returned an invalid game input action map.");
   }
   return parsed as GuaGameInputActionMap;
 }
 
 function parseGameInputActionSearch(value: unknown, version = 1): GuaGameInputActionSearchResult | import("./index.js").GuaGameInputActionSearchResultV2 {
-  const parsed = parseJson(value);
+  const parsed = parseJson(value, version === 2);
   const record = asRecord(parsed);
   if (!record || record.schemaVersion !== version || !Number.isInteger(record.sessionEpoch) || (record.sessionEpoch as number) < 1 ||
       !Number.isInteger(record.revision) || (record.revision as number) < 0 || !isNonEmptyString(record.context) ||
       !Number.isInteger(record.count) || (record.count as number) < 0 || typeof record.truncated !== "boolean" ||
       !Array.isArray(record.actions) || record.count !== record.actions.length || !record.actions.every(isGameInputAction) ||
-      (version === 2 && !record.actions.every(action => validInputActionMetadata(action as Record<string, unknown>))))
+      !record.actions.every(action => version === 2 ? validInputActionMetadata(action as Record<string, unknown>) :
+        !("valueSchema" in action) && !("examples" in action)))
     throw new GuaWebError("invalid_request", "The engine returned an invalid game input action search result.");
   return parsed as GuaGameInputActionSearchResult;
 }
@@ -498,10 +500,10 @@ function parseScreenshot(value: unknown): GuaScreenshot {
   return parsed as GuaScreenshot;
 }
 
-function parseJson(value: unknown): unknown {
+function parseJson(value: unknown, inputMetadata = false): unknown {
   if (typeof value !== "string") return value;
-  try { return JSON.parse(value); }
-  catch { throw new GuaWebError("invalid_request", "The engine returned malformed JSON."); }
+  try { return inputMetadata ? parseInputActionMetadataJson(value) : JSON.parse(value); }
+  catch { throw new GuaWebError("invalid_request", inputMetadata ? "The engine returned invalid game input metadata JSON." : "The engine returned malformed JSON."); }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

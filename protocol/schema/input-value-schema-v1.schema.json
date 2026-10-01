@@ -15,7 +15,8 @@
         },
         "description": {
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
         },
         "$schema": {
           "const": "https://json-schema.org/draft/2020-12/schema"
@@ -34,7 +35,8 @@
         },
         "description": {
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
         },
         "minimum": {
           "type": "number"
@@ -62,7 +64,8 @@
         },
         "description": {
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
         },
         "properties": {
           "type": "object",
@@ -84,7 +87,8 @@
                 },
                 "description": {
                   "type": "string",
-                  "maxLength": 1024
+                  "maxLength": 1024,
+                  "pattern": "^[^\\uD800-\\uDFFF]*$"
                 },
                 "minimum": {
                   "type": "number"
@@ -106,7 +110,8 @@
                 },
                 "description": {
                   "type": "string",
-                  "maxLength": 1024
+                  "maxLength": 1024,
+                  "pattern": "^[^\\uD800-\\uDFFF]*$"
                 },
                 "minimum": {
                   "type": "number"
@@ -150,7 +155,8 @@
         },
         "description": {
           "type": "string",
-          "maxLength": 1024
+          "maxLength": 1024,
+          "pattern": "^[^\\uD800-\\uDFFF]*$"
         },
         "minLength": {
           "type": "integer",

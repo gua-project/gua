@@ -156,14 +156,31 @@
         {
           "if": {
             "properties": {
-              "valueType": { "enum": ["button", "text"] }
+              "valueType": {
+                "enum": [
+                  "button",
+                  "text"
+                ]
+              }
             },
             "anyOf": [
-              { "required": ["valueSchema"] },
-              { "required": ["examples"] }
+              {
+                "required": [
+                  "valueSchema"
+                ]
+              },
+              {
+                "required": [
+                  "examples"
+                ]
+              }
             ]
           },
-          "then": { "properties": { "range": false } }
+          "then": {
+            "properties": {
+              "range": false
+            }
+          }
         },
         {
           "if": {
@@ -273,7 +290,8 @@
               "examples": {
                 "items": {
                   "type": "string",
-                  "maxLength": 40
+                  "maxLength": 40,
+                  "pattern": "^[^\\uD800-\\uDFFF]*$"
                 }
               }
             }

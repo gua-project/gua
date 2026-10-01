@@ -1,4 +1,5 @@
 #include "gua/godot/gua_context.hpp"
+#include "gua/godot/copy_json.hpp"
 
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/json.hpp>
@@ -156,24 +157,16 @@ godot::Dictionary clock_result(gua_runtime_t* runtime, int result)
     return value;
 }
 
+template<typename CopyJson>
+godot::String copy_json_with_retry(CopyJson copy_json)
+{
+    const auto json = gua::godot_detail::copy_json_with_retry(copy_json);
+    return godot::String::utf8(json.c_str());
+}
+
 godot::String copy_runtime_json(gua_runtime_t* runtime, int (*copy_json)(gua_runtime_t*, char*, int))
 {
-    int required_size = copy_json(runtime, nullptr, 0);
-    if (required_size <= 0) {
-        return godot::String();
-    }
-
-    for (;;) {
-        std::vector<char> buffer(static_cast<std::size_t>(required_size));
-        const int actual_size = copy_json(runtime, buffer.data(), static_cast<int>(buffer.size()));
-        if (actual_size <= 0) {
-            return godot::String();
-        }
-        if (actual_size <= static_cast<int>(buffer.size())) {
-            return godot::String::utf8(buffer.data());
-        }
-        required_size = actual_size;
-    }
+    return copy_json_with_retry([&](char* output, int size) { return copy_json(runtime, output, size); });
 }
 
 } // namespace
@@ -768,9 +761,7 @@ bool GuaContext::publish_game_input_actions(const String& input_context, const A
 String GuaContext::get_game_input_actions_json_v2(int observation_profile) const
 {
     const auto copy = [&](char* output, int size) { return gua_runtime_copy_game_input_actions_json_v2(runtime_, observation_profile, output, size); };
-    const int required = copy(nullptr, 0); if (required <= 0) return String("{}");
-    std::vector<char> output(static_cast<std::size_t>(required)); copy(output.data(), required);
-    return String::utf8(output.data());
+    return copy_json_with_retry(copy);
 }
 
 String GuaContext::get_game_input_actions_json() const
@@ -831,9 +822,7 @@ String GuaContext::find_game_input_actions_json_impl(const Dictionary& selector,
         static_cast<uint32_t>(tag_pointers.size()), static_cast<uint32_t>(limit) };
     const auto copy = [&](char* output, int size) { return metadata ? gua_runtime_query_game_input_actions_json_v2(runtime_, &native, observation_profile, output, size)
         : gua_runtime_query_game_input_actions_json(runtime_, &native, observation_profile, output, size); };
-    const int required = copy(nullptr, 0); if (required <= 0) return invalid_selector();
-    std::vector<char> output(static_cast<std::size_t>(required)); copy(output.data(), required);
-    return String::utf8(output.data());
+    return copy_json_with_retry(copy);
 }
 
 void GuaContext::enable_game_input_adapter(int capabilities, int player_capabilities)

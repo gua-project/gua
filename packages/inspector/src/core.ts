@@ -152,7 +152,7 @@ export type GuaInspectorCommand =
   | { id: number; type: "scroll"; nodeId: string; deltaX: number; deltaY: number; scrollUnit?: number }
   | { id: number; type: "press_key"; nodeId?: string; key: string; modifiers?: number }
   | ({ id: number } & GameInputCommandInput)
-  | { id: number; type: "get_game_input_actions" | "get_game_input_state" }
+  | { id: number; type: "get_game_input_actions" | "get_game_input_actions_v2" | "get_game_input_state" }
   | { id: number; type: "find_game_input_actions" | "find_game_input_actions_v2"; actionId?: string; query?: string; valueType?: 1 | 2 | 3 | 4;
       active?: 0 | 1 | 2; context?: string; category?: string; tags?: string[]; limit?: number }
   | { id: number; type: "poll_game_input"; requestId: number };
@@ -179,7 +179,7 @@ type GuaInspectorCommandInput =
   | { type: "scroll"; nodeId: string; deltaX: number; deltaY: number; scrollUnit?: number }
   | { type: "press_key"; nodeId?: string; key: string; modifiers?: number }
   | GameInputCommandInput
-  | { type: "get_game_input_actions" | "get_game_input_state" }
+  | { type: "get_game_input_actions" | "get_game_input_actions_v2" | "get_game_input_state" }
   | ({ type: "find_game_input_actions" | "find_game_input_actions_v2" } & GuaGameInputActionSelector)
   | { type: "poll_game_input"; requestId: number };
 
