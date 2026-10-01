@@ -169,6 +169,12 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             commandType = document.RootElement.GetProperty("command").GetProperty("type").GetString() ?? string.Empty;
         }
         catch (Exception error) { Debug.LogError("Invalid Gua WebGL request: " + error.Message); return; }
+        if (commandType == "get_game_input_actions_v2" || commandType == "find_game_input_actions_v2")
+        {
+            using var document = JsonDocument.Parse(json);
+            if (!ValidMetadataDiscoveryFields(document.RootElement.GetProperty("command")))
+            { ResolveWebError(callId, "invalid_request", "Unknown or duplicate metadata discovery field."); return; }
+        }
         // Game input search uses a boolean `active` field, while the legacy world-query DTO below uses an integer
         if (commandType == "get_observe_snapshot" || commandType == "subscribe_observations" || commandType == "poll_observations" || commandType == "unsubscribe_observations")
         {
@@ -189,11 +195,12 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             return;
         }
         // tri-state field with the same name. Route search before JsonUtility attempts that incompatible conversion.
-        if (commandType == "find_game_input_actions")
+        if (commandType == "find_game_input_actions" || commandType == "find_game_input_actions_v2")
         {
             if ((playerGameInputCapabilities & GuaGameInputCapabilities.Semantic) == 0) { ResolveWebError(callId, "engine_unsupported", "Unity Player game input is not authorized."); return; }
+            if (commandType == "find_game_input_actions_v2" && !NativeSupportsGameInputMetadata()) { ResolveWebError(callId, "engine_unsupported", "The native runtime does not support game input metadata."); return; }
             if (!TryGameInputSelector(json, out var selector, out var selectorError)) { ResolveWebError(callId, "invalid_request", selectorError); return; }
-            try { GuaUnityWebResolve(webOwnerId, callId, runtime.FindGameInputActionsJson(selector, GuaObservationProfile.Player), 0); }
+            try { GuaUnityWebResolve(webOwnerId, callId, (commandType == "find_game_input_actions_v2" ? runtime.FindGameInputActionsJsonV2(selector, GuaObservationProfile.Player) : runtime.FindGameInputActionsJson(selector, GuaObservationProfile.Player)), 0); }
             catch (Exception error) { ResolveWebError(callId, "invalid_request", error.Message); }
             return;
         }
@@ -226,10 +233,11 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             GuaUnityWebResolve(webOwnerId, envelope.callId, JsonSerializer.Serialize(WebGameInputCapabilities()), 0);
             return;
         }
-        if (envelope.command.type == "get_game_input_actions")
+        if (envelope.command.type == "get_game_input_actions" || envelope.command.type == "get_game_input_actions_v2")
         {
             if ((playerGameInputCapabilities & GuaGameInputCapabilities.Semantic) == 0) { ResolveWebError(envelope.callId, "engine_unsupported", "Unity Player game input is not authorized."); return; }
-            GuaUnityWebResolve(webOwnerId, envelope.callId, runtime.GetPlayerGameInputActionsJson(), 0);
+            if (envelope.command.type == "get_game_input_actions_v2" && !NativeSupportsGameInputMetadata()) { ResolveWebError(envelope.callId, "engine_unsupported", "The native runtime does not support game input metadata."); return; }
+            GuaUnityWebResolve(webOwnerId, envelope.callId, (envelope.command.type == "get_game_input_actions_v2" ? runtime.GetGameInputActionsJsonV2(GuaObservationProfile.Player) : runtime.GetPlayerGameInputActionsJson()), 0);
             return;
         }
         if (envelope.command.type == "get_game_input_state")
@@ -290,6 +298,16 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             return;
         }
         webCalls[requestId] = envelope.callId;
+    }
+
+    private static bool ValidMetadataDiscoveryFields(JsonElement command)
+    {
+        bool search = command.GetProperty("type").GetString() == "find_game_input_actions_v2";
+        var allowed = new HashSet<string>(search
+            ? new[] { "type", "id", "query", "valueType", "active", "context", "category", "tags", "limit" }
+            : new[] { "type" }, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        return command.EnumerateObject().All(field => allowed.Contains(field.Name) && seen.Add(field.Name));
     }
 
     public void HandleWebCancellation(string callIdValue)
@@ -356,11 +374,15 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         webGameInputSession = null;
     }
 
+    private bool NativeSupportsGameInputMetadata() => runtime != null &&
+        GuaVersion.Parse(runtime.GetVersionJson()).Capabilities.Contains("semantic_game_input_metadata_v1", StringComparer.Ordinal);
+
     private string[] WebGameInputCapabilities()
     {
         var result = new List<string>();
         if ((playerGameInputCapabilities & GuaGameInputCapabilities.Semantic) != 0) result.Add("semantic_game_input_v1");
         if ((playerGameInputCapabilities & GuaGameInputCapabilities.Semantic) != 0) result.Add("semantic_game_input_search_v1");
+        if ((playerGameInputCapabilities & GuaGameInputCapabilities.Semantic) != 0 && NativeSupportsGameInputMetadata()) result.Add("semantic_game_input_metadata_v1");
         if ((playerGameInputCapabilities & GuaGameInputCapabilities.Keyboard) != 0) result.Add("raw_keyboard_input_v1");
         if ((playerGameInputCapabilities & GuaGameInputCapabilities.Pointer) != 0) result.Add("raw_pointer_input_v1");
         if ((playerGameInputCapabilities & GuaGameInputCapabilities.Gamepad) != 0) result.Add("raw_gamepad_input_v1");

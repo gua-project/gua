@@ -2,6 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { DemoRuntime, handleMessage } from "../src/index";
 
 describe("DemoRuntime virtual clock", () => {
+  test("both metadata discovery commands return correlated unsupported errors", () => {
+    for (const type of ["get_game_input_actions_v2", "find_game_input_actions_v2"]) {
+      expect(handleMessage(JSON.stringify({ id: 41, type }), new DemoRuntime(() => 0)))
+        .toEqual({ id: 41, ok: false, error: "unsupported game input metadata" });
+    }
+  });
   test("maps the flat search wire fields without treating correlation id as an action id", () => {
     const runtime = new DemoRuntime(() => 0);
     const all = handleMessage(JSON.stringify({ id: 9, type: "find_game_input_actions", limit: 20 }), runtime);

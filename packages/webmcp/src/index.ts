@@ -64,7 +64,7 @@ export interface GuaUiTree {
 export interface GuaScreenshot { dataUri: string; width: number; height: number }
 
 export const guaGameInputCapabilities = [
-  "semantic_game_input_v1", "semantic_game_input_search_v1", "raw_keyboard_input_v1", "raw_pointer_input_v1", "raw_gamepad_input_v1",
+  "semantic_game_input_metadata_v1", "semantic_game_input_v1", "semantic_game_input_search_v1", "raw_keyboard_input_v1", "raw_pointer_input_v1", "raw_gamepad_input_v1",
   "text_input_v1", "game_input_lease_v1",
 ] as const;
 export type GuaGameInputCapability = (typeof guaGameInputCapabilities)[number];
@@ -73,10 +73,13 @@ export interface GuaGameInputAction {
   id: string; description: string; valueType: GuaGameInputValueType; range?: { minimum: number; maximum: number };
   holdable: boolean; active: boolean; bindings: string[]; risk: string; requiresConfirmation: boolean;
   category?: string; aliases?: string[]; tags?: string[]; agentExposure?: "auto" | "private";
+  valueSchema?: Record<string, unknown>; examples?: unknown[];
 }
 export interface GuaGameInputActionMap {
   schemaVersion: 1; sessionEpoch: number; revision: number; context: string; actions: GuaGameInputAction[];
 }
+export interface GuaGameInputActionMapV2 extends Omit<GuaGameInputActionMap, "schemaVersion"> { schemaVersion: 2 }
+export interface GuaGameInputActionSearchResultV2 extends Omit<GuaGameInputActionSearchResult, "schemaVersion"> { schemaVersion: 2 }
 export interface GuaGameInputActionSelector {
   id?: string; query?: string; valueType?: GuaGameInputValueType; active?: boolean; context?: string;
   category?: string; tags?: string[]; limit?: number;
@@ -137,6 +140,8 @@ export interface GuaBrowserBridge {
   getWorldObjectTree?(options?: GuaBridgeCallOptions): Promise<GuaWorldObjectTree>;
   findWorldObjects?(selector: GuaWorldSelector, options?: GuaBridgeCallOptions): Promise<GuaWorldQueryResult>;
   getGameInputCapabilities?(): Promise<GuaGameInputCapability[]>;
+  getGameInputActionsV2?(): Promise<GuaGameInputActionMapV2>;
+  findGameInputActionsV2?(selector: GuaGameInputActionSelector): Promise<GuaGameInputActionSearchResultV2>;
   getGameInputActions?(): Promise<GuaGameInputActionMap>;
   findGameInputActions?(selector: GuaGameInputActionSelector): Promise<GuaGameInputActionSearchResult>;
   getGameInputState?(): Promise<GuaGameInputState>;
@@ -268,6 +273,10 @@ function gameInputDefinitions(capabilities: GuaGameInputCapability[], bridge: Gu
   if (capabilities.includes("semantic_game_input_v1") && bridge.getGameInputActions) {
     for (const name of ["get_game_input_actions", "press_game_input_action", "set_game_input_action", "release_game_input_action"]) enabled.add(name);
   }
+  if (capabilities.includes("semantic_game_input_metadata_v1")) {
+    if (bridge.getGameInputActionsV2) enabled.add("get_game_input_actions_v2");
+    if (bridge.findGameInputActionsV2) enabled.add("find_game_input_actions_v2");
+  }
   if (capabilities.includes("semantic_game_input_search_v1") && bridge.findGameInputActions) enabled.add("find_game_input_actions");
   if (capabilities.length > 0) enabled.add("release_all_game_inputs");
   if (capabilities.length > 0 && bridge.getGameInputState) enabled.add("get_game_input_state");
@@ -354,6 +363,15 @@ async function executeTool(
         signal,
         "Timed out reading the latest Gua screenshot.",
       );
+    }
+    if (name === "get_game_input_actions_v2") {
+      rejectUnknownArguments(input, new Set());
+      if (!bridge.getGameInputActionsV2) throw new GuaWebError("engine_unsupported", "Game input metadata is unsupported.");
+      return await withTimeout(bridge.getGameInputActionsV2(), defaultTimeoutMs, signal, "Timed out reading game input metadata.");
+    }
+    if (name === "find_game_input_actions_v2") {
+      if (!bridge.findGameInputActionsV2) throw new GuaWebError("engine_unsupported", "Game input metadata search is unsupported.");
+      return await withTimeout(bridge.findGameInputActionsV2(gameInputSelector(input)), defaultTimeoutMs, signal, "Timed out searching game input metadata.");
     }
     if (name === "get_game_input_actions") {
       rejectUnknownArguments(input, new Set());

@@ -17,7 +17,18 @@ public sealed partial class GuaTraceSession
     private readonly Dictionary<string, ulong> _nativeSequences = new();
     internal void ReserveNative() { lock (_gate) _nativePending++; }
     internal void ReleaseNative() { lock (_gate) if (_nativePending > 0) _nativePending--; }
-    internal bool NativePending { get { lock (_gate) return _nativePending != 0; } }
+    // Sequence acceptance and the resulting correlation/records are one transaction
+    // across all readers of this session. The journal must already be read: no
+    // context calls or asynchronous waits may run inside this session lock.
+    internal bool CaptureNativeBatch(Action capture)
+    {
+        lock (_gate)
+        {
+            if (_nativePending != 0) return false;
+            capture();
+            return true;
+        }
+    }
     internal bool AcceptNativeSequence(string source, ulong sequence)
     {
         lock (_gate)
@@ -182,37 +193,39 @@ public sealed class GuaTraceLifecycle : IDisposable, IAsyncDisposable
             using var document = JsonDocument.Parse(_context.GetDiagnosticsJson());
             lock (_gate)
             {
-                if (_disposed || _trace.NativePending) return false;
-                var journal = document.RootElement.GetProperty("traceLifecycle");
-                var host = journal.GetProperty("sourceId").GetString();
-                if (host != _hostSource) { _trace.LifecycleIssue("native-source-changed"); _hostSource = host; _cursor = 0; }
-                foreach (var record in journal.GetProperty("events").EnumerateArray())
+                if (_disposed) return false;
+                return _trace.CaptureNativeBatch(() =>
                 {
-                    var sequence = Number(record, "sequence");
-                    if (sequence <= _cursor) continue;
-                    if (sequence != _cursor + 1) _trace.LifecycleIssue("native-lifecycle-gap");
-                    _cursor = sequence;
-                    if (!_trace.AcceptNativeSequence(_hostSource!, sequence)) continue;
-                    var key = Key(record);
-                    var known = _trace.FindRequest(key, out var step);
-                    var phase = record.GetProperty("phase").GetString()!;
-                    if (!known && phase is not ("enqueue" or "release-requested" or "owner-disconnected"))
-                    { _trace.LifecycleIssue("native-request-outside-correlation-window"); continue; }
-                    if (!known) step = _trace.BeginStep(GuaTraceStepKind.Lifecycle, "native " + record.GetProperty("domain").GetString(), key);
-                    var ended = _trace.IsEnded(step);
-                    _trace.RecordRequest(key, phase == "completion" && _trace.IsLateCompletion(step) ? "late-completion" : phase, record);
-                    if (phase == "owner-disconnected") _trace.EndStep(step, GuaTraceOutcome.Passed);
-                    if (phase is "completion" or "cancelled" && !ended)
+                    var journal = document.RootElement.GetProperty("traceLifecycle");
+                    var host = journal.GetProperty("sourceId").GetString();
+                    if (host != _hostSource) { _trace.LifecycleIssue("native-source-changed"); _hostSource = host; _cursor = 0; }
+                    foreach (var record in journal.GetProperty("events").EnumerateArray())
                     {
-                        var result = record.GetProperty("result");
-                        var outcome = result.TryGetProperty("succeeded", out var success) && success.ValueKind == JsonValueKind.True
-                            ? GuaTraceOutcome.Passed : GuaTraceOutcome.Failed;
-                        // Client-bound steps end at the caller result, native-only steps at host result.
-                        if (!known || IsNativeStep(step)) _trace.EndStep(step, outcome);
+                        var sequence = Number(record, "sequence");
+                        if (sequence <= _cursor) continue;
+                        if (sequence != _cursor + 1) _trace.LifecycleIssue("native-lifecycle-gap");
+                        _cursor = sequence;
+                        if (!_trace.AcceptNativeSequence(_hostSource!, sequence)) continue;
+                        var key = Key(record);
+                        var known = _trace.FindRequest(key, out var step);
+                        var phase = record.GetProperty("phase").GetString()!;
+                        if (!known && phase is not ("enqueue" or "release-requested" or "owner-disconnected"))
+                        { _trace.LifecycleIssue("native-request-outside-correlation-window"); continue; }
+                        if (!known) step = _trace.BeginStep(GuaTraceStepKind.Lifecycle, "native " + record.GetProperty("domain").GetString(), key);
+                        var ended = _trace.IsEnded(step);
+                        _trace.RecordRequest(key, phase == "completion" && _trace.IsLateCompletion(step) ? "late-completion" : phase, record);
+                        if (phase == "owner-disconnected") _trace.EndStep(step, GuaTraceOutcome.Passed);
+                        if (phase is "completion" or "cancelled" && !ended)
+                        {
+                            var result = record.GetProperty("result");
+                            var outcome = result.TryGetProperty("succeeded", out var success) && success.ValueKind == JsonValueKind.True
+                                ? GuaTraceOutcome.Passed : GuaTraceOutcome.Failed;
+                            // Client-bound steps end at the caller result, native-only steps at host result.
+                            if (!known || IsNativeStep(step)) _trace.EndStep(step, outcome);
+                        }
                     }
-                }
-                if (Number(journal, "lastSequence") > _cursor) _trace.LifecycleIssue("native-lifecycle-gap");
-                return true;
+                    if (Number(journal, "lastSequence") > _cursor) _trace.LifecycleIssue("native-lifecycle-gap");
+                });
             }
         }
         catch { _trace.LifecycleIssue("native-capture-failed"); return false; }

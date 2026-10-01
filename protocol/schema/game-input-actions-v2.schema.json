@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/game-input-actions-v2.schema.json",
+  "title": "Gua Game Input Action Map with opt-in metadata",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sessionEpoch",
+    "revision",
+    "context",
+    "actions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "sessionEpoch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "context": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    }
+  },
+  "$defs": {
+    "action": {
+      "type": "object",
+      "required": [
+        "id",
+        "description",
+        "valueType",
+        "holdable",
+        "active",
+        "bindings",
+        "risk",
+        "requiresConfirmation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$",
+          "maxLength": 127
+        },
+        "description": {
+          "type": "string"
+        },
+        "valueType": {
+          "enum": [
+            "button",
+            "axis1d",
+            "vector2",
+            "text"
+          ]
+        },
+        "range": {
+          "type": "object",
+          "required": [
+            "minimum",
+            "maximum"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "minimum": {
+              "type": "number"
+            },
+            "maximum": {
+              "type": "number"
+            }
+          }
+        },
+        "holdable": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "risk": {
+          "enum": [
+            "safe",
+            "caution",
+            "dangerous"
+          ]
+        },
+        "requiresConfirmation": {
+          "type": "boolean"
+        },
+        "category": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$",
+          "maxLength": 127
+        },
+        "aliases": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[^\\u0000\\uD800-\\uDFFF]+$"
+          }
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[^\\u0000\\uD800-\\uDFFF]+$"
+          }
+        },
+        "agentExposure": {
+          "enum": [
+            "auto",
+            "private"
+          ]
+        },
+        "valueSchema": {
+          "$ref": "input-value-schema-v1.schema.json"
+        },
+        "examples": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": [
+              "boolean",
+              "number",
+              "string",
+              "object"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "valueType": {
+                "enum": [
+                  "button",
+                  "text"
+                ]
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "valueSchema"
+                ]
+              },
+              {
+                "required": [
+                  "examples"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "range": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "valueType": {
+                "const": "button"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "valueSchema": {
+                "properties": {
+                  "type": {
+                    "const": "boolean"
+                  }
+                }
+              },
+              "examples": {
+                "items": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "valueType": {
+                "const": "axis1d"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "valueSchema": {
+                "properties": {
+                  "type": {
+                    "const": "number"
+                  }
+                }
+              },
+              "examples": {
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "valueType": {
+                "const": "vector2"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "valueSchema": {
+                "properties": {
+                  "type": {
+                    "const": "object"
+                  }
+                }
+              },
+              "examples": {
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "valueType": {
+                "const": "text"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "valueSchema": {
+                "properties": {
+                  "type": {
+                    "const": "string"
+                  }
+                }
+              },
+              "examples": {
+                "items": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "pattern": "^[^\\uD800-\\uDFFF]*$"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "valueType": {
+                "const": "button"
+              },
+              "holdable": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "examples": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
