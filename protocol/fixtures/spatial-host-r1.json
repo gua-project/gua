@@ -1,0 +1,533 @@
+{
+  "valid": [
+    {
+      "id": "registration",
+      "type": 7,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "registration",
+        "provider": {
+          "schemaVersion": "spatial-r1",
+          "documentType": "provider",
+          "providerId": "test",
+          "spaceId": "space",
+          "spaceEpoch": 1,
+          "worldSpace": "world3d",
+          "basis": {
+            "x": {
+              "x": 1,
+              "y": 0,
+              "z": 0
+            },
+            "y": {
+              "x": 0,
+              "y": 1,
+              "z": 0
+            },
+            "z": {
+              "x": 0,
+              "y": 0,
+              "z": 1
+            }
+          },
+          "up": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "unit": {
+            "label": "host"
+          },
+          "precision": {
+            "representation": "unknown",
+            "reason": "fake test only"
+          },
+          "operations": [
+            "raycast",
+            "overlap",
+            "sweep"
+          ],
+          "shapes": [
+            "sphere",
+            "capsule",
+            "box"
+          ],
+          "policies": [
+            "safe"
+          ],
+          "consistencies": [
+            "bestEffort",
+            "samePhysicsSample"
+          ],
+          "engine": {
+            "name": "test",
+            "version": "unknown",
+            "backend": "fake",
+            "backendVersion": "unknown"
+          },
+          "limits": {
+            "maxQueriesPerBatch": 64,
+            "maxHitsPerQuery": 32,
+            "maxDeadlineMs": 1000
+          }
+        },
+        "policies": [
+          {
+            "id": "safe",
+            "revision": 7,
+            "region": {
+              "min": {
+                "x": -10,
+                "y": -10,
+                "z": -10
+              },
+              "max": {
+                "x": 10,
+                "y": 10,
+                "z": 10
+              }
+            }
+          }
+        ],
+        "loadedRegion": {
+          "min": {
+            "x": -10,
+            "y": -10,
+            "z": -10
+          },
+          "max": {
+            "x": 10,
+            "y": 10,
+            "z": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "owner",
+      "type": 8,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "owner",
+        "sessionEpoch": 1,
+        "profile": "Debug",
+        "enabled": true,
+        "policies": [
+          "safe"
+        ],
+        "region": {
+          "min": {
+            "x": -10,
+            "y": -10,
+            "z": -10
+          },
+          "max": {
+            "x": 10,
+            "y": 10,
+            "z": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "batch",
+      "type": 5,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "batch",
+        "batchId": 1,
+        "consistency": "samePhysicsSample",
+        "queries": [
+          {
+            "schemaVersion": "spatial-r1",
+            "documentType": "request",
+            "requestId": 1,
+            "sessionEpoch": 1,
+            "queryId": "q1",
+            "spaceId": "space",
+            "spaceEpoch": 1,
+            "queryPolicyId": "safe",
+            "kind": "raycast",
+            "deadlineMs": 1000,
+            "consistency": "samePhysicsSample",
+            "segment": {
+              "from": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "to": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+              }
+            }
+          },
+          {
+            "schemaVersion": "spatial-r1",
+            "documentType": "request",
+            "requestId": 2,
+            "sessionEpoch": 1,
+            "queryId": "q2",
+            "spaceId": "space",
+            "spaceEpoch": 1,
+            "queryPolicyId": "safe",
+            "kind": "raycast",
+            "deadlineMs": 1000,
+            "consistency": "samePhysicsSample",
+            "segment": {
+              "from": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "to": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "boundary",
+      "type": 9,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "boundary",
+        "physicsSampleId": "sample"
+      }
+    },
+    {
+      "id": "execution",
+      "type": 10,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "execution",
+        "requestId": 1,
+        "sessionEpoch": 1,
+        "queryId": "q1",
+        "spaceId": "space",
+        "spaceEpoch": 1,
+        "kind": "raycast",
+        "status": "completed",
+        "outcome": "noHit",
+        "coverage": {
+          "state": "unknown",
+          "reason": "not declared"
+        },
+        "truncated": false,
+        "hits": [],
+        "nearest": "none",
+        "originInside": "unknown"
+      }
+    },
+    {
+      "id": "hostResult",
+      "type": 4,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "result",
+        "requestId": 1,
+        "sessionEpoch": 1,
+        "queryId": "q1",
+        "spaceId": "space",
+        "spaceEpoch": 1,
+        "kind": "raycast",
+        "status": "completed",
+        "outcome": "noHit",
+        "coverage": {
+          "state": "unknown",
+          "reason": "not declared"
+        },
+        "truncated": false,
+        "hits": [],
+        "nearest": "none",
+        "originInside": "unknown",
+        "sample": {
+          "physicsSampleId": "sample",
+          "clockId": "clock",
+          "observedFromMs": 0.1,
+          "observedToMs": 0.2,
+          "queryPolicyRevision": 7
+        }
+      }
+    },
+    {
+      "id": "batchResult",
+      "type": 6,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "batchResult",
+        "batchId": 1,
+        "items": [
+          {
+            "requestId": 1,
+            "queryId": "q1",
+            "state": "completed",
+            "result": {
+              "schemaVersion": "spatial-host-r1",
+              "documentType": "result",
+              "requestId": 1,
+              "sessionEpoch": 1,
+              "queryId": "q1",
+              "spaceId": "space",
+              "spaceEpoch": 1,
+              "kind": "raycast",
+              "status": "completed",
+              "outcome": "noHit",
+              "coverage": {
+                "state": "unknown",
+                "reason": "not declared"
+              },
+              "truncated": false,
+              "hits": [],
+              "nearest": "none",
+              "originInside": "unknown",
+              "sample": {
+                "physicsSampleId": "sample",
+                "clockId": "clock",
+                "observedFromMs": 0.1,
+                "observedToMs": 0.2,
+                "queryPolicyRevision": 7
+              }
+            }
+          },
+          {
+            "requestId": 2,
+            "queryId": "q2",
+            "state": "notExecuted",
+            "reason": "cancelled"
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "duplicateQuery",
+      "type": 5,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "batch",
+        "batchId": 1,
+        "consistency": "samePhysicsSample",
+        "queries": [
+          {
+            "schemaVersion": "spatial-r1",
+            "documentType": "request",
+            "requestId": 1,
+            "sessionEpoch": 1,
+            "queryId": "q1",
+            "spaceId": "space",
+            "spaceEpoch": 1,
+            "queryPolicyId": "safe",
+            "kind": "raycast",
+            "deadlineMs": 1000,
+            "consistency": "samePhysicsSample",
+            "segment": {
+              "from": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "to": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+              }
+            }
+          },
+          {
+            "schemaVersion": "spatial-r1",
+            "documentType": "request",
+            "requestId": 1,
+            "sessionEpoch": 1,
+            "queryId": "q1",
+            "spaceId": "space",
+            "spaceEpoch": 1,
+            "queryPolicyId": "safe",
+            "kind": "raycast",
+            "deadlineMs": 1000,
+            "consistency": "samePhysicsSample",
+            "segment": {
+              "from": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "to": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+              }
+            }
+          }
+        ]
+      },
+      "schemaReject": false
+    },
+    {
+      "id": "legacyTickStillRequired",
+      "type": 2,
+      "json": {
+        "schemaVersion": "spatial-r1",
+        "documentType": "result",
+        "requestId": 1,
+        "sessionEpoch": 1,
+        "queryId": "q1",
+        "spaceId": "space",
+        "spaceEpoch": 1,
+        "kind": "raycast",
+        "status": "completed",
+        "outcome": "noHit",
+        "coverage": {
+          "state": "unknown",
+          "reason": "not declared"
+        },
+        "truncated": false,
+        "hits": [],
+        "nearest": "none",
+        "originInside": "unknown",
+        "sample": {
+          "physicsSampleId": "sample",
+          "clockId": "clock",
+          "observedFromMs": 0.1,
+          "observedToMs": 0.2,
+          "queryPolicyRevision": 7
+        }
+      },
+      "schemaReject": true
+    },
+    {
+      "id": "noSampleHostResult",
+      "type": 4,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "result",
+        "requestId": 1,
+        "sessionEpoch": 1,
+        "queryId": "q1",
+        "spaceId": "space",
+        "spaceEpoch": 1,
+        "kind": "raycast",
+        "status": "completed",
+        "outcome": "noHit",
+        "coverage": {
+          "state": "unknown",
+          "reason": "not declared"
+        },
+        "truncated": false,
+        "hits": [],
+        "nearest": "none",
+        "originInside": "unknown"
+      },
+      "schemaReject": true
+    },
+    {
+      "id": "executionHasSample",
+      "type": 10,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "execution",
+        "requestId": 1,
+        "sessionEpoch": 1,
+        "queryId": "q1",
+        "spaceId": "space",
+        "spaceEpoch": 1,
+        "kind": "raycast",
+        "status": "completed",
+        "outcome": "noHit",
+        "coverage": {
+          "state": "unknown",
+          "reason": "not declared"
+        },
+        "truncated": false,
+        "hits": [],
+        "nearest": "none",
+        "originInside": "unknown",
+        "sample": {
+          "physicsSampleId": "sample",
+          "clockId": "clock",
+          "observedFromMs": 0.1,
+          "observedToMs": 0.2,
+          "queryPolicyRevision": 7
+        }
+      },
+      "schemaReject": true
+    },
+    {
+      "id": "negativeWorkEvidence",
+      "type": 4,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "result",
+        "requestId": 1,
+        "sessionEpoch": 1,
+        "queryId": "q1",
+        "spaceId": "space",
+        "spaceEpoch": 1,
+        "kind": "raycast",
+        "status": "completed",
+        "outcome": "noHit",
+        "coverage": {
+          "state": "unknown",
+          "reason": "not declared"
+        },
+        "truncated": false,
+        "hits": [],
+        "nearest": "none",
+        "originInside": "unknown",
+        "sample": {
+          "physicsSampleId": "sample",
+          "clockId": "clock",
+          "observedFromMs": 1,
+          "observedToMs": 0,
+          "queryPolicyRevision": 7
+        }
+      },
+      "schemaReject": false
+    },
+    {
+      "id": "arbitraryMask",
+      "type": 5,
+      "json": {
+        "schemaVersion": "spatial-host-r1",
+        "documentType": "batch",
+        "batchId": 1,
+        "consistency": "samePhysicsSample",
+        "queries": [
+          {
+            "schemaVersion": "spatial-r1",
+            "documentType": "request",
+            "requestId": 1,
+            "sessionEpoch": 1,
+            "queryId": "q1",
+            "spaceId": "space",
+            "spaceEpoch": 1,
+            "queryPolicyId": "safe",
+            "kind": "raycast",
+            "deadlineMs": 1000,
+            "consistency": "samePhysicsSample",
+            "segment": {
+              "from": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "to": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+              }
+            },
+            "layerMask": 1
+          }
+        ]
+      },
+      "schemaReject": true
+    }
+  ]
+}
