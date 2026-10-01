@@ -76,3 +76,11 @@ Every comparison has independent artifacts. Approval uses unique temporary files
 and atomic replacement so concurrent readers see complete documents. Concurrent
 approval of the same test/variant is last-writer-wins; use distinct variants for
 different expected states. No artifacts or packages are automatically published.
+
+For an explicitly invoked comparison, set `Trace`, `TraceStepId`, and the already
+authorized `TraceProfile` to attach the normalized result to that step. Trace does
+not run comparisons or approve baselines. The attachment omits absolute paths and
+uses the same masking rules before Trace redaction. Keep separate baseline variants
+for profiles/builds. Raw Trace UI/World observations retain geometry and frame data
+even when the comparison excludes them. Trace capture failure does not change the
+comparison result or `ExpectSnapshot` exception.

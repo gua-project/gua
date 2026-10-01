@@ -165,10 +165,17 @@ public static partial class GuaTraceCapture
 
     /// <summary>Reads only diagnostics exposed by the supplied context. Screenshots are deliberately omitted.</summary>
     public static bool Diagnostics(GuaTraceSession trace, string stepId, IGuaContext context)
+        // This interface cannot select or confirm a Player profile. Use an authorized getter for Player.
+        => Diagnostics(trace, stepId, context.GetDiagnosticsJson, GuaObservationProfile.Debug);
+
+    /// <summary>The caller must authorize the getter's profile. Capture before releasing the context.
+    /// Screenshot pixels are omitted even when present in diagnostics.</summary>
+    public static bool Diagnostics(GuaTraceSession trace, string stepId, Func<string> getter,
+        GuaObservationProfile profile)
     {
-        try
+        return JsonAttachment(trace, stepId, "gua.diagnostics.v1", () =>
         {
-            using var doc = JsonDocument.Parse(context.GetDiagnosticsJson());
+            using var doc = JsonDocument.Parse(getter());
             // Screenshot pixels have a separate policy and cannot inherit semantic sensitive markers.
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
@@ -178,9 +185,7 @@ public static partial class GuaTraceCapture
                     if (property.Name != "screenshot") property.WriteTo(writer);
                 writer.WriteEndObject();
             }
-            using var safe = JsonDocument.Parse(buffer.ToArray());
-            return trace.Attach(stepId, "gua.diagnostics.v1", safe.RootElement);
-        }
-        catch { trace.Record(stepId, "capture.failure", GuaTraceJson.Element(new { channel = "diagnostics", reason = "unavailable" })); return false; }
+            return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+        }, profile);
     }
 }

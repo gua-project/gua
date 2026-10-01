@@ -256,3 +256,51 @@ and failed-to-valid screenshot switching across reused event IDs. Missing
 interruption fixtures are rejected before any browser connection. Evidence is under
 ignored `artifacts/trace-viewer-qa-review`. The earlier audit passes remain the bounded
 independent audit gate; automated review fixes receive focused tests and review replies.
+
+## #128 T-06 実API統合（2026-10-01）
+
+Windows x64、MSVC 19.51.36260、.NET 10.0.401、Bun 1.4.0、Chrome 154.0.8037.59。
+nativeはこのisolated worktreeの `build/msvc` で新規ビルドした。
+
+| 検証 | 結果 |
+| --- | --- |
+| native C/C++ 全target | 13/13 |
+| Visual/Recording/Trace全suite | 117/117、skip 0（新規実API統合11件を含む） |
+| Snapshot全suite | 32/32、skip 0 |
+| Selector/remote/Observe/lifecycle全suite | 360/360、skip 0（HTTP listener権限、NUnit worker 1） |
+| Workspace TypeScript check | 全て成功 |
+| 共通Viewer focused regression | 26/26、98 assertions |
+| Gua.Testing / Snapshots / Recording netstandard2.1 | Release build、warning/error 0 |
+| 実.NET fixtureの静的reportをChromeで確認 | success/failure/interruption、4 reports、外部通信/例外 0 |
+
+統合fixtureは実 `GuaContext`、`GuaSemanticLinter.Analyze`、明示baseline更新後の
+`CompareSnapshot`、実 `GuaRecorder.ClickAsync`、公開diagnostics/version、独立Observe購読を使う。
+関連Stepから全添付を読めること、秘密markerのredaction、pending/logsの実内容、
+中間Changeとbounds位置変化、比較の既定geometry/frame除外との分離、baseline byte不変を確認した。
+Recent/StreamingとAlways/OnFailureで成功の破棄・失敗/中断の保持を確認する。
+12並列Traceの独立artifactとDispose時のInterrupted、profile不一致時のgetter未実行、
+Player lintのprivate非露出、sensitive Recordingの安全なsecretKey/request参照を検証した。
+既存diagnostics sessionをcontext解放前に接続し、例外本文や既存ファイルをimportしない。
+getterのIOExceptionとreport出力のfilesystem故障は実際に発火させ、元例外identity/stackを維持した。
+truth=true、caller結果Failed/Interrupted、正常host完了、cleanup Passedを別に表示する。
+
+default並列Selectorの既存30ms deadline試験は失敗した（1秒完了期限）。
+restricted sandboxでは別に18 HTTP listener起動失敗があった。
+同じbranch/nativeでlistener権限とworker 1の全360件が成功した。
+既知のmain並列deadline回帰と区別し、assertion変更やskipで成功にしていない。
+remote CIはPRの最終headで別に確認する。
+
+再現: Viewerを `bun scripts/build-trace-viewer.ts` でbuildし、
+`GUA_NATIVE_DIR=build/msvc/native/gua-core/Release` と
+`GUA_TRACE_INTEGRATION_EVIDENCE=<absolute artifacts/integration-browser>` を指定して
+`dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj -c Release`。
+専用profileのChromeをheadless/CDP port 9228で起動し、
+`bun scripts/verify-trace-integration-browser.ts artifacts/integration-browser 9228` を実行する。
+生成report/screenshot/browser-evidence.jsonはignored artifactで、手書きJSON fixtureを
+実機能接続の証拠にしていない。Browserは悪意あるHTML/URL添付を実行/fetchせず、
+成功/失敗/中断の主結果、比較matchedとbaselineUpdated=false、各添付とcleanupを検証した。
+
+既存Trace/Observe/owner/privacy/Screenshot/retention故障試験も上記全suiteに含む。
+Screenshotのpixel保護、認可済みgetter、取得時点の相関、baselineのprofile/build variantは
+呼出側の責務。実ゲームE2EやPlaytest P-16、未公開の内部変化、失われた履歴の復元は
+このGua-only統合fixtureの証拠に含めない。親#109の製品E2Eを完了扱いにしない。

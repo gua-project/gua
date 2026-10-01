@@ -14,6 +14,11 @@ public sealed class GuaDiagnosticOptions
     public IReadOnlyDictionary<string, Func<string>> TextArtifacts { get; init; } = new Dictionary<string, Func<string>>();
     public Func<byte[]>? ScreenshotCapture { get; init; }
     public Action<GuaDiagnosticFile>? AttachmentSink { get; init; }
+    /// <summary>Optional Trace copy, captured before teardown. Existing diagnostics files retain their own policy.</summary>
+    public GuaTraceSession? Trace { get; init; }
+    public string? TraceStepId { get; init; }
+    /// <summary>Profile already authorized on this context; does not elevate host access.</summary>
+    public GuaObservationProfile TraceProfile { get; init; } = GuaObservationProfile.Debug;
 }
 
 public sealed record GuaDiagnosticFile(string Path, string MediaType);
@@ -109,6 +114,13 @@ public static class GuaDiagnosticWriter
     {
         Guard.NotNull(context, nameof(context));
         Guard.NotNull(options, nameof(options));
+        if (options.Trace is { } trace)
+        {
+            GuaTraceCapture.Diagnostics(trace, options.TraceStepId ?? "", context.GetDiagnosticsJson, options.TraceProfile);
+            GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
+                JsonSerializer.Serialize(new { version = context.GetVersion(), environment = options.Environment,
+                    callerMetadata = options.CallerMetadata }, JsonOptions), options.TraceProfile);
+        }
         var errors = new List<string>();
         string diagnosticsJson;
         try

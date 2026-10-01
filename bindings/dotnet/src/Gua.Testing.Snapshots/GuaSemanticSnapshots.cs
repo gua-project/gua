@@ -24,6 +24,11 @@ public sealed class SemanticSnapshotOptions
     public bool IncludeGeometry { get; init; }
     public Func<string>? WorldTreeProvider { get; init; }
     public IReadOnlyList<SemanticSnapshotRule> Rules { get; init; } = Array.Empty<SemanticSnapshotRule>();
+    /// <summary>Optional capture of this explicit comparison, using only normalized in-memory data.</summary>
+    public GuaTraceSession? Trace { get; init; }
+    public string? TraceStepId { get; init; }
+    /// <summary>Caller-authorized profile of the supplied context/World getter. Does not project or elevate data.</summary>
+    public GuaObservationProfile TraceProfile { get; init; } = GuaObservationProfile.Debug;
 }
 
 public enum SemanticDifferenceKind { Added, Removed, Changed, Order }
@@ -105,6 +110,14 @@ public static class GuaSemanticSnapshots
         File.WriteAllText(System.IO.Path.Combine(artifact, "diff.json"), JsonSerializer.Serialize(differences, JsonOptions));
         // Do not retain raw runtime metadata or rule selectors that might contain sensitive values.
         File.WriteAllText(System.IO.Path.Combine(artifact, "comparison.json"), JsonSerializer.Serialize(result, JsonOptions));
+        if (options.Trace is { } trace)
+            GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.semantic-comparison.v1", () =>
+                // Do not import files or include machine paths. Snapshot masking rules have already run.
+                JsonSerializer.Serialize(new { result.Matched, result.BaselineUpdated, result.Reason, result.RunId,
+                    differences = result.Differences.Select(d => new { d.Kind, d.Path,
+                        expected = d.ExpectedJson is null ? null : JsonNode.Parse(d.ExpectedJson),
+                        actual = d.ActualJson is null ? null : JsonNode.Parse(d.ActualJson) }),
+                    actual, expected }, JsonOptions), options.TraceProfile);
         return result;
     }
 
