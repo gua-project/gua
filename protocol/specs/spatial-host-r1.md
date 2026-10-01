@@ -94,6 +94,9 @@ work remains completable and later authorized items continue in order, skipping
 revoked never-dispatched items. A selectively revoked consumed item keeps the
 lease occupied until its correlated completion is discarded or the boundary
 ends; a fully terminated batch rejects late completions as stale.
+End preserves any specific stop reason already recorded, then terminates all
+remaining items as `boundary_ended` and releases in-flight ownership. A partly
+stopped batch cannot be leased again on a later boundary.
 Redacting prior evidence releases its retained-byte charge, allowing later
 authorized completions to use the reclaimed output budget.
 

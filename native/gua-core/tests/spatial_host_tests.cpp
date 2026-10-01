@@ -195,6 +195,16 @@ int main() {
         auto second=x.take(l); assert(second.at("requestId").text=="2"); assert(x.complete(l,second)==0);
         auto r=x.poll(); assert(r.at("items").items[0].at("reason").text=="deadline_exceeded"&&r.at("items").items[0].at("state").text==(dispatched?"failed":"notExecuted")); assert(r.at("items").items[1].at("state").text=="completed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);
     }
+    for(bool deadline:{false,true}) {
+        Fixture x; x.dual_policies(); if(deadline) x.batch.fields.at("queries").items[0].fields["deadlineMs"]=parse("5"); assert(x.enqueue()==0);
+        auto queued=x.batch; queued.fields["batchId"]=parse("2");
+        for(size_t i=0;i<2;++i) { auto& q=queued.fields.at("queries").items[i]; q.fields["requestId"]=parse(std::to_string(i+3)); q.fields["queryId"]=parse(gua_value_detail::quote("next"+std::to_string(i))); q.fields["queryPolicyId"]=parse("\"other\""); q.fields["deadlineMs"]=parse("1000"); }
+        assert(x.enqueue(queued)==0); auto l=x.begin(); auto first=x.take(l);
+        if(deadline) std::this_thread::sleep_for(std::chrono::milliseconds(15)); else { auto grants=x.owner; grants.fields["policies"].items={parse("\"other\"")}; x.set_owner(grants); }
+        assert(gua_spatial_host_end(x.h,l,&x.e)==0); assert(x.complete(l,first)==GUA_SPATIAL_STALE);
+        auto r=x.poll(); assert(r.at("items").items[0].at("state").text=="failed"&&r.at("items").items[0].at("reason").text==(deadline?"deadline_exceeded":"not_authorized")); assert(r.at("items").items[1].at("state").text=="notExecuted"&&r.at("items").items[1].at("reason").text=="boundary_ended");
+        x.boundary.fields["physicsSampleId"]=parse("\"next-sample\""); auto next=x.begin(); auto q=x.take(next); assert(q.at("queryId").text=="next0"); assert(x.complete(next,q)==0); assert(gua_spatial_host_end(x.h,next,&x.e)==0);
+    }
     {
         Fixture x; x.batch.fields.at("queries").items[1].fields["deadlineMs"]=parse("5"); auto third=x.batch.at("queries").items[0]; third.fields["queryId"]=parse("\"third\""); third.fields["requestId"]=parse("3"); x.batch.fields.at("queries").items.push_back(third);
         assert(x.enqueue()==0); auto l=x.begin(); auto first=x.take(l); assert(x.complete(l,first)==0); std::this_thread::sleep_for(std::chrono::milliseconds(15)); auto last=x.take(l); assert(last.at("requestId").text=="3"); assert(x.complete(l,last)==0); auto r=x.poll(); assert(r.at("items").items[1].at("reason").text=="deadline_exceeded"&&r.at("items").items[2].at("state").text=="completed"); assert(gua_spatial_host_end(x.h,l,&x.e)==0);

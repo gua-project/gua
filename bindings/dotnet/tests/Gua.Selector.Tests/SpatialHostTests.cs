@@ -90,6 +90,21 @@ public sealed class SpatialHostTests
     }
     [TestCase(false)]
     [TestCase(true)]
+    public void EndAfterSelectiveStopTerminatesRemainderAndDoesNotStarveQueue(bool deadline)
+    {
+        using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var original=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);
+        var firstBatch=original.ReadBatch(); firstBatch.Queries[0].DeadlineMs=50;
+        if(!deadline) firstBatch.Queries[0].Segment=firstBatch.Queries[0].Segment! with { To=new GuaSpatialVector(10,0,0) };
+        using var firstInput=GuaSpatialDocument.FromBatch(firstBatch); var secondBatch=original.ReadBatch(); secondBatch.BatchId=2;
+        foreach(var q in secondBatch.Queries) { q.RequestId+=10; q.QueryId+="next"; } using var secondInput=GuaSpatialDocument.FromBatch(secondBatch);
+        var p=h.Register(registration); var o=h.OpenOwner(grants); h.Enqueue(o,firstInput); h.Enqueue(o,secondInput); var l=h.Begin(p,boundary)!.Value; using var first=h.Take(l);
+        if(deadline) Thread.Sleep(100); else { var changed=JsonNode.Parse(grants.ToJson())!; changed["region"]!["max"]!["x"]=9; using var narrowed=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Owner,changed.ToJsonString()); h.SetOwner(o,narrowed); }
+        h.End(l); using var ended=h.Poll(o,1)!; var items=ended.ReadBatchResult().Items;
+        Assert.That(items[0].State,Is.EqualTo("failed")); Assert.That(items[0].Reason,Is.EqualTo(deadline?"deadline_exceeded":"not_authorized")); Assert.That(items[1].Reason,Is.EqualTo("boundary_ended"));
+        var next=h.Begin(p,boundary)!.Value; using var qNext=h.Take(next)!; Assert.That(qNext.ReadRequest().QueryId,Does.EndWith("next")); h.End(next); using var output=h.Poll(o,2); Assert.That(output,Is.Not.Null);
+    }
+    [TestCase(false)]
+    [TestCase(true)]
     public void ExpiredQueryDoesNotExpireLaterLiveQuery(bool dispatched)
     {
         using var h=Host(); using var registration=Doc(0); using var grants=Doc(1); using var original=Doc(2); using var boundary=Doc(3); using var execution=Doc(4);

@@ -370,7 +370,10 @@ int gua_spatial_host_end(gua_spatial_host_t* h,uint64_t lease,gua_spatial_error_
         for(auto it=h->batches.begin();it!=h->batches.end();) {
             auto& b=it->second;
             if(b.lease!=lease) { ++it; continue; }
-            if(!b.done) { if(auto reason=stopped(*h,b)) finish(*h,b,reason); else finish(*h,b,"boundary_ended"); }
+            if(!b.done) if(auto reason=stopped(*h,b)) finish(*h,b,reason);
+            // Every boundary end is terminal even when the specific stop above
+            // affected only one query. Never re-lease a partially stopped batch.
+            terminate(b,"boundary_ended");
             b.lease=0;
             if(b.owner_closed) it=h->batches.erase(it); else ++it;
         }
