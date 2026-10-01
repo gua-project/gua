@@ -1,0 +1,10 @@
+{
+  "cases": [
+    { "name": "success-with-cleanup-failure", "truth": "false", "primary": "passed", "cleanup": "failed" },
+    { "name": "failure-condition-true", "truth": "true", "primary": "failed", "cleanup": "passed" },
+    { "name": "unknown-evaluation", "truth": "unknown", "primary": "unknown", "cleanup": "failed" },
+    { "name": "interrupted-runner", "truth": "unknown", "primary": "interrupted", "cleanup": "passed" }
+  ],
+  "annotation": "external-playtest.future.goal",
+  "schema": "external-playtest.future.decision.v1"
+}

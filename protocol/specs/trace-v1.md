@@ -131,6 +131,41 @@ NuGetの`trace/`にはTraceと参照先Observe transport・Observe・enum catalo
 既存Observe APIの引数・binary signatureは保持する。Reader/Viewerはgap/stale/failed/partial/outsideRetentionを
 記録品質として示し、Viewerの前後比較は同一channel/source/epochの読取に限る。
 
+## T-04 外部Runnerの受け入れ（#126 / AT-TRACE-001）
+
+公開APIを重複して追加せず、既存の`GuaTraceSession`を使用する。
+`examples/dotnet-trace`はGua.Testingだけを参照するconsole writerで、test framework・
+Playtest・実行中のゲームを必要としない。共通ValueのためGua.Coreのnativeライブラリは必要。
+`-p:TracePackageVersion=<version>`でProjectReferenceをNuGetのPackageReferenceへ切り替え、
+配布されたwriter/reader/Viewerを使う。同じサンプルをCIの4 RIDで実行する。
+
+| 外部Runnerの責務 | 公開API / 保存形式 | 受け入れ証拠 |
+| --- | --- | --- |
+| Stepとmark | BeginStep/EndStep/Mark | console writer、local/実WebSocket fixture |
+| 既存要求への相関 | Correlate/RecordRequest/Watch/UseStep | native enqueue/consume/completionを1 Action Stepへ集約、同一キーのBeginStepも同じID |
+| 評価と公開観測参照 | Evaluate/Observe、GuaTraceObservations | truthとcallerOutcomeを別保存。failure-condition=trueと主結果failedは両立 |
+| 未知注釈とschema添付 | Annotate/Attach | external-playtest.future.*を汎用JSONとして保持。未知usageは省略 |
+| 主結果とcleanup | SetPrimaryOutcome、独立Lifecycle Step | Passed+cleanup Failed、Failed+cleanup Passed、Unknown/Interruptedを保持 |
+| 記録品質と保存失敗 | Status/FlushAsync/CompleteAsync/DisposeAsync | filesystem故障時にfalseとwrite-failed、元例外のidentity/stackと成功戻り値を維持 |
+
+外部Runnerの通常/異常入力は`protocol/fixtures/trace-external-runner.json`で共有し、
+`TraceExternalRunnerTests`でlocal/実WebSocket × Recent/Streamingを検証する。
+このfixtureはRunner側の判断でありTraceの独自採点ではない。未知namespace/schemaは
+理解して実行しない。公開AI要求・観測ID・提案・採否・短い理由は同じ汎用添付で表せる。
+競合理由も`primaryCause`/`additionalCauses`等の公開JSONとして渡し、優先順位はRunnerが決める。
+
+主結果を固定してからcleanupを記録し、必要な観測/遅い結果を収集してからfinalizeする。
+`CompleteAsync(cleanupOutcome)`を呼んでも既に固定した主結果は変わらない。
+元例外を維持するには`catch { ...; throw; }`または`finally`で記録する。
+保存失敗のfalseを主結果のFailedへ変換しない。Statusの記録issueを別に報告する。
+明示JSONも秘密objectにmask/sensitiveを指定し、既知秘密をSecretsへ登録する。
+非公開の値・例外本文を無印で渡して自動検出を期待しない。redaction後の内容が
+保持・hash・添付に入り、未知利用量を0で埋めない。
+
+schemaVersion 1、既存binary signature、GuaからPlaytestを参照しない依存方向を維持する。
+net10.0/netstandard2.1の公開writerは同一契約で、native-backed Valueとschema validatorは
+必要なGua依存。NUnit/xUnit/MSTestやRunner固有型は必須依存にしない。
+
 ## 保存と上限（OPEN-10）
 
 `GuaTraceOptions` の公開既定値:
@@ -265,7 +300,7 @@ unconfirmed として扱い、completion が返した epoch でのみ確定相�
 | #123 T-01 | schema、writer/reader、有限上限、4 保存組合せ、部分末尾、redaction、容量/中断の故障 fixture | 強制終了時の未flush/メモリのみの保存は保証対象外 |
 | #124 T-02 | Selector/解決ID、明示/自動Step、native UI/Input/cleanup lifecycle、遅い結果、非破壊履歴 | native履歴未提供hostのphaseは未提供と表示。ゲーム画面でのGodot/Unity E2Eは別途 |
 | #125 T-03 | Snapshot/観測の分離、Observeの実native/実WebSocket購読、Value/カタログ、中間Change、欠損、独立UI/World読取 | ゲーム内部の未公開変化、失われた履歴の復元は保証対象外。各Runnerが取得契機を明示する |
-| #126 T-04 | 外部 Runner API、共通 Value、注釈/添付、評価/主結果分離、サンプル | 上記 native/Observe 統合後の横断受け入れ |
+| #126 T-04 | 外部 Runner API、共通 Value、未知注釈/添付、評価/主結果/cleanup分離、native/Observe横断fixture、framework-free配布consumer | 任意の外部Runnerの採点・非公開情報の自動判別・ゲーム画面のE2Eは保証対象外 |
 | #127 T-05 | 共通 React、静的 HTML、timeline/状態/JSON/区間差分、配布 | Screenshot pixel policy と bounds overlay、全端点の可視化 |
 | #128 T-06 | diagnostics 添付、既存形式の汎用添付 | #106/#108 の Lint/comparison 実接続、全機能統合試験 |
 

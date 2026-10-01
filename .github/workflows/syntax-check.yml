@@ -300,6 +300,17 @@ jobs:
           dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
           dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
 
+      - name: Set up Bun for the packaged Trace Viewer
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Pack framework-independent Trace writer
+        run: |
+          bun install --frozen-lockfile
+          bun run --filter @gua/inspector build:trace
+          dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci
+
       - name: Verify native package contents
         shell: pwsh
         run: scripts/verify-dotnet-native-packages.ps1 -PackageDirectory artifacts/packages -Version 0.0.0-ci
@@ -347,6 +358,15 @@ jobs:
 
       - name: Run package-only smoke
         run: dotnet run --project bindings/dotnet/tests/Gua.PackageSmoke/Gua.PackageSmoke.csproj --configuration Release --no-restore -p:GuaPackageVersion=0.0.0-ci
+        env:
+          GUA_NATIVE_DIR: ""
+          GUA_RUNTIME_NATIVE_DIR: ""
+
+      - name: Restore package-only external Trace runner
+        run: dotnet restore examples/dotnet-trace/Gua.TraceExample.csproj -p:TracePackageVersion=0.0.0-ci --source "${{ github.workspace }}/artifacts/packages" --source https://api.nuget.org/v3/index.json
+
+      - name: Verify framework-free external Trace runner
+        run: dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj --configuration Release --no-restore -p:TracePackageVersion=0.0.0-ci -- artifacts/external-runner
         env:
           GUA_NATIVE_DIR: ""
           GUA_RUNTIME_NATIVE_DIR: ""
