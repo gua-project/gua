@@ -19,10 +19,25 @@ const external: string[] = [], exceptions: string[] = [];
 monitor.addEventListener("message", e => {
   const m = JSON.parse(String(e.data));
   if (m.method === "Network.requestWillBeSent" && /^(https?:|file:)/.test(m.params.request.url) && !m.params.request.url.startsWith(pathToFileURL(root + "/").href)) external.push(m.params.request.url);
-  if (m.method === "Runtime.exceptionThrown") exceptions.push(m.params.exceptionDetails.text);
+  if (m.method === "Runtime.exceptionThrown") exceptions.push(m.params.exceptionDetails.text + " " + (m.params.exceptionDetails.exception?.description ?? ""));
   if (m.method === "Page.javascriptDialogOpening") exceptions.push("unexpected dialog");
 });
-for (const [i, method] of ["Network.enable", "Runtime.enable", "Page.enable"].entries()) monitor.send(JSON.stringify({ id: i + 1, method }));
+async function enableMonitoring(method: string, id: number) {
+  await new Promise<void>((done, fail) => {
+    const timer = setTimeout(() => { monitor.removeEventListener("message", reply); fail(new Error("Monitor activation timed out: " + method)); }, 10000);
+    function reply(e: MessageEvent) {
+      const m = JSON.parse(String(e.data));
+      if (m.id !== id) return;
+      clearTimeout(timer); monitor.removeEventListener("message", reply);
+      if (m.error) fail(new Error("Monitor activation failed: " + method + " " + m.error.message));
+      else done();
+    }
+    monitor.addEventListener("message", reply);
+    monitor.send(JSON.stringify({ id, method }));
+  });
+}
+// Responses on this monitoring connection must arrive before navigation on the command connection.
+for (const [i, method] of ["Network.enable", "Runtime.enable", "Page.enable"].entries()) await enableMonitoring(method, i + 1);
 async function evaluate(expression: string) {
   const result = await client.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }) as { result?: { value?: any }; exceptionDetails?: unknown };
   if (result.exceptionDetails) throw new Error("Browser evaluation failed: " + JSON.stringify(result.exceptionDetails));
@@ -36,6 +51,17 @@ async function wait(expression: string) {
 }
 const evidence: object[] = [];
 try {
+  // Prove the monitor sees startup-time faults before using an empty array as safety evidence.
+  const probeUrl = endpoint + "/monitor-self-test";
+  const probeHtml = `<script>const img=new Image();img.src=${JSON.stringify(probeUrl)};throw new Error('MONITOR-FIXTURE-FAILURE');</script>`;
+  await client.send("Page.navigate", { url: "data:text/html," + encodeURIComponent(probeHtml) });
+  const probeDeadline = performance.now() + 10000;
+  while (performance.now() < probeDeadline &&
+      !(external.includes(probeUrl) && exceptions.some(e => e.includes("MONITOR-FIXTURE-FAILURE")))) await Bun.sleep(50);
+  require(external.includes(probeUrl), "Monitor did not observe the deliberate startup request");
+  require(exceptions.some(e => e.includes("MONITOR-FIXTURE-FAILURE")), "Monitor did not observe the deliberate startup exception");
+  const monitorProbe = { startupRequestObserved: true, startupExceptionObserved: true };
+  external.length = 0; exceptions.length = 0;
   await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
   for (const file of files) {
     const outcome = file.split("-")[0]!;
@@ -65,6 +91,6 @@ try {
   require(external.length === 0, "external reads: " + external.join(","));
   require(exceptions.length === 0, "browser exceptions: " + exceptions.join(","));
   const browser = await (await fetch(endpoint + "/json/version")).json();
-  await writeFile(resolve(root, "browser-evidence.json"), JSON.stringify({ browser: browser.Browser, evidence, external, exceptions }, null, 2));
+  await writeFile(resolve(root, "browser-evidence.json"), JSON.stringify({ browser: browser.Browser, monitorProbe, evidence, external, exceptions }, null, 2));
   console.log(JSON.stringify({ passed: evidence.length, external, exceptions }));
 } finally { monitor.close(); client.close(); await fetch(endpoint + "/json/close/" + target.id); }

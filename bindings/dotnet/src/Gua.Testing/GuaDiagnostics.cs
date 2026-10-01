@@ -114,13 +114,6 @@ public static class GuaDiagnosticWriter
     {
         Guard.NotNull(context, nameof(context));
         Guard.NotNull(options, nameof(options));
-        if (options.Trace is { } trace)
-        {
-            GuaTraceCapture.Diagnostics(trace, options.TraceStepId ?? "", context.GetDiagnosticsJson, options.TraceProfile);
-            GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
-                JsonSerializer.Serialize(new { version = context.GetVersion(), environment = options.Environment,
-                    callerMetadata = options.CallerMetadata }, JsonOptions), options.TraceProfile);
-        }
         var errors = new List<string>();
         string diagnosticsJson;
         try
@@ -129,7 +122,19 @@ public static class GuaDiagnosticWriter
         }
         catch (Exception error)
         {
+            if (options.Trace is { } failedTrace)
+                GuaTraceCapture.JsonAttachment(failedTrace, options.TraceStepId ?? "", "gua.diagnostics.v1",
+                    () => throw new IOException(), options.TraceProfile);
             return new GuaDiagnosticCapture(null, $"{error.GetType().Name}: {error.Message}");
+        }
+
+        if (options.Trace is { } trace)
+        {
+            // Both outputs describe this one read, not two potentially different live snapshots.
+            GuaTraceCapture.Diagnostics(trace, options.TraceStepId ?? "", () => diagnosticsJson, options.TraceProfile);
+            GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
+                JsonSerializer.Serialize(new { version = context.GetVersion(), environment = options.Environment,
+                    callerMetadata = options.CallerMetadata }, JsonOptions), options.TraceProfile);
         }
 
         try

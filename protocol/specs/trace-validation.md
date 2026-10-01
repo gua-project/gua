@@ -304,3 +304,16 @@ remote CIはPRの最終headで別に確認する。
 Screenshotのpixel保護、認可済みgetter、取得時点の相関、baselineのprofile/build variantは
 呼出側の責務。実ゲームE2EやPlaytest P-16、未公開の内部変化、失われた履歴の復元は
 このGua-only統合fixtureの証拠に含めない。親#109の製品E2Eを完了扱いにしない。
+
+### #128 automated review follow-up
+
+既存diagnostics sessionのTrace接続はlive diagnosticsを一度だけ読む。
+同じpayloadからTraceと既存ファイルを作り、二度目の読取による状態差や追加故障を避ける。
+regression fixtureで二度目のIOExceptionを実際に発火させ、最初のcaptureは一度のreadで成功、
+両出力のUI内容は同一、二度目のcaptureはfailure品質と元例外identityを維持すると確認した。
+
+Browser verifierはmonitor接続上でNetwork/Runtime/Page各domainの成功応答を待ってから
+別command接続からnavigateする。startup時のlocalhostへの無害な404画像要求と
+`MONITOR-FIXTURE-FAILURE`例外を実際に発火させ、両方をmonitorが受信したことを検証する。
+probeと実reportの結果を分けて保存し、実report4件の外部要求/例外は0だった。
+修正後の全Visual117/117、独立最終auditの統合11/11（skip0）に成功し、actionable findingsなし。

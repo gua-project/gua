@@ -166,13 +166,24 @@ public sealed class TraceIntegrationTests
         var primary = new ApplicationException("PRIVATE-EXCEPTION");
         var options = new GuaDiagnosticOptions { TestName = "fixture", OutputDirectory = Path.Combine(_root, "legacy"),
             Trace = trace, TraceStepId = step, Environment = new Dictionary<string, string> { ["fixture"] = "SECRET-MARKER" } };
-        var result = new GuaDiagnosticsSession(context, options).Capture(primary);
+        var singleRead = new SingleReadDiagnostics(context);
+        var result = new GuaDiagnosticsSession(singleRead, options).Capture(primary);
+        Assert.That(singleRead.Reads, Is.EqualTo(1), "A second live diagnostics read fails in this fixture.");
         Assert.That(result.PrimaryException, Is.SameAs(primary)); Assert.That(result.Succeeded, Is.True);
+        var failedCapture = new GuaDiagnosticsSession(singleRead, options).Capture(primary);
+        Assert.That(singleRead.Reads, Is.EqualTo(2));
+        Assert.That(failedCapture.Succeeded, Is.False, "The second-read IOException must actually fire.");
+        Assert.That(failedCapture.PrimaryException, Is.SameAs(primary));
         context.Dispose();
         await trace.CompleteAsync(GuaTraceOutcome.Failed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Events.Where(e => e.Type == "attachment").Select(e => e.Data.GetProperty("schema").GetString()),
             Is.EquivalentTo(new[] { "gua.diagnostics.v1", "gua.environment.v1" }));
+        var diagnosticCopy = read.Blobs[read.Events.Single(e => e.Type == "attachment" && e.Data.GetProperty("schema").GetString() == "gua.diagnostics.v1").Data.GetProperty("blob").GetString()!];
+        Assert.That(System.Text.Json.Nodes.JsonNode.DeepEquals(
+            System.Text.Json.Nodes.JsonNode.Parse(diagnosticCopy.GetProperty("uiTree").GetRawText()),
+            System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath!, "ui-tree.json")))), Is.True);
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-failed"));
         Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())), Does.Not.Contain("SECRET-MARKER").And.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain(result.ArtifactPath!));
     }
 
@@ -215,5 +226,22 @@ public sealed class TraceIntegrationTests
         Assert.That(reference.GetProperty("steps")[0].GetProperty("secretKey").GetString(), Is.EqualTo("login-password"));
         Assert.That(reference.GetProperty("steps")[0].GetProperty("requestId").GetString(), Is.EqualTo(ulong.MaxValue.ToString()));
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-failed"));
+    }
+
+    private sealed class SingleReadDiagnostics(GuaContext context) : IGuaContext
+    {
+        public int Reads;
+        public string GetDiagnosticsJson() => ++Reads == 1 ? context.GetDiagnosticsJson() : throw new IOException("second live read fired");
+        public GuaVersion GetVersion() => context.GetVersion();
+        public string GetUiTreeJson() => context.GetUiTreeJson();
+        public GuaNodeState GetNodeState(string id) => context.GetNodeState(id);
+        public string FindNodeById(string id) => context.FindNodeById(id);
+        public string FindNodeByRole(string role, string? name = null) => context.FindNodeByRole(role, name);
+        public string FindNodeByText(string text) => context.FindNodeByText(text);
+        public bool EnqueueClick(string id) => context.EnqueueClick(id);
+        public GuaActionError EnqueueAction(GuaActionRequest request, out ulong requestId) => context.EnqueueAction(request, out requestId);
+        public bool TryPollActionEvent(out GuaActionEvent e) => context.TryPollActionEvent(out e);
+        public bool TryPollActionEvent(ulong requestId, out GuaActionEvent e) => context.TryPollActionEvent(requestId, out e);
+        public bool TryPollEvent(out GuaEvent e) => context.TryPollEvent(out e);
     }
 }
