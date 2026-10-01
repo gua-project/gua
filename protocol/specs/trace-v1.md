@@ -341,6 +341,8 @@ Trace Eventへ残し、Recordingの成功stepを捏造しない。
 overloadを使う。ラベルだけでDebug payloadをPlayerとして保存しない。
 logs/pendingRequests/environment等を保ち、Screenshotは常に取り除く。
 version、呼出側environment/callerMetadataは `gua.environment.v1` の別添付にする。
+このlegacy自動コピーもDebug限定。Playerへ既存environment/callerMetadataをラベルだけで移さず、
+明示的に認可済みdataを渡す`GuaTraceCapture.Environment` APIを使う。
 既存diagnosticsのディスクファイルや例外本文をTraceへimportせず、それらの既存policyを
 再マスクする機能ではない。取得/保存/表示故障はTrace品質として扱い、元例外を置き換えない。
 live読取後のJSON必須property欠損、file生成、supplement/sink故障もdiagnostics-failed品質と

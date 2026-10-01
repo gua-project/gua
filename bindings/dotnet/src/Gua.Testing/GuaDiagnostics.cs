@@ -141,8 +141,10 @@ public static class GuaDiagnosticWriter
                 options.TraceProfile == GuaObservationProfile.Debug ? diagnosticsJson : throw new NotSupportedException(),
                 GuaObservationProfile.Debug);
             GuaTraceCapture.JsonAttachment(trace, options.TraceStepId ?? "", "gua.environment.v1", () =>
-                JsonSerializer.Serialize(new { version = getVersion(), environment = options.Environment,
-                    callerMetadata = options.CallerMetadata }, JsonOptions), options.TraceProfile);
+                options.TraceProfile == GuaObservationProfile.Debug
+                    ? JsonSerializer.Serialize(new { version = getVersion(), environment = options.Environment,
+                        callerMetadata = options.CallerMetadata }, JsonOptions) : throw new NotSupportedException(),
+                GuaObservationProfile.Debug);
         }
 
         try

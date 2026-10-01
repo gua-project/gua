@@ -122,6 +122,8 @@ public sealed class TraceIntegrationTests
         Assert.That(reads, Is.Zero);
         Assert.That(GuaTraceCapture.Lint(trace, step, GuaSemanticLinter.Analyze(context)), Is.False);
         Assert.That(GuaTraceCapture.Lint(trace, step, GuaSemanticLinter.Analyze(context, new(GuaObservationProfile.Player))), Is.True);
+        Assert.That(GuaTraceCapture.Environment(trace, step, context.GetVersion(),
+            new Dictionary<string, string> { ["caller-approved"] = "public" }, GuaObservationProfile.Player), Is.True);
         await trace.CompleteAsync(GuaTraceOutcome.Passed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("passed"));
@@ -176,15 +178,18 @@ public sealed class TraceIntegrationTests
         var diagnostics = new GuaDiagnosticsSession(context, new()
         {
             TestName = "private", OutputDirectory = Path.Combine(_root, "legacy"),
-            Trace = trace, TraceStepId = step, TraceProfile = claimedProfile
+            Trace = trace, TraceStepId = step, TraceProfile = claimedProfile,
+            Environment = new Dictionary<string, string> { ["config"] = "PRIVATE-CONFIG" },
+            CallerMetadata = new Dictionary<string, string> { ["source"] = "PRIVATE-METADATA" }
         }).Capture(primary);
         Assert.That(diagnostics.Succeeded, Is.True); Assert.That(diagnostics.PrimaryException, Is.SameAs(primary));
         await trace.CompleteAsync(GuaTraceOutcome.Passed);
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Events.Where(e => e.Type == "attachment").Select(e => e.Data.GetProperty("schema").GetString()),
-            Does.Not.Contain("gua.semantic-comparison.v1").And.Not.Contain("gua.diagnostics.v1"));
+            Is.Empty, "Every legacy automatic payload, including environment/version/metadata, is Debug-only.");
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("profile-mismatch"));
-        Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())), Does.Not.Contain("PRIVATE-MARKER").And.Not.Contain("PRIVATE-EXCEPTION"));
+        Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())),
+            Does.Not.Contain("PRIVATE-MARKER").And.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain("PRIVATE-CONFIG").And.Not.Contain("PRIVATE-METADATA"));
     }
 
     [TestCase("directory")]

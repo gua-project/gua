@@ -333,3 +333,6 @@ version取得もsessionごとのLazyでTrace環境添付とversion.jsonへ同じ
 diagnostics-failed eventはcaptureごとに1件だけ（direct Writerの品質記録も維持）と確認する。
 live diagnostics readの実IOExceptionも同じ集約に含め、adapter別に二重のcapture.failureを
 生成しない。追加caseを含む統合17件で全capture.failure数が各fault1件と確認する。
+legacy environment/version/callerMetadataの自動添付もDebug限定に統一した。
+Player fixtureへSecrets未登録のPRIVATE-CONFIG/PRIVATE-METADATAを渡し、Debug/Playerの両labelで
+すべての自動添付が拒否されることを確認する。明示Environment APIは認可済みdata専用のまま。
