@@ -331,3 +331,5 @@ version取得もsessionごとのLazyでTrace環境添付とversion.jsonへ同じ
 二度目でIOExceptionを起こす実context wrapperでcaptureはread1回だけで成功、両出力が同一、
 明示的な二度目readでは故障が実際に発火すると確認する。session内のwriter/supplement/sink故障の
 diagnostics-failed eventはcaptureごとに1件だけ（direct Writerの品質記録も維持）と確認する。
+live diagnostics readの実IOExceptionも同じ集約に含め、adapter別に二重のcapture.failureを
+生成しない。追加caseを含む統合17件で全capture.failure数が各fault1件と確認する。

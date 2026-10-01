@@ -130,9 +130,7 @@ public static class GuaDiagnosticWriter
         }
         catch (Exception error)
         {
-            if (options.Trace is { } failedTrace)
-                GuaTraceCapture.JsonAttachment(failedTrace, options.TraceStepId ?? "", "gua.diagnostics.v1",
-                    () => throw new IOException(), options.TraceProfile);
+            if (recordTraceFailure) RecordTraceFailure(options);
             return new GuaDiagnosticCapture(null, $"{error.GetType().Name}: {error.Message}");
         }
 

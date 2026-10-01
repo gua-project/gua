@@ -190,6 +190,7 @@ public sealed class TraceIntegrationTests
     [TestCase("directory")]
     [TestCase("missing-property")]
     [TestCase("supplement")]
+    [TestCase("live-read")]
     public async Task DownstreamDiagnosticsFaultsAreVisibleWithoutReplacingPrimary(string fault)
     {
         using var context = new GuaContext(); Publish(context, 0);
@@ -199,7 +200,8 @@ public sealed class TraceIntegrationTests
         var blocked = Path.Combine(_root, "blocked"); File.WriteAllText(blocked, "actual filesystem fault");
         var primary = new ApplicationException("PRIVATE-EXCEPTION");
         bool supplementFired = false;
-        var source = new SingleReadDiagnostics(context, fault == "missing-property" ? () => "{}" : null);
+        var source = new SingleReadDiagnostics(context, fault == "missing-property" ? () => "{}" :
+            fault == "live-read" ? () => throw new IOException("PRIVATE-FAULT") : null);
         var result = new GuaDiagnosticsSession(source, new()
         {
             TestName = "fault", OutputDirectory = fault == "directory" ? blocked : Path.Combine(_root, "legacy"),
@@ -217,6 +219,7 @@ public sealed class TraceIntegrationTests
         Assert.That(read.Manifest.Quality.Issues, Does.Contain("diagnostics-failed"));
         Assert.That(read.Events.Any(e => e.Type == "capture.failure" && e.Data.GetProperty("reason").GetString() == "diagnostics-failed"), Is.True);
         Assert.That(read.Events.Count(e => e.Type == "capture.failure" && e.Data.GetProperty("reason").GetString() == "diagnostics-failed"), Is.EqualTo(1));
+        Assert.That(read.Events.Count(e => e.Type == "capture.failure"), Is.EqualTo(1), "One fault must not consume two events through different adapters.");
         Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())) + string.Join("", read.Events.Select(e => e.Data.GetRawText())),
             Does.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain("PRIVATE-FAULT"));
     }
@@ -254,7 +257,7 @@ public sealed class TraceIntegrationTests
         Assert.That(System.Text.Json.Nodes.JsonNode.DeepEquals(
             System.Text.Json.Nodes.JsonNode.Parse(environmentCopy.GetProperty("version").GetRawText()),
             System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(result.ArtifactPath!, "version.json")))), Is.True);
-        Assert.That(read.Manifest.Quality.Issues, Does.Contain("attachment-failed"));
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("diagnostics-failed"));
         Assert.That(string.Join("", read.Blobs.Values.Select(b => b.GetRawText())), Does.Not.Contain("SECRET-MARKER").And.Not.Contain("PRIVATE-EXCEPTION").And.Not.Contain(result.ArtifactPath!));
     }
 
