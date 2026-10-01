@@ -102,6 +102,18 @@ async function installGodotWebPort(
 }
 
 describe("Godot Web same-page port", () => {
+  test("v2 discovery preserves structured capability-revocation errors", async () => {
+    let revoked = false;
+    const response = () => JSON.stringify(revoked
+      ? { code: "engine_unsupported", message: "Semantic input was revoked." }
+      : { schemaVersion: 2, actions: [] });
+    const port = await installGodotWebPort([], { getGameInputActionsV2: response, findGameInputActionsV2: response });
+    await expect(port.invoke({ type: "get_game_input_actions_v2" })).resolves.toMatchObject({ schemaVersion: 2 });
+    revoked = true;
+    for (const type of ["get_game_input_actions_v2", "find_game_input_actions_v2"]) {
+      await expect(port.invoke({ type })).rejects.toMatchObject({ code: "engine_unsupported", message: "Semantic input was revoked." });
+    }
+  });
   test("metadata discovery is routed only by explicit v2 calls", async () => {
     let metadataCalls = 0;
     const port = await installGodotWebPort([], { getGameInputActionsV2: () => {

@@ -157,7 +157,11 @@ func attach(gua_adapter: RefCounted) -> bool:
         return result;
       }
       if (command.type === 'get_game_input_capabilities') return JSON.parse(callGodot(getGameInputCapabilities));
-      if (command.type === 'get_game_input_actions_v2') return JSON.parse(callGodot(getGameInputActionsV2));
+      if (command.type === 'get_game_input_actions_v2') {
+        const result = JSON.parse(callGodot(getGameInputActionsV2));
+        if (result && result.code) throw engineError(result.code, result.message || 'The Godot Gua adapter is unavailable.');
+        return result;
+      }
       if (command.type === 'find_game_input_actions_v2') {
         const result = JSON.parse(callGodot(findGameInputActionsV2, JSON.stringify(command)));
         if (result && result.code) throw engineError(result.code, result.message || 'Invalid game input selector.');

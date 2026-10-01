@@ -156,6 +156,18 @@
         {
           "if": {
             "properties": {
+              "valueType": { "enum": ["button", "text"] }
+            },
+            "anyOf": [
+              { "required": ["valueSchema"] },
+              { "required": ["examples"] }
+            ]
+          },
+          "then": { "properties": { "range": false } }
+        },
+        {
+          "if": {
+            "properties": {
               "valueType": {
                 "const": "button"
               }

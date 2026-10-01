@@ -42,6 +42,32 @@ test("unmodified strict legacy validators accept legacy payloads and reject meta
   expect(validateCommands({ type: "find_game_input_actions_v2", confirmed: true })).toBe(false);
 });
 
+test("v2 validators reject ranges only on metadata-bearing button and text actions", () => {
+  const { valueSchema: _schema, examples: _examples, ...legacy } = vector;
+  for (const valueType of ["button", "text"] as const) {
+    const action = { ...legacy, valueType };
+    for (const [validate, document] of [
+      [ajv.getSchema(mapSchema.$id)!, map],
+      [ajv.getSchema(searchSchema.$id)!, { ...map, count: 1, truncated: false }],
+    ] as const) {
+      expect(validate({ ...document, actions: [action] })).toBe(true);
+      expect(validInputActionMetadata(action)).toBe(true);
+      for (const metadata of [
+        { valueSchema: { type: valueType === "button" ? "boolean" : "string" } },
+        { examples: [] },
+        { valueSchema: { type: valueType === "button" ? "boolean" : "string" }, examples: [] },
+      ]) {
+        expect(validate({ ...document, actions: [{ ...action, ...metadata }] })).toBe(false);
+        expect(validInputActionMetadata({ ...action, ...metadata })).toBe(false);
+        const { range: _range, ...withoutRange } = action;
+        expect(validate({ ...document, actions: [{ ...withoutRange, ...metadata }] })).toBe(true);
+      }
+    }
+    expect(ajv.getSchema(oldMapSchema.$id)!({ ...map, schemaVersion: 1, actions: [action] })).toBe(true);
+    expect(ajv.getSchema(oldSearchSchema.$id)!({ ...map, schemaVersion: 1, actions: [action], count: 1, truncated: false })).toBe(true);
+  }
+});
+
 test("same-page metadata calls are explicit, version-specific and reject inconsistent engine declarations", async () => {
   const requests: string[] = [];
   let invalid = false;
