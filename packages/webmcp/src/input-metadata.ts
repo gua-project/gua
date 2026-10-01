@@ -19,14 +19,27 @@ export function parseInputActionMetadataJson(source: string): unknown {
   const value = () => {
     if (source[cursor] === '"') { string(); return; }
     if (source[cursor] === "{" || source[cursor] === "[") {
-      let depth = 1; cursor++;
+      const frames: Array<{ keys?: Set<string>; key: boolean }> = [
+        { keys: source[cursor] === "{" ? new Set() : undefined, key: true },
+      ];
+      cursor++;
       // Skip arbitrary nested values iteratively; only the fixed map/action path
       // is visited below, so unrelated nesting cannot grow the JS call stack.
-      while (depth) {
+      while (frames.length) {
         const token = source[cursor];
-        if (token === '"') { string(); continue; }
-        if (token === "{" || token === "[") depth++;
-        if (token === "}" || token === "]") depth--;
+        const frame = frames[frames.length - 1]!;
+        if (token === '"') {
+          const start = cursor; string();
+          if (frame.keys && frame.key) {
+            const key = JSON.parse(source.slice(start, cursor)) as string;
+            if (frame.keys.has(key)) throw new Error("Duplicate game input metadata key.");
+            frame.keys.add(key); frame.key = false;
+          }
+          continue;
+        }
+        if (token === "{" || token === "[") frames.push({ keys: token === "{" ? new Set() : undefined, key: true });
+        if (token === "}" || token === "]") frames.pop();
+        if (token === ",") frame.key = true;
         cursor++;
       }
     } else while (cursor < source.length && !/[\s,}\]]/.test(source[cursor]!)) cursor++;
@@ -46,10 +59,13 @@ export function parseInputActionMetadataJson(source: string): unknown {
     cursor++;
   };
   const object = (property: (key: string) => boolean) => {
+    const keys = new Set<string>();
     cursor++; space();
     while (source[cursor] !== "}") {
       const start = cursor; string();
       const key = JSON.parse(source.slice(start, cursor)) as string;
+      if (keys.has(key)) throw new Error("Duplicate game input metadata key.");
+      keys.add(key);
       space(); cursor++; space(); // colon
       if (!property(key)) value();
       space();

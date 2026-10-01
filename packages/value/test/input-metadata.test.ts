@@ -152,6 +152,24 @@ test("v2 JSON text enforces raw example byte boundaries on both discovery paths"
   }
 });
 
+test("v2 JSON text rejects duplicate decoded keys in schemas, examples and map envelopes", async () => {
+  for (const search of [false, true]) {
+    const document = { ...map, ...(search ? { count: 1, truncated: false } : {}) };
+    for (const raw of [
+      JSON.stringify(document).replace('"minimum":-1', '"minimum":0,"minimum":-1'),
+      JSON.stringify(document).replace('"minimum":-1', '"minim\\u0075m":0,"minimum":-1'),
+      JSON.stringify(document).replace('"x":0.5', '"x":0,"x":0.5'),
+      JSON.stringify(document).replace('"schemaVersion":2', '"schemaVersion":1,"schemaVersion":2'),
+      JSON.stringify(document).replace('"valueType":"vector2"', '"valueType":"text","valueType":"vector2"'),
+    ]) {
+      const bridge = createGuaInPageBridge({ invoke: async () => raw }, { gameInput: true });
+      await expect(search ? bridge.findGameInputActionsV2!({}) : bridge.getGameInputActionsV2!()).rejects.toMatchObject({ code: "invalid_request" });
+    }
+    const bridge = createGuaInPageBridge({ invoke: async () => JSON.stringify(document) }, { gameInput: true });
+    await expect(search ? bridge.findGameInputActionsV2!({}) : bridge.getGameInputActionsV2!()).resolves.toMatchObject({ schemaVersion: 2 });
+  }
+});
+
 test("WebMCP metadata tools require the capability and never run published examples", async () => {
   const tools = new Map<string, { execute(input: Record<string, unknown>): Promise<unknown> }>();
   const document = { modelContext: { registerTool: (tool: { name: string; execute(input: Record<string, unknown>): Promise<unknown> }) => tools.set(tool.name, tool), unregisterTool: (name: string) => tools.delete(name) } } as unknown as Document;
