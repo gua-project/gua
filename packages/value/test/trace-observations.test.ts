@@ -36,6 +36,13 @@ test("Observe host references require typed source and bounded decimal metadata"
 });
 const event = (type: string, data: unknown) => ({ schemaVersion: 1, traceId: fixture.traceId, stepId: fixture.stepId,
   sequence: 1, eventId: "e1", collectedMilliseconds: 1, type, data });
+test("semantic validation preserves schema-valid generic records", () => {
+  for (const data of [null, {}, { channel: "custom" }]) {
+    const record = event("observation.change", data);
+    expect(structure(record)).toBe(true);
+    expect(validate(record)).toBe(true);
+  }
+});
 const uint64 = new Set(["sessionEpoch", "sequence", "revision", "uiFrame", "uiRevision", "worldFrame", "worldRevision", "ownerId", "registrationId"]);
 function changeData(document: object) {
   const received = Object.fromEntries(Object.entries(document).map(([key, value]) => [key, uint64.has(key) ? String(value) : value]));

@@ -1,7 +1,7 @@
 /** Apply after trace.schema.json succeeds. Draft 2020-12 cannot compare values
  * at separate instance paths; these Observe association rules are normative. */
 export function validateTraceObserveSemantics(record) {
-  if (record.type !== "observation.change" || record.data.channel !== "observe") return true;
+  if (record.type !== "observation.change" || record.data?.channel !== "observe") return true;
   const { received, catalogs } = record.data;
   if (Object.hasOwn(catalogs, "value")) return false;
   for (const side of ["before", "after"]) {
