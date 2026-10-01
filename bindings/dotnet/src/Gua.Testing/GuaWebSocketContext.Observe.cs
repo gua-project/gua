@@ -15,7 +15,9 @@ public sealed partial class GuaWebSocketContext
         long generation = 0;
         try {
             using var response = JsonDocument.Parse(Raw(new { type = "subscribe_observations" }, onConnection: g => generation = g));
-            return new GuaRemoteObserveSubscription(this, generation, response.RootElement.GetProperty("subscriptionId").GetUInt64(),
+            var subscriptionId = response.RootElement.GetProperty("subscriptionId").GetUInt64();
+            if (subscriptionId == 0) throw new JsonException();
+            return new GuaRemoteObserveSubscription(this, generation, subscriptionId,
                 response.RootElement.GetProperty("snapshot").GetRawText());
         } catch (RemoteCommandRejectedException) { throw; } catch {
             // A lost reply may have created a cursor. Close its owning connection.
