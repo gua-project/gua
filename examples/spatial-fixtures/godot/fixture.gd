@@ -10,6 +10,7 @@ var phase := 0
 var spatial_owner: int
 var queued_at: int
 var evidence: Array = []
+var lease_races: Array = []
 var profile_records: Array = []
 var profile_frame := 0
 var profile_last := 0
@@ -75,7 +76,7 @@ func _physics_process(_delta: float) -> void:
 	if index >= fixture.cases.size():
 		if not _profile_frame():
 			return
-		var output := {"configuration":fixture.configuration,"backend":ProjectSettings.get_setting("physics/3d/physics_engine"),"results":evidence,"profile":profile_records,"physicsTick":Engine.get_physics_frames()}
+		var output := {"configuration":fixture.configuration,"backend":ProjectSettings.get_setting("physics/3d/physics_engine"),"results":evidence,"profile":profile_records,"leaseRaces":lease_races,"physicsTick":Engine.get_physics_frames()}
 		var file := FileAccess.open("res://evidence.json", FileAccess.WRITE)
 		file.store_string(JSON.stringify(output, "\t", true, true))
 		print("SPATIAL PASS: ", evidence.size(), " real Godot cases")
@@ -90,6 +91,10 @@ func _physics_process(_delta: float) -> void:
 		add_child(viewport)
 		for obstacle in case.obstacles:
 			_obstacle(viewport, obstacle)
+		var misstated := _registration(case.loaded)
+		misstated.provider.precision.representation = "binary64"
+		var rejected_reader := Reader.new()
+		_check(rejected_reader.configure(host,viewport.find_world_3d(),misstated,{})==5,"misstated Godot precision refused")
 		reader = Reader.new()
 		var policies := {"solid":{"mask":1,"bodies":true,"areas":false,"backfaces":false,"margin":0.0,"exclude":[]},
 			"triggers":{"mask":1,"bodies":true,"areas":true,"backfaces":false,"margin":0.0,"exclude":[]}}
@@ -217,6 +222,9 @@ func _physics_process(_delta: float) -> void:
 		_check(expected == "engine-specific" or batch_item.result.outcome == expected, "batch fixed expectation")
 		_check(batch_item.result.truncated == case.truncated, "batch truncation")
 	evidence.append({"case":case.id,"batchSize":16,"pumpWallUs":batch_wall,"queueWallUs":batch_start-queue_start,"result":batch_doc})
+	_lease_race(case,expected)
+	if index == 0:
+		_lease_race(case,expected,true)
 	_check(reader.dispose() == 0, "dispose")
 	var stale_batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":9999,
 		"consistency":"samePhysicsSample","queries":[case.query]}
@@ -292,3 +300,49 @@ func _profile_frame() -> bool:
 		viewport.queue_free()
 		return true
 	return false
+
+# Deterministic owner revocation after Take; invokes the same completion helper
+# as pump, then executes the next query against the actual held World3D state.
+func _lease_race(case: Dictionary, expected: String, deadline: bool = false) -> void:
+	var first: Dictionary = case.query.duplicate(true)
+	first.requestId = 11000
+	first.queryId = "race-revoked"
+	if deadline:
+		first.deadlineMs = 100
+	first.kind = "overlap"
+	first.erase("segment")
+	first.erase("delta")
+	first.shape = {"type":"sphere","center":{"x":9,"y":0,"z":0},"radius":0.25}
+	var second: Dictionary = case.query.duplicate(true)
+	second.requestId = 11001
+	second.queryId = "race-eligible"
+	var batch := {"schemaVersion":"spatial-host-r1","documentType":"batch","batchId":11000,"consistency":"samePhysicsSample","queries":[first,second]}
+	_check(host.enqueue(spatial_owner,JSON.stringify(batch,"",true,true)).status==0,"race enqueue")
+	var sample_id := "race:%s:%s" % [index,deadline]
+	var boundary := {"schemaVersion":"spatial-host-r1","documentType":"boundary","physicsSampleId":sample_id,"tick":Engine.get_physics_frames()}
+	var begun := host.begin(reader.provider,JSON.stringify(boundary,"",true,true))
+	_check(begun.status==0,"race begin")
+	var consumed := host.take(begun.handle)
+	_check(consumed.status==0 and JSON.parse_string(consumed.json).requestId==11000,"race first consumed before terminal change")
+	var grants := {"schemaVersion":"spatial-host-r1","documentType":"owner","sessionEpoch":1,"profile":"Testing","enabled":true,"policies":["solid","triggers"],"region":region.duplicate(true)}
+	grants.region.max.x = 8
+	if deadline:
+		OS.delay_msec(120) # Deterministic host stall after Take; no physics simulation.
+	else:
+		_check(host.set_owner(spatial_owner,JSON.stringify(grants,"",true,true)).status==0,"race selective revoke")
+	var execution := reader._execute(viewport.find_world_3d().direct_space_state,JSON.parse_string(consumed.json),begun.handle)
+	_check(reader._complete_item(begun.handle,execution)==0,"race correlation released")
+	var eligible := host.take(begun.handle)
+	_check(eligible.status==0,"race next eligible taken")
+	var actual := reader._execute(viewport.find_world_3d().direct_space_state,JSON.parse_string(eligible.json),begun.handle)
+	_check(reader._complete_item(begun.handle,actual)==0,"race actual physics completed")
+	var polled := host.poll(spatial_owner,11000)
+	_check(polled.status==0,"race poll")
+	var result: Dictionary = JSON.parse_string(polled.json)
+	_check(result.items[0].state=="failed" and result.items[0].reason==("deadline_exceeded" if deadline else "not_authorized") and not result.items[0].has("result"),"race revoked geometry withheld")
+	_check(result.items[1].state=="completed" and result.items[1].result.sample.physicsSampleId==sample_id,"race same held sample")
+	_check(expected=="engine-specific" or result.items[1].result.outcome==expected,"race independent geometry")
+	_check(host.end(begun.handle).status==0,"race mandatory end")
+	grants.region = region
+	_check(host.set_owner(spatial_owner,JSON.stringify(grants,"",true,true)).status==0,"race grants restored")
+	lease_races.append({"case":case.id,"deadline":deadline,"result":result})

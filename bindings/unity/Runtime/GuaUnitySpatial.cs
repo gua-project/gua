@@ -84,16 +84,45 @@ namespace Gua.Unity
                     {
                         if (request == null) break;
                         var query = request.ReadRequest();
-                        var result = Execute(query, lease.Value);
-                        using (var execution = GuaSpatialDocument.FromExecution(result)) host.Complete(lease.Value, execution);
+                        var result = ExecuteOrTerminal(query, lease.Value);
+                        if (!CompleteItem(lease.Value, result)) break;
                     }
                 }
                 return true;
             }
             finally
             {
-                try { if (lease.HasValue) host.End(lease.Value); }
+                try { if (lease.HasValue) { try { host.End(lease.Value); } catch(GuaSpatialException e) when(e.Code==GuaSpatialErrorCode.Stale) { } } }
                 finally { pumping = false; Array.Clear(casts, 0, casts.Length); Array.Clear(overlaps, 0, overlaps.Length); }
+            }
+        }
+
+        GuaSpatialHostQueryResult ExecuteOrTerminal(GuaSpatialRequest query, ulong lease)
+        {
+            try { return Execute(query,lease); }
+            catch(GuaSpatialException e) when(e.Code==GuaSpatialErrorCode.NotReady || e.Code==GuaSpatialErrorCode.Stale)
+            {
+                // Native has already recorded the truthful terminal reason.
+                // Only carry consumed correlation through completion cleanup.
+                return Unsupported(query);
+            }
+        }
+        bool CompleteItem(ulong lease, GuaSpatialHostQueryResult result)
+        {
+            using(var execution=GuaSpatialDocument.FromExecution(result))
+            {
+                for(int attempt=0;attempt<2;++attempt)
+                {
+                    try { host.Complete(lease,execution); return true; }
+                    catch(GuaSpatialException e) when(e.Code==GuaSpatialErrorCode.NotReady)
+                    {
+                        // Selective revocation may retain an in-flight item.
+                        // One bounded retry releases it. If already released,
+                        // NotReady is a no-op because no next item was taken.
+                    }
+                    catch(GuaSpatialException e) when(e.Code==GuaSpatialErrorCode.Stale) { return false; }
+                }
+                return true;
             }
         }
 

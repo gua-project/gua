@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using Gua.Core;
 using Gua.Unity;
@@ -70,6 +71,7 @@ public static class SpatialFixture
                 // Global state is a host precondition; the reader never changes it.
                 Check(!Physics.queriesHitBackfaces,"fixture requires explicit backfaces=false host state");
                 var evidence = new List<object>();
+                var leaseRaces = new List<object>();
                 var other = SceneManager.CreateScene("spatial-other",new CreateSceneParameters(LocalPhysicsMode.Physics3D));
                 var sentinel = new GameObject("other-scene-wall"); SceneManager.MoveGameObjectToScene(sentinel,other);
                 sentinel.layer=8;
@@ -188,6 +190,8 @@ public static class SpatialFixture
                                     evidence.Add(new {id,batchSize=16,result=result.ToJson(),pumpWallUs=wallUs,threadCpuUs=cpuUs,queueWallUs=(start-queued)*1000000.0/Stopwatch.Frequency});
                                 }
                             }
+                            LeaseRace(host,adapter,owner,grants,currentQuery,id=="door-transition"?test.GetProperty("doorOpenOutcome").GetString():test.GetProperty("outcome").GetString(),leaseRaces,id);
+                            if(batchId==1) LeaseRace(host,adapter,owner,grants,currentQuery,test.GetProperty("outcome").GetString(),leaseRaces,id,true);
                             adapter.Dispose();
                             foreach (var obstacle in scene.GetRootGameObjects()) obstacle.transform.position+=new Vector3(100,0,0);
                             Physics.SyncTransforms();
@@ -209,7 +213,7 @@ public static class SpatialFixture
                 profile.Completed=(records,error)=>
                 {
                     if(error!=null) {UnityEngine.Debug.LogException(error);EditorApplication.Exit(1);return;}
-                    File.WriteAllText("evidence.json",JsonSerializer.Serialize(new {configuration,results=evidence,profile=records}));
+                    File.WriteAllText("evidence.json",JsonSerializer.Serialize(new {configuration,results=evidence,profile=records,leaseRaces}));
                     UnityEngine.Debug.Log("SPATIAL PROFILE PASS: "+records.Count+" real FixedUpdate samples");
                     EditorApplication.Exit(0);
                 };
@@ -220,4 +224,47 @@ public static class SpatialFixture
         catch (Exception e) { UnityEngine.Debug.LogException(e); }
         EditorApplication.Exit(exit);
     }
+    static void LeaseRace(GuaSpatialHost host,GuaUnitySpatial adapter,ulong owner,GuaSpatialDocument grants,GuaSpatialRequest query,string expected,List<object> evidence,string id,bool deadline=false)
+    {
+        // Reflection is fixture-only access to the exact private pump helpers;
+        // no production test hook or physics override is installed.
+        var execute=typeof(GuaUnitySpatial).GetMethod("ExecuteOrTerminal",BindingFlags.Instance|BindingFlags.NonPublic);
+        var complete=typeof(GuaUnitySpatial).GetMethod("CompleteItem",BindingFlags.Instance|BindingFlags.NonPublic);
+        GuaSpatialRequest Copy() {using(var d=GuaSpatialDocument.FromRequest(query)) return d.ReadRequest();}
+        var first=Copy();first.RequestId=11000;first.QueryId="race-revoked";first.Kind="overlap";first.Segment=null;first.Delta=null;first.Shape=new GuaSpatialShape {Type="sphere",Center=V(9,0,0),Radius=.25};if(deadline) first.DeadlineMs=100;
+        var second=Copy();second.RequestId=11001;second.QueryId="race-eligible";
+        using(var batch=GuaSpatialDocument.FromBatch(new GuaSpatialBatch {BatchId=11000,Consistency="samePhysicsSample",Queries=new[]{first,second}})) host.Enqueue(owner,batch);
+        var sample="race:"+id+":"+deadline;
+        using(var boundary=GuaSpatialDocument.FromBoundary(new GuaSpatialBoundary {PhysicsSampleId=sample}))
+        {
+            var lease=host.Begin(adapter.Provider,boundary).Value;
+            try
+            {
+                using(var consumed=host.Take(lease))
+                {
+                    Check(consumed!=null && consumed.ReadRequest().RequestId==11000,"race first consumed before terminal change");
+                    if(deadline) System.Threading.Thread.Sleep(120);
+                    else {var narrow=grants.ReadOwner();narrow.Region=new GuaSpatialRegion(V(-20,-20,-20),V(8,20,20));using(var updated=GuaSpatialDocument.FromOwner(narrow)) host.SetOwner(owner,updated);}
+                    var execution=(GuaSpatialHostQueryResult)execute.Invoke(adapter,new object[]{consumed.ReadRequest(),lease});
+                    Check((bool)complete.Invoke(adapter,new object[]{lease,execution}),"race correlation released");
+                }
+                using(var eligible=host.Take(lease))
+                {
+                    Check(eligible!=null,"race next eligible taken");
+                    var execution=(GuaSpatialHostQueryResult)execute.Invoke(adapter,new object[]{eligible.ReadRequest(),lease});
+                    Check((bool)complete.Invoke(adapter,new object[]{lease,execution}),"race actual physics completed");
+                }
+                using(var result=host.Poll(owner,11000))
+                {
+                    var items=result.ReadBatchResult().Items;
+                    Check(items[0].State=="failed"&&items[0].Reason==(deadline?"deadline_exceeded":"not_authorized")&&items[0].Result==null,"race revoked geometry withheld");
+                    Check(items[1].State=="completed"&&items[1].Result.Sample.PhysicsSampleId==sample,"race same held sample");
+                    Check(expected=="engine-specific"||items[1].Result.Outcome==expected,"race independent geometry");
+                    evidence.Add(new {id,deadline,result=result.ToJson()});
+                }
+            }
+            finally {host.End(lease);host.SetOwner(owner,grants);}
+        }
+    }
+
 }

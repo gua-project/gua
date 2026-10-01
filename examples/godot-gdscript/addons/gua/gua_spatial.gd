@@ -24,7 +24,7 @@ func configure(host: GuaSpatialHost, world: World3D, registration: Dictionary, p
 	# from a query. RID exclusions are applied by physics before enumeration.
 	_registration = registration.duplicate(true)
 	_policies = policies.duplicate(true)
-	if registration.provider.engine.name != "Godot" or registration.provider.engine.version != Engine.get_version_info().string or registration.provider.engine.backend != ProjectSettings.get_setting("physics/3d/physics_engine") or registration.provider.engine.backend not in ["GodotPhysics3D","Jolt Physics"]:
+	if registration.provider.get("precision",{}).get("representation","") != "binary32" or registration.provider.engine.name != "Godot" or registration.provider.engine.version != Engine.get_version_info().string or registration.provider.engine.backend != ProjectSettings.get_setting("physics/3d/physics_engine") or registration.provider.engine.backend not in ["GodotPhysics3D","Jolt Physics"]:
 		return 5
 	for policy in registration.policies:
 		if not _policies.has(policy.id):
@@ -80,14 +80,27 @@ func pump() -> int:
 			break
 		var query: Dictionary = JSON.parse_string(taken.json)
 		var execution := _execute(space, query, begin.handle)
-		var completed := _host.complete(begin.handle, JSON.stringify(execution, "", true, true))
-		if completed.status != 0:
-			status = completed.status
+		var completed := _complete_item(begin.handle, execution)
+		if completed == 11:
+			break
+		if completed != 0:
+			status = completed
 			break
 	# Mandatory cleanup even when native validation/deadlines reject a result.
 	var ended := _host.end(begin.handle)
 	_pumping = false
-	return status if status != 0 else ended.status
+	return status if status != 0 else (0 if ended.status == 11 else ended.status)
+
+func _complete_item(lease: int, execution: Dictionary) -> int:
+	var wire := JSON.stringify(execution,"",true,true)
+	for _attempt in range(2):
+		var completed := _host.complete(lease,wire)
+		if completed.status == 10:
+			# One retry releases retained terminal correlation. Already released
+			# items cannot consume another query because no next Take occurred.
+			continue
+		return completed.status
+	return 0
 
 static func _v(value: Dictionary) -> Vector3:
 	return Vector3(value.x, value.y, value.z)

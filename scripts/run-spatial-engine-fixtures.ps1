@@ -63,6 +63,7 @@ try {
         $evidence = Get-Content -LiteralPath $output -Raw | ConvertFrom-Json
         if ($evidence.results.Count -ne (2 * (Get-Content protocol/fixtures/spatial-engine-r1.json -Raw | ConvertFrom-Json).cases.Count + 1)) { throw "Incomplete engine fixture evidence: $output" }
         if ($evidence.profile.Count -ne 360) { throw "Incomplete real physics-callback profile: $output" }
+        if ($evidence.leaseRaces.Count -ne ((Get-Content protocol/fixtures/spatial-engine-r1.json -Raw | ConvertFrom-Json).cases.Count + 1)) { throw "Missing selective lease race evidence: $output" }
         Write-Host "Real engine evidence: $output"
     }
 } finally { Pop-Location }

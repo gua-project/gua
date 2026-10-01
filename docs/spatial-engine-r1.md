@@ -3,7 +3,11 @@
 `GuaUnitySpatial` reads its explicitly registered `PhysicsScene`;
 `GuaSpatialReader` reads its explicitly registered `World3D` direct state.
 Both are opt-in trusted host integrations over the native spatial-host-r1
-scheduler, with ordered take/complete and mandatory End. They expose no runtime
+scheduler, with ordered take/complete and mandatory End. Both readers continue after an individual consumed item becomes
+terminal: they preserve the native reason, use at most one completion retry to
+release retained correlation, and take the next eligible item in the same lease.
+All-batch terminal states still stop and End; an already revoked lease needs no
+second reclamation. They expose no runtime
 transport capability. Existing strict spatial-r1 documents remain unchanged.
 Host-installed enabled Testing/Debug grants are required; Player and whole
 original shapes crossing a grant are rejected before dispatch.
@@ -40,6 +44,8 @@ native outward-rounded original bounds, then checks current owner and policy
 regions before physics. It retains the volume for complete/poll revocation and
 coverage checks. Narrow grants are refused rather than expanded. This guard
 bounds parameter preparation; it does not certify collision-kernel accuracy.
+Godot rejects registrations claiming a representation other than binary32,
+matching the pinned build and its parameter-preparation rules.
 Coordinates/dimensions beyond 8192 units, nonfinite/collapsed parameters and
 nonzero margins remain unsupported. Backend absolute error remains unknown.
 Distinct capsule endpoints whose binary32 squared axis length is zero or
@@ -92,7 +98,15 @@ respective front-face winding. Inside-start rays and exact floor contact are
 explicitly backend-specific; neither may certify normals or penetration.
 
 The Windows runs cover 33 shared scenarios, a second moving-door state, and
-16-query batches: 67 result records per engine. They also assert independent
+16-query batches: 67 result records per engine. An additional 34 lease-race records exercise
+post-Take owner revocation for every geometry scenario and deterministic
+post-Take deadline expiry once. The exact Execute/completion helpers used by
+Pump release the terminal item, then run the eligible query against the actual
+held engine state; its fixed outcome and same boundary sample are checked.
+Unity reflection is confined to the fixture, with no production physics override
+or test hook. The deadline fixture deliberately pauses the host for 120 ms after
+taking an item with a fixed 100 ms deadline; it does not simulate physics.
+They also assert independent
 world/scene isolation, anonymous walls, Player denial, whole-shape grant denial,
 prepared-geometry refusal, explicit trigger/self filters, saturation, unloaded
 coverage, unregister and stale replacement epochs. Door old/new states have
@@ -140,9 +154,9 @@ wall times are microseconds; raw evidence/logs remain under ignored artifacts.
 
 | Engine/backend | Baseline median | Single median / p95 | Batch16 median / p95 |
 | --- | ---: | ---: | ---: |
-| GodotPhysics3D | 186.5 | 988.5 / 1316 | 6786 / 7975 |
-| Jolt Physics | 186 | 970.5 / 1225 | 6841.5 / 7897 |
-| Unity PhysX | 28.3 | 916.7 / 1139.3 | 6264.1 / 8198 |
+| GodotPhysics3D | 153.5 | 739.5 / 950 | 6130 / 7851 |
+| Jolt Physics | 144 | 759.5 / 1009 | 5904 / 6823 |
+| Unity PhysX | 18.2 | 597 / 869.6 | 5280.7 / 7223.7 |
 
 Godot single/batch p95 callback intervals reached about 29.9 ms with normal
 60 FPS render pacing; Unity reached about 16.7 ms. The configured 60 Hz target
@@ -160,17 +174,17 @@ and managed host suites; real engine fixtures preserve those boundaries.
 
 | Engine/backend | Mean callback CPU cycles: baseline / single / batch16 | Whole retained phase main-thread CPU ms: baseline / single / batch16 |
 | --- | ---: | ---: |
-| GodotPhysics3D | 646125 / 3755560 / 25994769 | 93.75 / 31.25 / 1000 |
-| Jolt Physics | 651599 / 3685939 / 25629250 | 62.5 / 62.5 / 546.875 |
-| Unity PhysX | 97196 / 3507393 / 24183972 | 1937.5 / 1953.125 / 2000 |
+| GodotPhysics3D | 643843 / 2762477 / 23655329 | 31.25 / 171.875 / 765.625 |
+| Jolt Physics | 595460 / 2856448 / 22622195 | 125 / 0 / 546.875 |
+| Unity PhysX | 71817 / 2437274 / 20747119 | 1968.75 / 1953.125 / 1968.75 |
 
 Each retained phase spans approximately 1.98 seconds. Unity batch-mode Editor
 work keeps the main thread busy between callbacks, so phase CPU totals do not
-isolate query costs. GodotPhysics3D single reports less phase CPU than baseline despite more callback
-work, and Jolt single and baseline phase times quantize equally;
+isolate query costs. Jolt reports zero single-query phase CPU despite more callback work than the
+baseline; this exposes the accounting resolution limit of GetThreadTimes;
 callback CPU cycles still distinguish the workload. Baseline-subtracted median
-callback wall overhead is about 0.80 ms for one query and 6.60 ms for batch16
-in GodotPhysics3D; 0.78/6.66 ms in Jolt; 0.89/6.24 ms in Unity. These measure
+callback wall overhead is about 0.59 ms for one query and 5.98 ms for batch16
+in GodotPhysics3D; 0.62/5.76 ms in Jolt; 0.58/5.26 ms in Unity. These measure
 adapter, serialization, enqueue and result consumption within the host workload.
 For full primitive/triangle scenario timings, use the single/batch records,
 not only this empty-space profiling scenario.
