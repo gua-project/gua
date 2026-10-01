@@ -14,6 +14,141 @@ public sealed class TraceTests
     private GuaTraceOptions Options(GuaTraceCaptureMode mode = GuaTraceCaptureMode.Recent,
         GuaTraceSavePolicy policy = GuaTraceSavePolicy.Always) => new() { OutputDirectory = _root, CaptureMode = mode, SavePolicy = policy };
 
+    [TestCase("ui")]
+    [TestCase("world")]
+    public async Task MetadataOnlyTreeIsFailedWithoutCreatingAnEmptySnapshot(string channel)
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root });
+        var step = trace.BeginStep(GuaTraceStepKind.Action, "capture tree");
+        GuaTraceCapture.Tree(trace, step, channel, "runtime", "main-result",
+            () => "{\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0}");
+        trace.EndStep(step, GuaTraceOutcome.Passed);
+        await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        Assert.That(Directory.Exists(trace.ArtifactPath), Is.True);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        var observation = read.Events.Single(e => e.Type == "observation");
+        Assert.That(observation.Data.GetProperty("availability").GetString(), Is.EqualTo("failed"));
+        Assert.That(observation.Data.TryGetProperty("blob", out _), Is.False);
+        Assert.That(read.Blobs, Is.Empty);
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("tree-failed"));
+    }
+
+    [TestCase("ui", "button", false)]
+    [TestCase("world", "world2d", false)]
+    [TestCase("ui", "SecretLabel", true)]
+    [TestCase("world", "SecretLabel", true)]
+    public async Task RedactedTreeMustStillFollowItsChannelSchema(string channel, string secret, bool available)
+    {
+        var tree = channel == "ui"
+            ? "{\"schemaVersion\":2,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"screen\":\"s\",\"nodes\":[{\"id\":\"n\",\"role\":\"button\",\"label\":\"SecretLabel\",\"visible\":true,\"enabled\":true,\"bounds\":{},\"actions\":[\"click\"]}]}"
+            : "{\"schemaVersion\":1,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"scene\":\"s\",\"objects\":[{\"id\":\"o\",\"kind\":\"actor\",\"label\":\"SecretLabel\",\"space\":\"world2d\",\"position\":{\"x\":1},\"visibleToPlayer\":true,\"active\":true,\"agentExposure\":\"auto\",\"state\":{}}]}";
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, SavePolicy = GuaTraceSavePolicy.Always, Secrets = new[] { secret } });
+        var step = trace.BeginStep(GuaTraceStepKind.Assertion, "redacted-tree");
+        GuaTraceCapture.Tree(trace, step, channel, "game", "capture", () => tree);
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        var observation = read.Events.Single(e => e.Type == "observation");
+        Assert.That(observation.Data.GetProperty("availability").GetString(), Is.EqualTo(available ? "available" : "failed"));
+        Assert.That(read.Blobs.Count, Is.EqualTo(available ? 1 : 0));
+        if (available) Assert.That(read.Blobs.Single().Value.GetRawText(), Does.Contain("[redacted]").And.Not.Contain(secret));
+        else {
+            Assert.That(observation.Data.TryGetProperty("blob", out _), Is.False);
+            Assert.That(read.Manifest.Quality.Issues, Does.Contain("tree-failed"));
+        }
+    }
+
+    [TestCase("ui", 2, "screen", "nodes")]
+    [TestCase("world", 1, "scene", "objects")]
+    public async Task TreeEnvelopeRejectsInvalidStructureAndPreservesGenuinelyEmptyTrees(string channel,
+        int version, string label, string items)
+    {
+        await using var trace = new GuaTraceSession(Options());
+        var step = trace.BeginStep(GuaTraceStepKind.Action, "tree envelope");
+        object Metadata() => new { sessionEpoch = 1, frameSequence = 0, revision = 0 };
+        string Tree(int schemaVersion, object? name, object? collection) {
+            var data = JsonSerializer.SerializeToElement(Metadata()).EnumerateObject().ToDictionary(p => p.Name, p => (object)p.Value);
+            data["schemaVersion"] = schemaVersion; data[label] = name!; data[items] = collection!;
+            return JsonSerializer.Serialize(data);
+        }
+        foreach (var invalid in new[] { Tree(version + 1, "test", Array.Empty<object>()), Tree(version, null, Array.Empty<object>()),
+            Tree(version, "", Array.Empty<object>()), Tree(version, "test", null), Tree(version, "test", new { }),
+            Tree(version, "test", new object?[] { null }), Tree(version, "test", new[] { 1 }) })
+            GuaTraceCapture.Tree(trace, step, channel, "runtime", "invalid", () => invalid);
+        GuaTraceCapture.Tree(trace, step, channel, "runtime", "empty", () => Tree(version, "test", Array.Empty<object>()));
+        trace.EndStep(step, GuaTraceOutcome.Passed); await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Where(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "invalid")
+            .Select(e => e.Data.GetProperty("availability").GetString()), Is.All.EqualTo("failed"));
+        var empty = read.Events.Single(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "empty");
+        Assert.That(empty.Data.GetProperty("availability").GetString(), Is.EqualTo("available"));
+        Assert.That(read.Blobs[empty.Data.GetProperty("blob").GetString()!].GetProperty(items).GetArrayLength(), Is.Zero);
+        Assert.That(empty.Data.GetProperty("host").GetProperty("frame").GetString(), Is.EqualTo("0"));
+    }
+
+    [TestCase("ui")]
+    [TestCase("world")]
+    public async Task TreeItemsFollowTheFullChannelSchema(string channel)
+    {
+        var itemJson = channel == "ui"
+            ? "{\"id\":\"n\",\"role\":\"button\",\"visible\":true,\"enabled\":true,\"bounds\":{},\"actions\":[\"click\"]}"
+            : "{\"id\":\"o\",\"kind\":\"actor\",\"space\":\"world2d\",\"position\":{\"x\":1},\"visibleToPlayer\":true,\"active\":true,\"agentExposure\":\"auto\",\"state\":{}}";
+        var valid = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject();
+        var invalid = new List<System.Text.Json.Nodes.JsonNode> { new System.Text.Json.Nodes.JsonObject() };
+        foreach (var field in valid.Select(p => p.Key)) {
+            var missing = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject(); missing.Remove(field); invalid.Add(missing);
+            var wrongType = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject(); wrongType[field] = null; invalid.Add(wrongType);
+        }
+        var nested = System.Text.Json.Nodes.JsonNode.Parse(itemJson)!.AsObject();
+        nested[channel == "ui" ? "bounds" : "position"] = System.Text.Json.Nodes.JsonNode.Parse(channel == "ui" ? "{\"w\":-1}" : "{\"z\":1}"); invalid.Add(nested);
+        await using var trace = new GuaTraceSession(Options()); var step = trace.BeginStep(GuaTraceStepKind.Assertion, "items");
+        string Tree(System.Text.Json.Nodes.JsonNode item) => channel == "ui"
+            ? $"{{\"schemaVersion\":2,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"screen\":\"s\",\"nodes\":[{item.ToJsonString()}]}}"
+            : $"{{\"schemaVersion\":1,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"scene\":\"s\",\"objects\":[{item.ToJsonString()}]}}";
+        foreach (var item in invalid) GuaTraceCapture.Tree(trace, step, channel, "game", "invalid", () => Tree(item));
+        GuaTraceCapture.Tree(trace, step, channel, "game", "valid", () => Tree(valid));
+        await trace.CompleteAsync(GuaTraceOutcome.Passed); var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Where(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "invalid")
+            .Select(e => e.Data.GetProperty("availability").GetString()), Is.All.EqualTo("failed"));
+        Assert.That(read.Events.Single(e => e.Type == "observation" && e.Data.GetProperty("reason").GetString() == "valid")
+            .Data.GetProperty("availability").GetString(), Is.EqualTo("available"));
+        Assert.That(read.Blobs.Count, Is.EqualTo(1));
+    }
+
+    [TestCase("player")]
+    [TestCase("debug")]
+    public async Task RemoteWorldCaptureRequiresAnAuthorizedGetter(string profile)
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, Profile = profile });
+        using var remote = new GuaWebSocketContext("ws://127.0.0.1:1", TimeSpan.FromMilliseconds(50));
+        var step = trace.BeginStep(GuaTraceStepKind.Assertion, "remote");
+        GuaTraceCapture.World(trace, step, remote, "remote", "capture");
+        await trace.CompleteAsync(GuaTraceOutcome.Passed); var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Events.Single(e => e.Type == "observation").Data.GetProperty("availability").GetString(), Is.EqualTo("failed"));
+        Assert.That(read.Blobs, Is.Empty);
+    }
+
+    private sealed class FixedProfileWorld : IGuaWorldContext
+    {
+        public int Reads;
+        public string GetWorldObjectTreeJson(GuaObservationProfile profile = GuaObservationProfile.Debug)
+        { Reads++; return "{\"schemaVersion\":1,\"sessionEpoch\":1,\"frameSequence\":0,\"revision\":0,\"scene\":\"debug\",\"objects\":[]}"; }
+        public GuaWorldTree GetWorldObjectTree(GuaObservationProfile profile = GuaObservationProfile.Debug) => throw new NotSupportedException();
+        public GuaWorldQueryResult QueryWorldObjects(GuaWorldSelector selector, GuaObservationProfile profile = GuaObservationProfile.Debug) => throw new NotSupportedException();
+        public Task<GuaWorldObject> WaitForWorldObjectAsync(GuaWorldSelector selector, TimeSpan? timeout = null,
+            GuaObservationProfile profile = GuaObservationProfile.Debug, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    [Test]
+    public async Task FixedProfileWorldIsRejectedBeforeReadingEvenAValidTree()
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, Profile = "player" });
+        var context = new FixedProfileWorld(); var step = trace.BeginStep(GuaTraceStepKind.Assertion, "profile");
+        GuaTraceCapture.World(trace, step, context, "remote", "capture");
+        Assert.That(context.Reads, Is.Zero);
+        await trace.CompleteAsync(GuaTraceOutcome.Passed);
+        Assert.That(GuaTraceReader.Read(trace.ArtifactPath).Blobs, Is.Empty);
+    }
+
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.OnFailure)]
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.Always)]
     [TestCase(GuaTraceCaptureMode.Streaming, GuaTraceSavePolicy.OnFailure)]

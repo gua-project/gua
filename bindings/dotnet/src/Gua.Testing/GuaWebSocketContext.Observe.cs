@@ -12,15 +12,19 @@ public sealed partial class GuaWebSocketContext
     public GuaRemoteObserveSubscription SubscribeObservations()
     {
         GetVersion().EnsureCompatible(requiredCapabilities: ["observe_v1"]);
+        long generation = 0;
         try {
-            long generation = 0;
-            using var response = JsonDocument.Parse(Raw(new { type = "subscribe_observations" }, onSuccess: g => generation = g));
-            return new GuaRemoteObserveSubscription(this, generation, response.RootElement.GetProperty("subscriptionId").GetUInt64(),
+            using var response = JsonDocument.Parse(Raw(new { type = "subscribe_observations" }, onConnection: g => generation = g));
+            var subscriptionId = response.RootElement.GetProperty("subscriptionId").GetUInt64();
+            if (subscriptionId == 0) throw new JsonException();
+            return new GuaRemoteObserveSubscription(this, generation, subscriptionId,
                 response.RootElement.GetProperty("snapshot").GetRawText());
         } catch (RemoteCommandRejectedException) { throw; } catch {
             // A lost reply may have created a cursor. Close its owning connection.
             requestGate.Wait();
-            try { socket?.Dispose(); socket = null; bufferedActionEvents.Clear(); }
+            try {
+                if (connectionGeneration == generation) { socket?.Dispose(); socket = null; bufferedActionEvents.Clear(); }
+            }
             finally { requestGate.Release(); }
             throw;
         }
@@ -38,8 +42,21 @@ public sealed partial class GuaWebSocketContext
             throw;
         }
     }
-    internal void UnsubscribeObservations(ulong subscription, long generation) =>
-        Raw(new { type = "unsubscribe_observations", subscriptionId = subscription }, observeGeneration: generation, ignoreStaleObserve: true);
+    internal void UnsubscribeObservations(ulong subscription, long generation)
+    {
+        try {
+            using var response = JsonDocument.Parse(Raw(new { type = "unsubscribe_observations", subscriptionId = subscription }, observeGeneration: generation, ignoreStaleObserve: true));
+            if (response.RootElement.ValueKind != JsonValueKind.Null) throw new JsonException();
+        }
+        catch {
+            // The token has no retry path. Disconnect its owner even after a rejection.
+            requestGate.Wait();
+            try {
+                if (connectionGeneration == generation) { socket?.Dispose(); socket = null; bufferedActionEvents.Clear(); }
+            } finally { requestGate.Release(); }
+            throw;
+        }
+    }
 }
 /// <summary>Connection-owned cursor. SnapshotJson/PollJson return the transport
 /// envelope; inspect document.status and resubscribe after gap/stale_session.

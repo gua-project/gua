@@ -211,7 +211,7 @@ public sealed partial class GuaWebSocketContext : IGuaContext, IGuaClockContext,
         finally { requestGate.Release(); }
     }
     private string Raw(object command, TimeSpan? responseTimeout = null, long? observeGeneration = null,
-        bool ignoreStaleObserve = false, Action<long>? onSuccess = null)
+        bool ignoreStaleObserve = false, Action<long>? onConnection = null)
     {
         requestGate.Wait();
         try
@@ -220,8 +220,8 @@ public sealed partial class GuaWebSocketContext : IGuaContext, IGuaClockContext,
                 if (ignoreStaleObserve) return "null";
                 throw new InvalidOperationException("Observe subscription belongs to an inactive connection.");
             }
-            EnsureConnected(); var id = nextId++; Send(Envelope(id, command));
-            while (true) { using var document = JsonDocument.Parse(Receive(responseTimeout)); var root = document.RootElement; if (!root.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id) continue; if (!root.GetProperty("ok").GetBoolean()) throw new RemoteCommandRejectedException(root.GetProperty("error").GetString()); var result = root.GetProperty("result").GetRawText(); onSuccess?.Invoke(connectionGeneration); return result; }
+            EnsureConnected(); onConnection?.Invoke(connectionGeneration); var id = nextId++; Send(Envelope(id, command));
+            while (true) { using var document = JsonDocument.Parse(Receive(responseTimeout)); var root = document.RootElement; if (!root.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id) continue; if (!root.GetProperty("ok").GetBoolean()) throw new RemoteCommandRejectedException(root.GetProperty("error").GetString()); return root.GetProperty("result").GetRawText(); }
         }
         finally { requestGate.Release(); }
     }

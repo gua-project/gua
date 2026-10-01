@@ -67,6 +67,70 @@ continuity の既定は unverified。再取得は失われた中間 Change を�
 observationId を発行する。bounds/position/frame を baseline の既定正規化で
 削除しない。baseline 結果は別添付である。Viewer の前後差分は因果を意味しない。
 
+## T-03 Observe 実購読の保存（OPEN-03/04、#125）
+
+Observeの公開・取得不能・寿命・標準fieldとの分離は
+[Observe v1](observe-v1.md)、接続所有権は[Observe transport v1](observe-transport-v1.md)に従う。
+Traceは検知境界を追加せず、getterの未公開の中間代入を推測しない。
+
+`.NET GuaTraceObservations.Subscribe(trace, stepId, context)` はTrace専用の独立購読を作る。
+local GuaContextと実WebSocket clientに対応する。Gua.Runtimeには公開factory overloadで
+`SubscribeObservations(profile)` と `GetObserveSnapshotTransportJson(profile)` を渡せる。
+localはTraceと同じprofileを選び、remote/factoryは応答profileの一致を保存前に検証する。
+hostの認可は既存経路の責務であり、Traceのprofileで昇格しない。
+
+- 初期の原子的Snapshot+cursorを `before` 等の取得契機で保存する。
+  保存内容は `{entries, catalogs}`、公開時点はObservation Recordの
+  `metadata.publication`へ分ける。entryの取得不能status/errorも保存し、空Snapshotにしない。
+- `Poll(stepId, reason)` は受信した各Changeを `observation.change` に追記する。
+  `channel=observe`、`intervalId`、収集時点のreason、`continuity=continuous`、
+  `received`（元のkind/boundary/Owner/登録/Value/status/error/host参照）、`catalogs`を持つ。
+  native uint64のID/epoch/frame/revision/sequenceだけを十進文字列にし、共通Valueの整数は数値を維持する。
+  added/changed/removed/unavailable/recoveredを区別し、存在しないValueは省略する。
+- source/epoch/sequenceの連続性を受信区間全体で確認する。`continuous`はこの購読の
+  受信済み公開Changeの連続性で、内部状態・標準tree・操作との因果は保証しない。
+- gap/stale_session/通信・取得失敗はblobなしのgap/stale/failed観測と品質issueへ残す。
+  以降のPollも確認済みの欠損理由を再購読まで維持し、stale/failedをgapへ読み替えない。
+  取得を再試行して成功した空履歴に読み替えない。保存上限も`observe-storage-gap`で示す。
+  成功した主結果でも、これらの品質issueがあればOnFailureで破棄しない。
+  汎用`Observe`でもpartial/gap/stale/failed/outsideRetentionを品質issueへ記録し、
+  正常不在のabsentとは分けて、成功した主結果のTraceを保持する。
+- `Snapshot(stepId, reason)` は最新公開値の新しい読取時点。cursorを進めず、連続性はunverified。
+  古い購読epochとは別epoch、またはcursorより古いsequenceのSnapshotはstale。`Resubscribe`は新しいintervalIdと
+  Snapshot+cursorから始めるが、過去の欠損は残る。background pollingや自動再購読は行わない。
+- `Dispose`は専用購読だけ解放する。他のObserve購読やaction completion queueに触らない。
+
+`GuaTraceCapture.Ui/World`は標準treeをprofileに従って別々に取得し、各epoch/frame/revisionと
+内容を分離する。`Tree`の公開getter overloadは呼出側が認可済みprofileを使う。
+UI/World/ObserveのsourceIdは取得元ごとに明記し、同時取得とは称さない。
+`World`のcontext overloadはprofileを選択できるローカル`GuaContext`のみ取得する。
+remote/custom contextはfailedとし、hostの認可済みprofileを確認した呼出側が
+`Tree`のgetter overloadを使う。Traceのprofile名だけでremote profileを保証しない。
+位置・bounds・公開fieldをbaseline用に除外しない。失敗はfailed、指定epochとの不一致はstale。
+TreeはUI Tree v2／World Object Tree v1のschemaで子要素を含めて
+検証してからavailableにする。metadataだけの応答や不正な要素はfailedでblobを作らず、
+正しいenvelopeの空配列は正常な空Treeとして保存する。
+getter例外本文は保存しない。検索partial/truncatedは汎用`Observe(..., "partial", ...)`で
+結果そのものとともに明記し、正常不在のabsentと混同しない。
+
+呼出側はbefore/input-complete/wait-end/main-result/after-cleanupの各実取得時点で
+PollとSnapshotを呼ぶ。主結果決定時とcleanup後は別Observation Recordであり上書きしない。
+schemaVersion 1の追加event dataとして旧readerも汎用JSON表示できる。
+`observation.change`の`change`と`received.kind`は一致が必須であり、`catalogs`は
+Observe transportと共通のsingle-enum catalog契約で検証する。ChangeではenumTypeを持つ
+before/after Valueに対応するcatalogが必須であり、非enum・欠けたValueのcatalogとvalue catalogは不可。
+catalogの単一定義はValueと同じenumTypeを持ち、scalarまたはcollectionの全memberを含むことが必須。
+標準JSON Schemaは異なるinstance pathの値を比較できないため、schemaは構造制約を検証し、
+続けて配布同梱の`trace-observe-semantics.mjs`の`validateTraceObserveSemantics(record)`を適用する。
+別言語のvalidatorも同じ意味制約を実装する。schemaだけの成功はこの対応の検証完了を意味しない。
+受信ChangeのsessionEpoch・ownerId・registrationIdは正の十進文字列で、
+sequence・revision・UI/World frame等のカウンターは0を許す。
+十進uint64はUInt64.MaxValue以下に限り、外側hostもsourceId・epoch・revisionの型を検証する。
+NuGetの`trace/`にはTraceと参照先Observe transport・Observe・enum catalog・Value schemaを
+同梱する。offline validatorでは同梱schemaをそれぞれの`$id`で登録して使う。
+既存Observe APIの引数・binary signatureは保持する。Reader/Viewerはgap/stale/failed/partial/outsideRetentionを
+記録品質として示し、Viewerの前後比較は同一channel/source/epochの読取に限る。
+
 ## 保存と上限（OPEN-10）
 
 `GuaTraceOptions` の公開既定値:
@@ -110,6 +174,12 @@ Dispose は結果未確定なら Interrupted で閉じる。強制終了時の R
 明示 sensitive=true/mask=true の object 全体、または API の sensitive 引数を
 マスクしてから session buffer/queue/hash に入れる。追加の既知秘密文字列は
 Secrets に登録できる。heuristic による完全検出は約束しない。
+UI/World Tree helperはredaction後にもchannel schemaを検証し、構造語の置換で
+無効になったTreeをfailedとして扱う。schemaを維持するlabel等のマスクはavailableを維持する。
+Observe transportはdocumentの全要素と対応catalogをprotocol schemaで検証してから保持する。
+typed Observe payloadに既知秘密文字列の置換が必要な場合は、その観測区間全体をfailedとして
+記録し、Value・catalog・中間Changeを保持しない。enum memberや構造語の置換でschemaを壊さず、
+既存の欠損区間を再購読で復元済みとして扱わない。unsubscribe失敗時は当該世代の接続を閉じる。
 sourceFile は basename のみにする。名前・任意 JSON・例外添付にも同じ redaction を適用する。
 
 Diagnostics helper は supplied context の公開 diagnostics のみ読む。Screenshot は
@@ -194,7 +264,7 @@ unconfirmed として扱い、completion が返した epoch でのみ確定相�
 | --- | --- | --- |
 | #123 T-01 | schema、writer/reader、有限上限、4 保存組合せ、部分末尾、redaction、容量/中断の故障 fixture | 強制終了時の未flush/メモリのみの保存は保証対象外 |
 | #124 T-02 | Selector/解決ID、明示/自動Step、native UI/Input/cleanup lifecycle、遅い結果、非破壊履歴 | native履歴未提供hostのphaseは未提供と表示。ゲーム画面でのGodot/Unity E2Eは別途 |
-| #125 T-03 | Snapshot/観測の分離、Change 記録口、位置差分 | #119/#120 の購読連続性/欠損契約と実接続（OPEN-03/04） |
+| #125 T-03 | Snapshot/観測の分離、Observeの実native/実WebSocket購読、Value/カタログ、中間Change、欠損、独立UI/World読取 | ゲーム内部の未公開変化、失われた履歴の復元は保証対象外。各Runnerが取得契機を明示する |
 | #126 T-04 | 外部 Runner API、共通 Value、注釈/添付、評価/主結果分離、サンプル | 上記 native/Observe 統合後の横断受け入れ |
 | #127 T-05 | 共通 React、静的 HTML、timeline/状態/JSON/区間差分、配布 | Screenshot pixel policy と bounds overlay、全端点の可視化 |
 | #128 T-06 | diagnostics 添付、既存形式の汎用添付 | #106/#108 の Lint/comparison 実接続、全機能統合試験 |

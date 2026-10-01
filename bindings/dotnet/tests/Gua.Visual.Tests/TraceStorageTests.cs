@@ -14,6 +14,38 @@ public sealed class TraceStorageTests
     private static T Field<T>(GuaTraceSession trace, string name) =>
         (T)typeof(GuaTraceSession).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(trace)!;
 
+    [Test]
+    public async Task PublicIncompleteObservationIsRetainedUnderOnFailure(
+        [Values(GuaTraceCaptureMode.Recent, GuaTraceCaptureMode.Streaming)] GuaTraceCaptureMode mode,
+        [Values("partial", "gap", "stale", "failed", "outsideRetention")] string availability)
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, CaptureMode = mode });
+        var step = trace.BeginStep(GuaTraceStepKind.Action, "public observation");
+        var observation = trace.Observe(step, "world", "wait-end", availability, new("runtime", "1"));
+        Assert.That(observation, Is.Not.Empty);
+        trace.EndStep(step, GuaTraceOutcome.Passed);
+        Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.True);
+        Assert.That(Directory.Exists(trace.ArtifactPath), Is.True);
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("passed"));
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain("observation-" + availability));
+        Assert.That(read.Events.Single(e => e.Type == "observation").Data.GetProperty("observationId").GetString(), Is.EqualTo(observation));
+    }
+
+    [Test]
+    public async Task CompletePublicObservationDoesNotForceOnFailureRetention(
+        [Values(GuaTraceCaptureMode.Recent, GuaTraceCaptureMode.Streaming)] GuaTraceCaptureMode mode,
+        [Values("available", "absent")] string availability)
+    {
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, CaptureMode = mode });
+        var step = trace.BeginStep(GuaTraceStepKind.Action, "public observation");
+        trace.Observe(step, "world", "wait-end", availability, new("runtime", "1"));
+        trace.EndStep(step, GuaTraceOutcome.Passed);
+        Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.True);
+        Assert.That(trace.Status.Issues, Is.Empty);
+        Assert.That(Directory.Exists(trace.ArtifactPath), Is.False);
+    }
+
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceOutcome.Unknown)]
     [TestCase(GuaTraceCaptureMode.Streaming, GuaTraceOutcome.Unknown)]
     [TestCase(GuaTraceCaptureMode.Recent, GuaTraceOutcome.Interrupted)]

@@ -26,6 +26,8 @@ pollの応答喪失・不正応答・timeout・cancelでも、cursorが進んだ
 同じ購読の再試行で空の成功として扱わず、新しいSnapshotと購読から再開する。
 same-page portでは失効したhandleを即座に拒否し、所有portでその購読を解除する。
 再接続は可能だが既存tokenは復元しない。明示的なサーバー拒否では既存購読を維持する。
+ただしDispose済みtokenのunsubscribe拒否・応答喪失・不正な成功応答では再試行経路がないため、
+そのtokenを所有した接続世代だけを閉じて残存購読を回収する。
 古い接続のtokenはpollを拒否し、Disposeは新しい接続へunsubscribeを送らない。
 Inspector/MCP/WebMCPが返すsubscriptionIdはclient内の再利用しないhandleである。
 そのclientへ返して使用し、clientが所有socket/engine portとwireのsubscriptionIdへ変換する。

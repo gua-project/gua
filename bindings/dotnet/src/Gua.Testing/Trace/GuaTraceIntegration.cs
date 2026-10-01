@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Json.Schema;
 using Gua.Core;
 
 namespace Gua.Testing;
@@ -96,6 +97,72 @@ internal sealed class GuaTraceAction
 
 public static class GuaTraceCapture
 {
+    private static readonly Lazy<JsonSchema> UiSchema = new(() => LoadSchema("UiTree"));
+    private static readonly Lazy<JsonSchema> WorldSchema = new(() => LoadSchema("WorldTree"));
+    private static JsonSchema LoadSchema(string name)
+    {
+        using var stream = typeof(GuaTraceCapture).Assembly.GetManifestResourceStream($"Gua.Trace.{name}.schema.json")!;
+        using var reader = new StreamReader(stream);
+        return JsonSchema.FromText(reader.ReadToEnd());
+    }
+
+    public static string Ui(GuaTraceSession trace, string stepId, GuaContext context,
+        string sourceId, string reason, string? expectedSessionEpoch = null) =>
+        Tree(trace, stepId, "ui", sourceId, reason,
+            () => context.GetUiTreeJson(GuaTraceObservations.Profile(trace)), expectedSessionEpoch);
+
+    public static string World(GuaTraceSession trace, string stepId, IGuaWorldContext context,
+        string sourceId, string reason, string? expectedSessionEpoch = null) =>
+        Tree(trace, stepId, "world", sourceId, reason,
+            () => context is GuaContext local
+                ? local.GetWorldObjectTreeJson(GuaTraceObservations.Profile(trace))
+                : throw new InvalidOperationException("Use an authorized Tree getter for remote World capture."), expectedSessionEpoch);
+
+    /// <summary>The getter must use the host-authorized profile. UI and World are separate
+    /// reads, with independent host references. A failed read never becomes an empty tree.</summary>
+    public static string Tree(GuaTraceSession trace, string stepId, string channel, string sourceId,
+        string reason, Func<string> getter, string? expectedSessionEpoch = null)
+    {
+        try
+        {
+            using var parsed = JsonDocument.Parse(getter());
+            var root = parsed.RootElement;
+            var schema = channel switch {
+                "ui" => UiSchema.Value,
+                "world" => WorldSchema.Value,
+                _ => throw new JsonException(),
+            };
+            if (!schema.Evaluate(root).IsValid || root.GetProperty("sessionEpoch").GetUInt64() == 0)
+                throw new JsonException();
+            // Validate the same transformation that will enter the snapshot buffer.
+            // Safe text masking remains available; masked structural values do not.
+            using var redacted = JsonDocument.Parse(trace.RedactObservation(root));
+            if (!schema.Evaluate(redacted.RootElement).IsValid) throw new JsonException();
+            string Number(string key) => root.GetProperty(key).GetUInt64().ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var host = new GuaTraceHost(sourceId, Number("sessionEpoch"), Number("frameSequence"), Number("revision"));
+            if (expectedSessionEpoch is not null && expectedSessionEpoch != host.SessionEpoch)
+            {
+                trace.ObservationIssue("tree-stale");
+                return trace.Observe(stepId, channel, reason, "stale", host);
+            }
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                foreach (var field in root.EnumerateObject())
+                    if (field.Name is not ("sessionEpoch" or "frameSequence" or "revision")) field.WriteTo(writer);
+                writer.WriteEndObject();
+            }
+            using var content = JsonDocument.Parse(stream.ToArray());
+            return trace.Observe(stepId, channel, reason, "available", host, content.RootElement);
+        }
+        catch
+        {
+            trace.ObservationIssue("tree-failed");
+            return trace.Observe(stepId, channel, reason, "failed", new(sourceId, expectedSessionEpoch ?? "0"));
+        }
+    }
+
     /// <summary>Reads only diagnostics exposed by the supplied context. Screenshots are deliberately omitted.</summary>
     public static bool Diagnostics(GuaTraceSession trace, string stepId, IGuaContext context)
     {

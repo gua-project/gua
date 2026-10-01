@@ -62,6 +62,11 @@ public sealed partial class GuaTraceSession : IDisposable, IAsyncDisposable
     }
 
     public GuaTraceStatus Status { get { lock (_gate) return StatusUnsafe(); } }
+    // Typed Observe payloads cannot use the generic redacted representation.
+    // Omit the entire affected interval before retaining any values or catalogs.
+    internal bool ObservationRedactionIsUnchanged(JsonElement payload) =>
+        _redaction.Json(payload).SequenceEqual(new GuaTraceRedaction(Array.Empty<string>()).Json(payload));
+    internal byte[] RedactObservation(JsonElement payload) => _redaction.Json(payload);
     private GuaTraceStatus StatusUnsafe() => new(_stopped, _evicted, _dropped, _issues.OrderBy(x => x, StringComparer.Ordinal).ToArray());
     private void Stop(string reason) { _stopped = true; _issues.Add(reason); }
     private GuaTraceManifest Manifest(bool finalized) => new(1, TraceId,
@@ -185,11 +190,18 @@ public sealed partial class GuaTraceSession : IDisposable, IAsyncDisposable
 
     /// <summary>Snapshot content is deduplicated after masking, independently of the observation ID.</summary>
     public string Observe(string stepId, string channel, string reason, string availability,
-        GuaTraceHost host, JsonElement? snapshot = null, string continuity = "unverified", bool sensitive = false)
+        GuaTraceHost host, JsonElement? snapshot = null, string continuity = "unverified", bool sensitive = false) =>
+        ObserveWithMetadata(stepId, channel, reason, availability, host, snapshot, continuity, sensitive);
+
+    internal string ObserveWithMetadata(string stepId, string channel, string reason, string availability,
+        GuaTraceHost host, JsonElement? snapshot = null, string continuity = "unverified", bool sensitive = false,
+        JsonElement? metadata = null)
     {
         lock (_gate)
         {
             if (_closed || _stopped || !_byId.TryGetValue(stepId, out var step)) return "";
+            if (availability is "partial" or "gap" or "stale" or "failed" or "outsideRetention" && _issues.Count < 64)
+                _issues.Add("observation-" + availability);
             var observationId = Guid.NewGuid().ToString("N");
             var blobs = new Dictionary<string, byte[]>();
             string? blob = null;
@@ -200,9 +212,11 @@ public sealed partial class GuaTraceSession : IDisposable, IAsyncDisposable
                 blob = "snapshots/" + Hash(bytes) + ".json"; blobs.Add(blob, bytes);
             }
             return AppendUnsafe(step, "observation", GuaTraceJson.Element(new { observationId, channel, reason,
-                availability, host, continuity, blob }), blobs: blobs) ? observationId : "";
+                availability, host, continuity, blob, metadata }), blobs: blobs) ? observationId : "";
         }
     }
+    internal string ObservationProfile => _options.Profile;
+    internal void ObservationIssue(string issue) { lock (_gate) { if (!_closed && _issues.Count < 64) _issues.Add(issue); } }
     /// <summary>JSON-only attachment boundary; screenshots require a separate caller-side pixel policy.</summary>
     public bool Attach(string stepId, string schema, JsonElement content, bool sensitive = false)
     {

@@ -1,5 +1,81 @@
 # #109 Trace 基盤の検証記録
 
+## #125 review追加検証（2026-10-01）
+
+追加の接続世代reviewではsubscribeの送信前に世代を保持し、失敗cleanupがその世代だけを
+閉じるよう修正した。失われた返信・不正成功返信・ゼロ購読IDの閉鎖3/3とObserve/transport 38/38が成功。
+catalogの動的enumType/member照合はschema後の配布同梱意味validatorで検証し、scalar・
+list・setと空collectionの対応を確認した。汎用null/custom recordの監査追加回帰を含む
+schema+意味検証10/10、全Selector344/344、抽出NuGetだけからの
+オフライン検証（不一致型・欠けたmember拒否を含む）、両.NET target pack、型検査が成功。
+
+main `f8726e5`（#152のLifecycle/Web修正）取り込み後、Snapshotのcursorより古い公開sequenceを
+staleとして拒否し、同一/先行Snapshotがcursorを進めないことを検証した。Trace schemaは
+before/afterのenum Valueにだけ対応catalogを要求し、非enum・欠けた側・value catalogを拒否する。
+Observe 25/25、schema 9/9、全Selector 341/341、Visual 100/100、Inspector/Value 236/236、
+MSVC CTest 13/13、workspace型検査、両.NET targetのpack、NuGet offline schema検証が成功。
+全Selectorの初回では遅い診断読取の開始待ちが失敗した。診断読取を専用スレッドで確実に
+開始し、停止後の固定50ms待機を読取完了待機へ変更して再検証した。元の1秒期限と30ms
+停止期限、遅延記録拒否・completion queueを消費しないassertionは維持している。
+
+独立checkoutでmainとの文書競合を解消し、MSVC Debug nativeを再ビルドした。
+Observeの不正なentry/change/catalog、enum Valueとcatalogの型・member対応、空enum collection、
+enum member/構造語に一致する既知秘密文字列、unsubscribe拒否/timeout/不正成功応答を検証した。
+型付きObserve payloadにredactionが必要な区間はfailedとなり、Value/catalogを保持しない。
+
+- TraceObserveTests + ObserveTransportTests: 37/37成功。
+- Selectorの独立回帰: 311/311成功。共有TraceLifecycleTestsは#152のrace修正取り込み後に別検証する。
+- Gua.Visual.Tests: 96/96成功。
+- Inspector/ValueのBun回帰: 223/223成功。未確認/空host identityではSnapshot差分を表示しない。
+- MSVC build、CTest 12/12、両.NET target build、workspace型検査、NuGet offline schema検証が成功。
+- 累積差分の読み取り専用監査後、対応するcatalogとunsubscribeの追加修正を最終監査し、追加指摘なし。
+
+これらはローカル検証記録であり、最終HEADのremote CI・他OS・engine E2E成功を意味しない。
+
+追加レビューではUI/World Treeのredaction後schema検証と、正規化Observe Changeの
+未知field拒否を追加した。構造値button/world2dの置換はfailed・Blobなし、labelの安全な
+マスクはavailableとして保持する。Tree focused 8/8、Trace schema 9/9、Visual全100/100、
+Inspector/Value全224/224、両.NET target、型検査とNuGet offline検証が成功した。
+
+## #125 T-03 の追加検証（2026-09-30）
+
+Windows x64、MSVC 19.51 / Ninja、.NET SDK 10.0.401、Bun 1.4.0。
+このcheckoutのnative core/runtimeをビルドし、実登録→実購読→Trace writer→readerを検証した。
+WebSocketテストもFakeではなく実GuaRuntime/bridgeを使う。
+
+| 対象 | 結果 |
+| --- | --- |
+| CTest `build/trace` | 8/8 成功 |
+| `Gua.Selector.Tests`（Observe transportを含む） | 207/207 成功、skip 0 |
+| 追加 `TraceObserveTests` | 10/10 成功（local/remoteパラメータを含む） |
+| `Gua.Visual.Tests`（既存Trace/配布Viewerを含む） | 73/73 成功、skip 0 |
+| Trace schema/fixture + Reader/ViewerのBunテスト | 18/18 成功 |
+| `bun run check` | 全workspace成功 |
+| `Gua.Testing` net10.0 / netstandard2.1 | 成功、警告0 |
+| `bun run --filter @gua/inspector build:trace` | 成功 |
+
+AT-TRACE-004: 同一内容を異なるworldFrameで3回取得し、1 Blobと3 Observation Recordを確認。
+秘密値のValue/Enum Catalog、getter例外marker、profile不一致のデータが保存されないことを確認。
+AT-TRACE-005: 位置だけが1→2に変わるWorldの内容と別々のhost frameが保存されることを確認。
+AT-TRACE-006: First→Second→Thirdの実公開・受信Changeとカタログをlocal/remote経由で保存。
+主結果決定時のThirdがcleanup後のFirstで上書きされないことを確認。
+履歴容量1でgapを発火させ、最新Snapshotと再購読後にも古い欠損が残ることを確認。
+reset後はstale、getter失敗はunavailable/error=100、再登録の初期値はnot_sampled=101。
+removed-beforeの取得不能をダミーnullへ変換せず、新registrationIdを区別する。
+実WorldからObjectを削除し、同Runtime IDを再生成しても古い値と新しいOwnerを混同しない。
+並列Snapshot、Trace byte容量超過、参照整合性を確認。partial/failed/stale/outsideRetentionと
+正常不在をfixtureで分け、Viewerが異なるchannel/source/epochの前後比較を作らないことを確認。
+
+VS presetの自動検出は失敗したため、VsDevCmdでMSVC環境を初期化してNinjaで構成。
+Visualテストの初回1件は未生成の同梱Viewerが原因で失敗し、Viewer生成後に全件成功。
+remote CI、他OS、Godot/Unityのゲームを使うE2Eは今回未実行。
+各Runnerの自動取得タイミング、未公開の内部代入、失われた中間状態の復元は保証していない。
+
+読み取り専用監査のstale/failed後の再Pollがgapへ変わる指摘を、親側の回帰試験で再現した。
+理由を購読状態に保持する修正後、repeated-stale/repeated-failedと全TraceObserve回帰に成功。
+Trace schemaのstatus欠落受理も失敗fixtureで再現し、Observe v1と同じ
+before/after status・Value・error整合条件へ修正。status欠落・正常Valueとerrorの併記を拒否する。
+
 ## T-02 lifecycle相関（#124、2026-09-30）
 
 Windows / MSVC 19.51 / Ninja Debug / .NET 10.0.401で実施した。

@@ -291,6 +291,30 @@ var report = GuaTraceReport.WriteHtml(trace.ArtifactPath, "artifacts/report.html
 
 `BeginStep`/`EndStep`/`Mark`/`Correlate`/`RecordRequest`/`Observe`/`Change`/
 `Evaluate`/`Annotate`/`Attach`/`FlushAsync` は外部 Runner から使用できる。
+
+Observeの実購読を保存する場合は独立した`GuaTraceObservations`を使う。
+購読はTraceのprofileと一致する応答だけを保存する。各取得契機は呼出側が指定する:
+
+```csharp
+var step = trace.BeginStep(GuaTraceStepKind.Action, "transition");
+using var observation = GuaTraceObservations.Subscribe(trace, step, context);
+// 操作・wait等を実行した実際の境界で呼ぶ。
+observation.Poll(step, "input-complete");
+observation.Snapshot(step, "wait-end");
+observation.Snapshot(step, "main-result");
+// cleanup後は別の観測として追記する。
+observation.Poll(step, "after-cleanup");
+observation.Snapshot(step, "after-cleanup");
+trace.EndStep(step, GuaTraceOutcome.Passed);
+```
+
+`context`はGuaContextまたはGuaWebSocketContext。Gua.Runtimeには購読とSnapshot取得の
+factory overloadを使う。`Poll`がfalseなら欠損・失敗・保存上限を確認し、必要時に
+`Resubscribe(step)`で新しいSnapshot+cursorを取得する。過去の欠損は消えない。
+getter失敗とnot_sampledはentry/Changeのstatus/errorに残り、ダミーnullを生成しない。
+標準UI/Worldは`GuaTraceCapture.Ui/World`（remote等は`Tree`の認可済みgetter）で別取得し、
+sourceIdとreasonを明記する。部分検索は`Observe`へ`availability="partial"`で保存する。
+
 `GuaTraceCapture.Diagnostics` は既存 context の公開 diagnostics を JSON 添付にする。
 Screenshot は別の pixel mask 方針が必要なので自動収集しない。
 主結果は `SetPrimaryOutcome` で固定でき、以後の cleanup/遅い結果は追記する。
@@ -310,6 +334,11 @@ dotnet run --project examples/dotnet-trace/Gua.TraceExample.csproj -- artifacts/
 
 完全な契約、上限と親 #109 の未完了条件は
 [Trace v1](../../../../protocol/specs/trace-v1.md) を参照。
+
+外部writerのObserve Changeは、配布`trace/trace.schema.json`の構造検証後に同梱の
+`trace/trace-observe-semantics.mjs`から`validateTraceObserveSemantics(record)`を呼ぶ。
+enumType一致と全memberのcatalog所属は標準JSON Schemaのinstance間比較では表現できない
+意味制約であり、別言語validatorも同じ照合を行う。両段階の成功が必要である。
 
 native lifecycleを記録する場合は、raw操作前に `var lifecycle = trace.Watch(context);`
 を呼ぶ。UI completion/Locator helperでは自動接続される。WatchはDebug diagnosticsの

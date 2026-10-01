@@ -10,6 +10,37 @@ const manifest = { schemaVersion: 1, traceId, captureMode: "recent", savePolicy:
 function event(sequence: number, type: string, data: unknown) { return { schemaVersion: 1, traceId, sequence, eventId: `e${sequence}`, stepId, type, collectedMilliseconds: sequence, data }; }
 const lines = (...events: unknown[]) => events.map(e => JSON.stringify(e)).join("\n") + "\n";
 describe("Trace v1 offline reader/viewer", () => {
+  test("unknown or empty observation identity never establishes a snapshot comparison", () => {
+    for (const identity of [{}, { channel: "ui" }, { channel: "ui", host: {} },
+      { channel: "ui", host: { sourceId: "", sessionEpoch: "1" } },
+      { channel: "ui", host: { sourceId: "game", sessionEpoch: "" } },
+      { channel: "", host: { sourceId: "game", sessionEpoch: "1" } }]) {
+      const blobs = Object.fromEntries([1, 2].map(i => [`snapshots/${String(i).repeat(64)}.json`, { position: i }]));
+      const trace = parseTrace(JSON.stringify(manifest), lines(...[1, 2].map(i => event(i, "observation", {
+        ...identity, reason: `read-${i}`, availability: "available", blob: `snapshots/${String(i).repeat(64)}.json` }))), blobs);
+      expect(renderToStaticMarkup(<GuaTraceViewer trace={trace} />)).not.toContain('"path":');
+    }
+  });
+  test("gaps and failed/partial/stale reads remain unverified after another snapshot", () => {
+    for (const availability of ["gap", "failed", "partial", "stale", "outsideRetention"]) {
+      const trace = parseTrace(JSON.stringify({ ...manifest, lastSequence: 3 }), lines(
+        event(1, "step.begin", {}), event(2, "observation", { channel: "observe", availability, reason: "wait-end" }),
+        event(3, "observation", { channel: "observe", availability: "available", reason: "resynchronized", continuity: "subscription-start" })));
+      expect(trace.issues).toContain(`observation-${availability}`);
+      expect(renderToStaticMarkup(<GuaTraceViewer trace={trace} />)).toContain("Recording is incomplete");
+    }
+  });
+  test("interval differences never compare UI with World or different source/epoch", () => {
+    const blobs = Object.fromEntries([1, 2, 3, 4].map(i => [`snapshots/${String(i).repeat(64)}.json`, { position: i }]));
+    const observation = (i: number, channel: string, sourceId: string, sessionEpoch: string, reason: string) =>
+      event(i, "observation", { observationId: `o${i}`, channel, host: { sourceId, sessionEpoch }, reason,
+        availability: "available", blob: `snapshots/${String(i).repeat(64)}.json` });
+    const trace = parseTrace(JSON.stringify({ ...manifest, lastSequence: 4 }), lines(
+      observation(1, "ui", "game", "1", "ui-before"), observation(2, "world", "game", "1", "world-before"),
+      observation(3, "ui", "other", "1", "other"), observation(4, "ui", "game", "2", "reset")), blobs);
+    const html = renderToStaticMarkup(<GuaTraceViewer trace={trace} />);
+    expect(html).not.toContain("ui-before → world-before"); expect(html).not.toContain('"path":');
+  });
   test("missing complete streaming record is reported even when the tail is intact", () => {
     const trace = parseTrace(JSON.stringify({ ...manifest, captureMode: "streaming", lastSequence: 3 }),
       lines(event(1, "step.begin", {}), event(3, "step.end", { outcome: "passed" })));

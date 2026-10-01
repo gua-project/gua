@@ -1,0 +1,23 @@
+{
+  "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "stepId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "intervalId": "cccccccccccccccccccccccccccccccc",
+  "host": { "sourceId": "fixture-source", "sessionEpoch": "1", "revision": "1" },
+  "unavailable": [
+    { "reason": "wait-end", "availability": "gap" },
+    { "reason": "input-complete", "availability": "failed" },
+    { "reason": "main-result", "availability": "partial" },
+    { "reason": "after-cleanup", "availability": "stale" },
+    { "reason": "before", "availability": "outsideRetention" },
+    { "reason": "before", "availability": "absent" }
+  ],
+  "transitions": [
+    { "kind": "added", "afterStatus": "available", "after": { "type": "integer", "value": 1 } },
+    { "kind": "changed", "beforeStatus": "available", "before": { "type": "integer", "value": 1 }, "afterStatus": "available", "after": { "type": "integer", "value": 2 } },
+    { "kind": "removed", "beforeStatus": "available", "before": { "type": "integer", "value": 2 } },
+    { "kind": "unavailable", "beforeStatus": "available", "before": { "type": "integer", "value": 2 }, "afterStatus": "unavailable", "afterError": 100 },
+    { "kind": "recovered", "beforeStatus": "unavailable", "beforeError": 100, "afterStatus": "available", "after": { "type": "integer", "value": 3 } },
+    { "kind": "removed", "beforeStatus": "unavailable", "beforeError": 100 }
+  ],
+  "invalidChanges": ["missing-after", "null-after", "numeric-registration-id", "unsupported-kind", "missing-after-status", "missing-before-status", "error-with-value"]
+}
