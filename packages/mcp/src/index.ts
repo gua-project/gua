@@ -1,5 +1,6 @@
 import path from "node:path";
 import { spatialTools, spatialBatchArguments, type GuaSpatialAdvertisement, type GuaSpatialBatch, type GuaSpatialBatchResult } from "gua-world-tools";
+import { isSpatialBatchResult } from "./spatial-result.js";
 import { ObserveWireRejectionError, decodeObserveWireResponse, observeTools, observeSubscriptionId, parseObserveTransport } from "gua-value";
 
 import {
@@ -1075,9 +1076,18 @@ export class GuaBridgeClient {
         const result = await this.request<GuaSpatialBatchResult | null>({ type: "poll_spatial_batch", batchId: batch.batchId },
           Math.max(1, this.requestTimeoutMs - (Date.now() - started)), signal, socket);
         if (result !== null) {
-          if (result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" || result.batchId !== batch.batchId ||
-            result.items.length !== batch.queries.length || result.items.some((item, index) => item.requestId !== batch.queries[index]!.requestId || item.queryId !== batch.queries[index]!.queryId))
+          if (!isRecord(result) || result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" || result.batchId !== batch.batchId ||
+            !Array.isArray(result.items) || result.items.length !== batch.queries.length || result.items.some((item, index) => !isRecord(item) || item.requestId !== batch.queries[index]!.requestId || item.queryId !== batch.queries[index]!.queryId))
             throw new Error("Spatial correlation mismatch.");
+          if (!isSpatialBatchResult(result) || result.items.some((item, index) => {
+            const query = batch.queries[index]!;
+            if (item.state !== "completed") return false;
+            const geometry = item.result;
+            return !isRecord(geometry) ||
+              geometry.requestId !== query.requestId || geometry.queryId !== query.queryId ||
+              geometry.sessionEpoch !== query.sessionEpoch || geometry.spaceId !== query.spaceId || geometry.spaceEpoch !== query.spaceEpoch ||
+              geometry.kind !== query.kind;
+          })) throw new Error("Invalid spatial terminal result.");
           return result;
         }
         await new Promise(resolve => setTimeout(resolve, 10));

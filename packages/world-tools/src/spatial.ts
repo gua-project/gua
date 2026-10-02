@@ -1,4 +1,6 @@
 import { spatialBatchInputSchema } from "./spatial-schema.generated.js";
+/** Output validation uses the same protocol-generated definitions as the tools. */
+export const spatialBatchResultSchema = { $ref: "#/$defs/batchResult", $defs: spatialBatchInputSchema.$defs };
 export interface GuaSpatialVector { x: number; y: number; z: number }
 export interface GuaSpatialBasis { x: GuaSpatialVector; y: GuaSpatialVector; z: GuaSpatialVector }
 export type GuaSpatialOperation = "raycast" | "overlap" | "sweep";

@@ -100,6 +100,114 @@ public sealed class SpatialTransportTests
         var result=request.GetAwaiter().GetResult(); Assert.That(result.BatchId,Is.EqualTo(1));
         Assert.That(result.Items.Select(i=>i.RequestId),Is.EqualTo(batch.ReadBatch().Queries.Select(q=>q.RequestId)));
     }
+    [TestCase(false,1048576)] [TestCase(true,1048576)]
+    [TestCase(false,1)] [TestCase(true,1)]
+    public async Task PartialBoundaryResultSurvivesWebSocketTraceReaderAndReport(bool truncated,int storageLimit)
+    {
+        using var h=new Host(); var listener=new TcpListener(IPAddress.Loopback,0); listener.Start();
+        int port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); Assert.That(h.Runtime.StartInspectorBridge(port),Is.True);
+        using var remote=new GuaWebSocketContext($"ws://127.0.0.1:{port}"); using var original=Doc(2);
+        var input=original.ReadBatch();
+        // Three ordered queries: one completed, one consumed but unfinished,
+        // one never consumed. End must preserve all three distinctions.
+        var third=JsonNode.Parse(original.ToJson())!["queries"]![0]!.DeepClone(); third["requestId"]=3; third["queryId"]="q3";
+        using var thirdDoc=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Request,third.ToJsonString());
+        input.Queries=[..input.Queries,thirdDoc.ReadRequest()];
+        var directory=Path.Combine(TestContext.CurrentContext.WorkDirectory,"gua-spatial-partial",Guid.NewGuid().ToString("N"));
+        using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=directory,SavePolicy=GuaTraceSavePolicy.Always,MaxAttachmentBytes=storageLimit});
+        var call=Task.Run(()=>remote.QuerySpatialBatch(input,TimeSpan.FromSeconds(3),trace:trace));
+        using var boundary=Doc(3); ulong? lease=null; var deadline=DateTime.UtcNow.AddSeconds(2);
+        while(lease is null && DateTime.UtcNow<deadline) { lease=h.Spatial.Begin(h.Provider,boundary); if(lease is null) await Task.Delay(5); }
+        Assert.That(lease,Is.Not.Null,"The submitted batch must reach the real native host.");
+        using(var first=h.Spatial.Take(lease!.Value)) {
+            Assert.That(first!.ReadRequest().RequestId,Is.EqualTo(1));
+            var execution=JsonNode.Parse(DocJson(4))!;
+            execution["outcome"]="hit"; execution["nearest"]="returnedHits"; execution["truncated"]=truncated;
+            execution["hits"]=JsonNode.Parse("[{\"relation\":\"unknown\",\"distance\":0.5,\"missing\":{\"position\":\"fixture unavailable\",\"normal\":\"fixture unavailable\",\"collisionRef\":\"anonymous\",\"worldObjectId\":\"unregistered\"}}]");
+            using var completion=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Execution,execution.ToJsonString()); h.Spatial.Complete(lease.Value,completion);
+        }
+        using(var second=h.Spatial.Take(lease.Value)) Assert.That(second!.ReadRequest().RequestId,Is.EqualTo(2));
+        h.Spatial.End(lease.Value);
+        var received=await call;
+        Assert.That(received.Items,Has.Length.EqualTo(3));
+        Assert.That(received.Items.Select(i=>i.RequestId),Is.EqualTo(new long[]{1,2,3}));
+        Assert.That(received.Items.Select(i=>i.QueryId),Is.EqualTo(new[]{"q1","q2","q3"}));
+        Assert.That(received.Items.Select(i=>i.State),Is.EqualTo(new[]{"completed","failed","notExecuted"}));
+        Assert.That(received.Items.Skip(1).Select(i=>i.Reason),Is.EqualTo(new[]{"boundary_ended","boundary_ended"}));
+        Assert.That(received.Items.Skip(1).All(i=>i.Result is null),Is.True);
+        Assert.That(received.Items[0].Result!.Truncated,Is.EqualTo(truncated));
+        await trace.CompleteAsync(GuaTraceOutcome.Failed); var saved=GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(saved.Manifest.PrimaryOutcome,Is.EqualTo("failed"));
+        Assert.That(saved.Events.Count(e=>e.Type=="step.begin" && e.Data.GetProperty("kind").GetString()=="lifecycle"),Is.EqualTo(1));
+        Assert.That(saved.Events.Any(e=>e.Type=="step.begin" && e.Data.GetProperty("kind").GetString()=="action"),Is.False);
+        var receipt=saved.Events.Single(e=>e.Type=="spatial.received");
+        Assert.That(receipt.Data.GetProperty("batchId").GetInt64(),Is.EqualTo(input.BatchId));
+        Assert.That(receipt.Data.GetProperty("queryTruncated").GetBoolean(),Is.EqualTo(truncated));
+        var states=receipt.Data.GetProperty("states").EnumerateArray().ToArray();
+        Assert.That(states.Select(s=>s.GetProperty("state").GetString()),Is.EqualTo(new[]{"completed","failed","notExecuted"}));
+        Assert.That(states.Select(s=>s.GetProperty("requestId").GetInt64()),Is.EqualTo(new long[]{1,2,3}));
+        Assert.That(states.Skip(1).Select(s=>s.GetProperty("reason").GetString()),Is.EqualTo(new[]{"boundary_ended","boundary_ended"}));
+        if(storageLimit==1) {
+            Assert.That(saved.Blobs,Is.Empty); Assert.That(saved.Manifest.Quality.Issues,Does.Contain("attachment-limit"));
+            Assert.That(saved.Events.Any(e=>e.Type=="spatial.storage"),Is.False);
+        } else {
+            var items=saved.Blobs.Values.Single().GetProperty("result").GetProperty("items").EnumerateArray().ToArray();
+            Assert.That(items,Has.Length.EqualTo(3)); Assert.That(items[0].GetProperty("result").GetProperty("truncated").GetBoolean(),Is.EqualTo(truncated));
+            Assert.That(items.Skip(1).All(i=>!i.TryGetProperty("result",out _)),Is.True);
+            Assert.That(items.Select(i=>i.GetProperty("state").GetString()),Is.EqualTo(new[]{"completed","failed","notExecuted"}));
+        }
+        var report=GuaTraceReport.WriteHtml(trace.ArtifactPath,Path.Combine(directory,"partial.html"));
+        Assert.That(report.Succeeded,Is.True,report.Error); var html=File.ReadAllText(report.Path!);
+        Assert.That(html,Does.Contain("boundary_ended").And.Contain("notExecuted"));
+    }
+    static string DocJson(int index) { using var document=Doc(index); return document.ToJson(); }
+    [TestCase("typescript","cancel")] [TestCase("typescript","timeout")]
+    [TestCase("typescript","disconnect")] [TestCase("typescript","correlation")]
+    [TestCase("mcp","cancel")] [TestCase("mcp","timeout")]
+    [TestCase("mcp","disconnect")] [TestCase("mcp","correlation")]
+    public async Task TypeScriptAndBuiltMcpInvalidateActualNativeOwner(string route,string fault)
+    {
+        using var h=new Host(1); var listener=new TcpListener(IPAddress.Loopback,0); listener.Start();
+        int port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); Assert.That(h.Runtime.StartInspectorBridge(port),Is.True);
+        var root=new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while(root is not null && !File.Exists(Path.Combine(root.FullName,"AGENTS.md"))) root=root.Parent;
+        Assert.That(root,Is.Not.Null,"This integration test requires the source checkout and built MCP driver.");
+        var start=new System.Diagnostics.ProcessStartInfo("bun") {WorkingDirectory=root!.FullName,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false};
+        foreach(var argument in new[]{"scripts/verify-spatial-owner.ts",$"ws://127.0.0.1:{port}",route,fault}) start.ArgumentList.Add(argument);
+        using var driver=System.Diagnostics.Process.Start(start)!;
+        var errors=driver.StandardError.ReadToEndAsync();
+        ulong? lease=null;
+        try {
+            Assert.That(await driver.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)),Is.EqualTo("poll"),"The fault must fire after actual native acceptance.");
+            using var boundary=Doc(3); lease=h.Spatial.Begin(h.Provider,boundary);
+            Assert.That(lease,Is.Not.Null,"Real host has the original pending batch.");
+            using var first=h.Spatial.Take(lease!.Value); Assert.That(first!.ReadRequest().RequestId,Is.EqualTo(1));
+            driver.StandardInput.WriteLine("fire"); driver.StandardInput.Flush();
+            await driver.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            var output=await driver.StandardOutput.ReadToEndAsync();
+            Assert.That(driver.ExitCode,Is.EqualTo(0),await errors);
+            Assert.That(output,Does.Contain("\"submissions\":1").And.Contain("\"connections\":1"));
+            // Closing the TS/MCP connection must invalidate the native owner.
+            // Its consumed completion is acknowledged, discarded and cannot be
+            // resumed by a later connection. Capacity one exposes leaked owners.
+            using var completion=Doc(4); Assert.DoesNotThrow(()=>h.Spatial.Complete(lease.Value,completion));
+            Assert.That(h.Spatial.Take(lease.Value),Is.Null); h.Spatial.End(lease.Value); lease=null;
+            GuaRuntimeSpatialClient? fresh=null; var deadline=DateTime.UtcNow.AddSeconds(2);
+            while(fresh is null && DateTime.UtcNow<deadline) {
+                try { fresh=h.Runtime.CreateSpatialClient(); }
+                catch(InvalidOperationException) { await Task.Delay(10); }
+            }
+            using(fresh) {
+                Assert.That(fresh,Is.Not.Null,"The disconnected native owner must release its bounded slot.");
+                using var info=fresh!.Describe(); Assert.That(info.ReadAdvertisement().Provider.ProviderId,Is.EqualTo("test"));
+                Assert.That(Assert.Throws<GuaSpatialException>(()=>fresh.Poll(1))!.Code,Is.EqualTo(GuaSpatialErrorCode.Stale));
+            }
+            Assert.That(h.Spatial.Begin(h.Provider,boundary),Is.Null,"No retry or remaining batch may be leased.");
+        } finally {
+            if(!driver.HasExited) driver.Kill(entireProcessTree:true);
+            if(lease is not null) h.Spatial.End(lease.Value);
+        }
+    }
     [Test]
     public void RebindAtFullOwnerCapacityReplacesOldOwner()
     {
