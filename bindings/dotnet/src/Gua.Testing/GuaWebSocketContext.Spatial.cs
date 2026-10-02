@@ -108,7 +108,11 @@ public sealed partial class GuaWebSocketContext
             var id = nextId++;
             await active.SendAsync(new ArraySegment<byte>(Envelope(id, command)), WebSocketMessageType.Text, true, cancellation).ConfigureAwait(false);
             while (true) {
-                using var document = JsonDocument.Parse(await ReceiveAsync(cancellation, responseTimeout).ConfigureAwait(false));
+                string wire;
+                try { wire = await ReceiveAsync(cancellation, responseTimeout).ConfigureAwait(false); }
+                catch (OperationCanceledException error) when (!cancellation.IsCancellationRequested)
+                { throw new TimeoutException("Spatial response timed out.", error); }
+                using var document = JsonDocument.Parse(wire);
                 var root = document.RootElement;
                 if (!root.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id) continue;
                 if (!root.GetProperty("ok").GetBoolean()) throw new RemoteCommandRejectedException(root.GetProperty("error").GetString());
