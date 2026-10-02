@@ -14,7 +14,7 @@ var notices = Path.Combine(AppContext.BaseDirectory, "notices");
 if (!Directory.Exists(notices) || !File.Exists(Path.Combine(notices, "Gua-MIT.LICENSE.txt")) ||
     !Directory.EnumerateFiles(notices).Any(path => Path.GetFileName(path).StartsWith("JsonSchema.Net-", StringComparison.Ordinal)))
     throw new Exception("Redistribution license notices are absent from the consumer output.");
-var required = new[] { "recording.schema.json", "trace.schema.json", "selector.schema.json", "game-input-actions-v2.schema.json", "input-value-schema-v1.schema.json", "observe-v1.schema.json", "spatial-r1.schema.json" };
+var required = new[] { "recording.schema.json", "trace.schema.json", "selector.schema.json", "game-input-actions-v2.schema.json", "input-value-schema-v1.schema.json", "observe-v1.schema.json", "spatial-r1.schema.json", "timed-segment-v1.schema.json", "timed-segment-result-v1.schema.json" };
 var expectedCommit = Environment.GetEnvironmentVariable("GUA_EXPECTED_COMMIT") ?? throw new Exception("Expected source commit is required.");
 using var viewerMetadata = JsonDocument.Parse(GuaDistribution.ViewerMetadata);
 if (viewerMetadata.RootElement.GetProperty("sourceCommit").GetString() != expectedCommit) throw new Exception("Viewer provenance mismatch.");
@@ -35,6 +35,53 @@ File.WriteAllText(recordingPath, "{\"schemaVersion\":1,\"steps\":[{\"action\":\"
 var legacy = GuaRecordingFile.Load(recordingPath);
 if (legacy.SchemaVersion != 1 || legacy.Steps.Count != 1 || legacy.Steps[0].Target?.Id != "ready") throw new Exception("Legacy recording compatibility failed.");
 GuaRecordingFile.Save(Path.Combine(output, "legacy-roundtrip.json"), legacy);
+var unsupportedRecording = Path.Combine(output, "unsupported-ui-recording-v2.json");
+File.WriteAllText(unsupportedRecording, File.ReadAllText(recordingPath).Replace("\"schemaVersion\":1", "\"schemaVersion\":2"));
+try { GuaRecordingFile.Load(unsupportedRecording); throw new Exception("UI Recording reader accepted an undeclared version."); }
+catch (InvalidDataException) { }
+
+// Two package-local reference hops: action search -> action metadata -> input value schema.
+const string actionSearch = """{"schemaVersion":2,"sessionEpoch":1,"revision":0,"context":"distribution-consumer","count":1,"truncated":false,"actions":[{"id":"move","description":"Move","valueType":"axis1d","holdable":false,"active":true,"bindings":[],"risk":"safe","requiresConfirmation":false,"valueSchema":{"type":"number"}}]}""";
+if (!GuaDistribution.ValidateJson("game-input-action-search-v2.schema.json", actionSearch) ||
+    GuaDistribution.ValidateJson("game-input-action-search-v2.schema.json", actionSearch.Replace("\"number\"", "\"invalid\"")))
+    throw new Exception("Offline packaged schema reference closure failed.");
+
+const string gameInputRecording = """{"schemaVersion":2,"steps":[{"action":"game_input","operation":"key_down","arguments":{"code":"KeyW"},"relativeMilliseconds":0,"sensitive":false},{"action":"game_input","operation":"pointer_wheel","arguments":{"deltaX":0,"deltaY":20},"relativeMilliseconds":100,"sensitive":false},{"action":"game_input","operation":"key_up","arguments":{"code":"KeyW"},"relativeMilliseconds":300,"sensitive":false}]}""";
+var segment = GuaTimedSegmentImport.FromRecording(gameInputRecording, 300, 20, 1000, 100);
+var segmentPath = Path.Combine(output, "timed-segment-roundtrip.json");
+GuaTimedSegmentFile.Save(segmentPath, segment);
+var loadedSegment = GuaTimedSegmentFile.Load(segmentPath);
+if (loadedSegment.SchemaVersion != 1 || loadedSegment.TimingProvenance != "legacy-unknown" ||
+    !loadedSegment.Inputs.Select(input => input.OffsetMilliseconds).SequenceEqual(new long[] { 0, 100, 300 }) ||
+    loadedSegment.Inputs[0].LeaseMilliseconds != 5000 || loadedSegment.Inputs[1].Target != "pixels" ||
+    !GuaDistribution.ValidateJson("timed-segment-v1.schema.json", File.ReadAllText(segmentPath)))
+    throw new Exception("Packaged timed segment import or file compatibility failed.");
+var unsupportedSegment = Path.Combine(output, "unsupported-timed-segment-v2.json");
+File.WriteAllText(unsupportedSegment, File.ReadAllText(segmentPath).Replace("\"schemaVersion\": 1", "\"schemaVersion\": 2"));
+if (GuaDistribution.ValidateJson("timed-segment-v1.schema.json", File.ReadAllText(unsupportedSegment)))
+    throw new Exception("Timed segment schema accepted an unknown version.");
+try { GuaTimedSegmentFile.Load(unsupportedSegment); throw new Exception("Timed segment reader accepted an unknown version."); }
+catch (InvalidDataException) { }
+
+// A serialization fixture carries no evidence that Replay or a host input ran.
+using (var timingTrace = new GuaTraceSession(new GuaTraceOptions { OutputDirectory = Path.Combine(output, "timing-fixture-trace"), SavePolicy = GuaTraceSavePolicy.Always }))
+{
+    var step = timingTrace.BeginStep(GuaTraceStepKind.Mark, "timing serialization fixture; Replay not executed");
+    var fixture = new GuaTimedSegmentResult(GuaSegmentOutcome.Cancelled,
+        new[] { new GuaTimedInputResult(0, 0, null, null, null, null, null, null) }, true, true, "caller-cancelled")
+        { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 1000, CleanupTimeoutMilliseconds = 100 };
+    if (!GuaRecordingTrace.AttachTimedResult(timingTrace, step, fixture)) throw new Exception("Packaged timed-result serializer failed.");
+    timingTrace.EndStep(step, GuaTraceOutcome.Passed);
+    if (!await timingTrace.CompleteAsync(GuaTraceOutcome.Passed)) throw new Exception("Timing fixture Trace completion failed.");
+    var read = GuaTraceReader.Read(timingTrace.ArtifactPath);
+    if (!read.Manifest.Finalized || read.Issues.Count != 0 || read.Events.Count != 3) throw new Exception("Timed-result Trace round trip failed.");
+    var attachment = Directory.GetFiles(Path.Combine(timingTrace.ArtifactPath, "attachments"), "*.json").Single();
+    var fixtureJson = File.ReadAllText(attachment);
+    if (!GuaDistribution.ValidateJson("timed-segment-result-v1.schema.json", fixtureJson) ||
+        GuaDistribution.ValidateJson("timed-segment-result-v1.schema.json", fixtureJson.Replace("\"schemaVersion\":1", "\"schemaVersion\":2")))
+        throw new Exception("Packaged timed-result schema validation failed.");
+    File.WriteAllText(Path.Combine(output, "timed-result-serialization-fixture.json"), fixtureJson);
+}
 
 using (var trace = new GuaTraceSession(new GuaTraceOptions { OutputDirectory = Path.Combine(output, "trace"), SavePolicy = GuaTraceSavePolicy.Always }))
 {
@@ -77,6 +124,7 @@ if (!args.Contains("--offline"))
 File.WriteAllText(Path.Combine(output, "result.json"), JsonSerializer.Serialize(new {
     rid = RuntimeInformation.RuntimeIdentifier, sourceCommit = expectedCommit, offline = args.Contains("--offline"),
     schemas = GuaDistribution.SchemaNames, embeddedViewer = true, legacyRecording = true,
+    timedSegmentRoundtrip = true, timedResultSerialization = true, timingProvenance = loadedSegment.TimingProvenance, timedSegmentReplay = "not-executed",
     nativeLoad = !args.Contains("--offline"), engineAttach = "not-tested", featureSupport = "not-inferred"
 }));
 Console.WriteLine("Distribution consumer passed: " + output);

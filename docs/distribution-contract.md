@@ -65,7 +65,7 @@ Tool installation with new empty caches and only that feed. The resulting
 `distribution-manifest.json` lists exact resolved package versions, SHA-256,
 license expressions/files and repository commits. Retain this manifest, the
 local feed, dependency license files and `project.assets.json` with external
-consumer evidence. Gua is MIT; the Viewer contains React-family MIT code;
+consumer evidence. Gua is MIT; the Viewer contains React-family MIT code.
 Both the extracted archive and Tool payload include a `notices/` directory with
 Gua/Viewer notices, dependency license files and Microsoft runtime notices.
 `JsonSchema.Net` and its transitive dependencies retain their own package
@@ -96,16 +96,23 @@ must not be copied into an engine-wide support claim.
 The resource API and `schemas/` package directory are additive; existing `trace/`
 entries stay available. UI tree schema v2, Trace v1, Selector and InputAction
 metadata schemas retain their independent versions. The Recording JSON schema
-accepts v1/v2, while the managed Recording reader must be checked against its
-declared versions after #122; schema acceptance alone does not prove a replay
-reader can read v2. The external smoke retains a legacy v1 Recording round trip,
-rejects an unknown version and checks the embedded Viewer.
+accepts v1/v2. `GuaRecordingFile` retains its UI Recording v1 reader/writer and
+rejects v2; `GuaTimedSegmentImport.FromRecording` explicitly converts only
+game-input v2 to an independent timed-segment v1 plan. The merged #122 contract
+ships `timed-segment-v1.schema.json` and `timed-segment-result-v1.schema.json`.
+`GuaTimedSegmentFile.Save/Load` round-trips a bounded plan without native code.
+The external smoke retains legacy UI v1 compatibility, preserves imported
+offsets/defaults and `legacy-unknown` provenance, rejects undeclared versions,
+validates package-local schema references and round-trips a values-free timing
+result serialization fixture through Trace. A file round trip does not execute
+Replay or establish host application timing.
 
 | Serialized contract | Read/write support at this candidate boundary |
 | --- | --- |
 | UI tree | v2; additive optional state fields remain omitted when unsupported |
 | Trace | v1 reader/writer; unknown major versions rejected, additive fields retained |
-| Recording | JSON schema v1/v2; managed legacy semantic v1 file round trip is tested; #122 timing acceptance remains required |
+| Recording | JSON schema v1/v2; managed UI v1 round trip and v2 rejection; explicit game-input v2 timed import |
+| Timed Segment | Independent v1 plan/result schemas; managed plan import/file round trip with unknown original timing provenance and result serialization fixture; host Replay support verified separately |
 | Semantic Selector | Existing `selector.schema.json` string-criterion objects; no new selector grammar |
 | InputAction map | Existing v1 preserved; explicit v2 metadata map/search use their separate schemas and `semantic_game_input_metadata_v1` capability |
 | Observe / Value / Spatial | Independently pinned v1/r1 schemas; execution/provider support negotiated separately |
@@ -132,7 +139,9 @@ scripts/verify-distribution-consumer.ps1 -PackageDirectory artifacts/packages `
 | AT-PACK-002 | Consumer copied outside the repository; isolated NuGet caches; local-feed-only acceptance restore; native overrides rejected |
 | AT-PACK-003 | Extracted self-contained consumer ZIP and fresh installed .NET Tool run, package manifests and embedded report |
 
-Final issue closure additionally requires #122 integration, exact-head required
-CI/audit success, the owner's public version/channel decision and verification
+Candidate acceptance incorporates merged #122 at
+`989163781a0e5ce6ac629e99a7d140a47e0db1ad` and repeats the four-RID consumer gates.
+Final issue closure additionally requires exact-head required CI/audit success,
+the owner's public version/channel decision and verification
 of that actual public distribution across the declared engine routes. Candidate
 success does not authorize publication or satisfy that release-only gate.
