@@ -1,9 +1,11 @@
 # #109 integrated acceptance — 2026-10-02
 
 Baseline: `ca9400e8` (PR #168 included). Tested acceptance changes:
-`b5ef0fd6e1ec29ca5d0dd3e8bf711694bd655fd7`. The latter changes tests and browser
-verification only; it does not alter Trace runtime behavior. Later documentation
-commits do not imply another runtime test run. All counts below exclude skips.
+`b5ef0fd6e1ec29ca5d0dd3e8bf711694bd655fd7`, with the explicit caller-clock
+assertions additionally verified at `7228d12a2b3a2463c6a32715ef9459036a0efbe1`
+(24 focused cases, full Visual 373/373). These changes affect tests and browser verification only;
+they do not alter Trace runtime behavior. Later documentation commits do not
+imply another runtime test run. All counts below exclude skips.
 
 Windows x64, MSVC 19.51.36260, .NET SDK 10.0.401, Bun 1.4.0,
 Chrome 154.0.8037.59. Native DLLs were built in this isolated worktree.
@@ -49,6 +51,14 @@ manifest and an explicit reader error, rather than inventing on-disk evidence.
 Original exception identity/stack through actual assertion/storage/report failures
 is separately covered by the preexisting lifecycle and integration tests.
 
+The normal integrated matrix and terminal fault matrix also install an actual
+caller clock at 123 ms with a 17 ms step, pause it and enqueue 34 ms of clock
+work before starting Trace. Full `GetClockStatus()` equality after completion
+requires installation, pause state, current time, pending work, step and generation
+to remain unchanged. Clock setup requires Pause before RunFor; initial misplaced
+assertions and InvalidState setup failures were corrected before committing and
+are not contract-violation detection evidence.
+
 Two selected mutations ran only in `gua-109-negative`, detached at `b5ef0fd`:
 
 - Request-ID-only BeginStep lookup: correlation test failed at the intended
@@ -92,8 +102,9 @@ absolute native directories stated above and `PATH` including Bun.
 | `dotnet run --project examples/dotnet-trace-viewer/Gua.TraceViewerExample.csproj -- artifacts/acceptance/viewer`; `bun scripts/verify-trace-viewer-browser.ts artifacts/acceptance/viewer 9349 http://127.0.0.1:1420` | 7 cases; `viewer/browser-evidence.json` and PNGs. Deliberate startup probes detected; actual external requests/exceptions zero. |
 | `bun scripts/verify-trace-integration-browser.ts artifacts/acceptance/integration 9349 http://127.0.0.1:1420` | 6 actual reports × static/Inspector = 12 cases; `integration/browser-evidence.json` and PNGs, actual external requests/exceptions zero. |
 | `bun packages/value/scripts/verify-trace-attachment-schemas.ts artifacts/acceptance/integration/schema` | Actual diagnostics/Recording projection valid, original Recording rejects redacted envelope. |
-| `dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release`; extracted package offline schema validator and console consumer | net10.0/netstandard2.1 built; embedded report opened in Chrome. `pack.log`, `consumer.log`, `consumer-browser.log`, `source-free/browser-evidence.json`. Local package only; no publication. |
+| `dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release`; extracted package offline schema validator and console consumer | net10.0/netstandard2.1 built; embedded report opened in Chrome. `pack.log`, `consumer.log`, `consumer-browser.log`, `source-free/viewer-browser.json`. Local package only; no publication. |
 | Disposable negative worktree, targeted dotnet tests | `negative-correlation.log/trx`, `negative-outcome.log/trx`: intended assertion failures described above. |
+| Final clock assertions at `7228d12`, full Visual and regenerated integration reports | `clock-integration.log/trx` 24/24 and `visual-clock.log/trx` 373/373; `integration-clock/browser-evidence.json` repeats the 12 static/Inspector cases with zero actual external reads/exceptions. |
 | `git diff --check` | Passed. |
 
 Initial execution errors were not counted as acceptance: restricted MSVC/NuGet
