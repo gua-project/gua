@@ -83,6 +83,9 @@ bot, or full UI framework.
   whether an implementation that breaks a major contract could still pass its
   tests. Verify selected violation-detection evidence and path-specific coverage;
   apply this within the existing audit gate, not a separate review loop.
+- Obtain the mapping and execution evidence from the supplied review context,
+  PR body, or explicitly referenced local artifacts. If required evidence is
+  missing or inaccessible, report it as unverified; do not claim validation.
 - For cross-boundary changes, trace the affected contract from `protocol/`
   through the C ABI, managed bindings, engine adapters, bridge, MCP, Inspector,
   recording, and tests. Do not assume that matching type names prove matching
@@ -111,9 +114,10 @@ bot, or full UI framework.
 - Give the auditor the current task scope plus the cumulative branch diff against
   the intended base branch. Include `git status --short`, tracked and staged
   diffs, and the contents of relevant untracked files so additions cannot escape
-  review. Require the auditor to use `$gua-bug-hunt`, select every audit-matrix
-  lane touched by that cumulative diff, and return reproducible findings with
-  file references and verification evidence.
+  review. Also supply the contract mapping and accessible execution evidence or
+  explicit artifact references. Require the auditor to use `$gua-bug-hunt`, select
+  every audit-matrix lane touched by that cumulative diff, and return reproducible
+  findings with file references and verification evidence.
 - Treat the auditor as behaviorally read-only: its custom-agent sandbox defaults
   to read-only, but a live parent permission override may take precedence.
   Explicitly prohibit edits in every audit prompt, reject any audit-authored
