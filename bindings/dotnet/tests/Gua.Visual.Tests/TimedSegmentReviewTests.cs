@@ -111,16 +111,19 @@ public sealed partial class TimedSegmentTests
         Assert.That(id, Is.EqualTo(1));
     }
 
-    [Test]
-    public void Review_TraceRejectsUnregisteredFailureText()
+    [TestCase("secret-marker", false)]
+    [TestCase("host-health-failed", true)]
+    public void Review_TraceRejectsUnregisteredFailureText(string code, bool accepted)
     {
         var root = Path.Combine(Path.GetTempPath(), "gua-invalid-timed", Guid.NewGuid().ToString("N"));
         try
         {
             using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
             var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
-            var invalid = new GuaTimedSegmentResult(GuaSegmentOutcome.Failed, [], false, false, "secret-marker");
-            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, invalid), Is.False);
+            var invalid = new GuaTimedSegmentResult(GuaSegmentOutcome.Failed,
+                [new(0, 0, 0, 1, 1, null, false, 1)], false, false, code)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 };
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, invalid), Is.EqualTo(accepted));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
