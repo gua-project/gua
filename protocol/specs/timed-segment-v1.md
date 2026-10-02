@@ -63,6 +63,8 @@ queue、request ID、result、Trace event を作らない。scheduler は option
 秘密参照は Unicode whitespace だけの key を許可しない。`Save` は入力と JSON value を
 複製し、同じ snapshot を検証・保存する。値付き preflight の例外は固定文言へ置換し、
 元の例外や解決済み秘密を error に残さない。
+Timed Result の Trace 添付も入力結果を複製し、同じ snapshot に時刻の意味検査・schema
+検査を行って保存する。呼出し側 collection の後続変更で検証済み証拠を差し替えない。
 
 同 offset は配列順に送信する。host はこの順に consume/apply する契約が必要である。
 同 offset の送信間には結果 polling を挟まず、待機時は有限件数の round-robin polling を使う。

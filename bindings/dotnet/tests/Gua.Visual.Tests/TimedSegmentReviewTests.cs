@@ -11,6 +11,36 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [Test]
+    public async Task Review_TraceSerializesTheValidatedResultSnapshot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gua-result-snapshot", Guid.NewGuid().ToString("N"));
+        var initial = new GuaTimedInputResult(0, 0, 0, 1, 1, null, true, 0);
+        var changing = new ChangingResults(initial, initial with { ScheduledMilliseconds = 50 });
+        var result = new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded, changing, true, true, null)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 };
+        try
+        {
+            using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
+            var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, result), Is.True);
+            trace.EndStep(step, GuaTraceOutcome.Passed);
+            Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.True);
+            using var attachment = JsonDocument.Parse(File.ReadAllText(Directory.GetFiles(Path.Combine(trace.ArtifactPath, "attachments"), "*.json").Single()));
+            Assert.That(attachment.RootElement.GetProperty("result").GetProperty("inputs")[0].GetProperty("scheduledMilliseconds").GetInt64(), Is.Zero);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    private sealed class ChangingResults(GuaTimedInputResult initial, GuaTimedInputResult replacement) : IReadOnlyList<GuaTimedInputResult>
+    {
+        private int reads;
+        public int Count => 1;
+        public GuaTimedInputResult this[int index] => initial;
+        public IEnumerator<GuaTimedInputResult> GetEnumerator() { yield return reads++ == 0 ? initial : replacement; }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     [TestCase(0)]
     [TestCase(1)]
     [TestCase(2)]

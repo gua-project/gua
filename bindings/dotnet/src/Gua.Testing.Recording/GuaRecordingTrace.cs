@@ -19,6 +19,7 @@ public static class GuaRecordingTrace
         GuaObservationProfile profile = GuaObservationProfile.Debug) =>
         GuaTraceCapture.JsonAttachment(trace, stepId, "gua.timed-segment-result.v1", () =>
         {
+            result = result with { Inputs = result.Inputs.ToArray() };
             double? previousKnownApplication = null;
             for (var i = 0; i < result.Inputs.Count; i++)
             {
