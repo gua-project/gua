@@ -11,6 +11,48 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Review_PartialApplyStampsStillProveOrder(bool betweenKnown)
+    {
+        var clock = new FakeRealtime();
+        var host = new FakeHost(clock) { Applied = id => id == 1 ? 20 : id == (betweenKnown ? 3ul : 2ul) ? 10 : null };
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100,
+            Enumerable.Range(0, 3).Select(_ => new GuaTimedInput(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")).ToArray());
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Failed));
+        Assert.That(result.FailureCode, Is.EqualTo("application-order-or-tick-violation"));
+        Assert.That(result.ApplicationTimingConfirmed, Is.False);
+        var forged = result with { Outcome = GuaSegmentOutcome.Succeeded, FailureCode = null };
+        AssertResultAttachment(forged, false);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Review_CompletedOrdinaryWorkNeedsOnlyOneFinalRelease(bool nearDeadline)
+    {
+        var clock = new FakeRealtime();
+        var releases = 0;
+        var host = new FakeHost(clock) { OnRelease = () =>
+            { releases++; if (releases > 1) throw new InvalidOperationException("redundant cleanup"); if (nearDeadline) clock.Milliseconds += 99; } };
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]);
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Succeeded)); Assert.That(releases, Is.EqualTo(1));
+        Assert.That(result.CleanupSucceeded, Is.True); Assert.That(result.NeutralConfirmed, Is.True);
+    }
+
+    [Test]
+    public async Task Review_OutstandingOrdinaryWorkRetainsSecondSafetyRelease()
+    {
+        using var cancel = new CancellationTokenSource();
+        var clock = new FakeRealtime(); clock.OnDelay = () => cancel.Cancel();
+        var host = new FakeHost(clock) { ResultDelay = 5 };
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]);
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, cancellationToken: cancel.Token, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Cancelled)); Assert.That(host.CleanupCount, Is.EqualTo(2));
+        Assert.That(result.NeutralConfirmed, Is.True);
+    }
+
     [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Realtime, 5, 4, false)]
     [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Realtime, 0, 50, false)]
     [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Realtime, 0, 20, true)]
@@ -927,7 +969,9 @@ public sealed partial class TimedSegmentTests
         var clock = new FakeRealtime();
         var host = new FakeHost(clock) { ClearScopeOnEnd = true, SimulationScope = "input-only" };
         var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")], Clock: GuaSegmentClock.Simulation);
-        host.Health = () => host.CleanupCount == 2 ? "lease-expired-before-release" : null;
+        var changed = false;
+        host.OnNeutral = () => changed = true;
+        host.Health = () => changed ? "lease-expired-before-release" : null;
         var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
         Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Failed));
         Assert.That(result.FailureCode, Is.EqualTo("lease-expired-before-release"));

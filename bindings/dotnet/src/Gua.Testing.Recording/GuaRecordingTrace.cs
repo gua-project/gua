@@ -19,6 +19,7 @@ public static class GuaRecordingTrace
         GuaObservationProfile profile = GuaObservationProfile.Debug) =>
         GuaTraceCapture.JsonAttachment(trace, stepId, "gua.timed-segment-result.v1", () =>
         {
+            double? previousKnownApplication = null;
             for (var i = 0; i < result.Inputs.Count; i++)
             {
                 var input = result.Inputs[i];
@@ -32,8 +33,10 @@ public static class GuaRecordingTrace
                     (input.SentMilliseconds >= result.ExecutionTimeoutMilliseconds || input.ResultReceivedMilliseconds >= result.ExecutionTimeoutMilliseconds))
                     throw new InvalidDataException("Successful input exceeded the execution deadline.");
                 if (result.Outcome == GuaSegmentOutcome.Succeeded && input.HostAppliedMilliseconds is { } knownApplied &&
-                    (knownApplied < input.ScheduledMilliseconds || knownApplied - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds))
+                    (knownApplied < input.ScheduledMilliseconds || knownApplied - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds ||
+                     previousKnownApplication is { } prior && knownApplied < prior))
                     throw new InvalidDataException("Known application evidence contradicts a successful outcome.");
+                if (input.HostAppliedMilliseconds is { } known) previousKnownApplication = known;
             }
             var requestIds = new HashSet<ulong>();
             if (result.Inputs.Any(input => input.RequestId is { } id && !requestIds.Add(id)))

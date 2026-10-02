@@ -93,6 +93,10 @@ dispatch 前から計測し、poll / neutral 確認にも適用する。全送�
 異なる session の解除証拠を混ぜない。未完了要求が残る場合は neutral 未確認。owner dispose
 による後続 cleanup を要求しても、適用確認と称さない。他 owner を解除しない。
 
+最初の cleanup dispatch 時に ordinary work がすべて完了していれば、その解除を最後の
+解除として再利用する。ordinary work が残っていた時だけ、完了後に二回目の safety release
+を要求する。不要な二回目の解除で cleanup 予算を消費しない。
+
 host の preflight と引数 marshal 後、native enqueue の直前にも caller の send guard を
 実行する。guard が投げた時は送信しない。送信を試みた後に request ID を取得できなかった
 要求は未解決として保持し、中立を確認したとしない。Load は省略 timing field をゼロへ
@@ -128,6 +132,7 @@ simulation の証拠は非空 scope を必要とし、終端 outcome と failure
 Succeeded の send / receipt は実時間 execution deadline より前でなければならない。
 Succeeded の既知の apply stamp も確認 flag に関係なく予定 / lateness 内でなければならない。
 未取得 apply stamp は引き続き null とし、flag は完全な順序証拠がある場合だけ true とする。
+既知 stamp 同士の順序は欠損を跨いで検査し、部分証拠でも逆順があれば正常再現にしない。
 すべての outcome で neutral confirmed は cleanup succeeded を必要とする。
 realtime の send は予定 offset より前を許可せず、Succeeded は maxLateness 内とする。
 simulation の offset と realtime send は異なる時計のため、この比較を適用しない。

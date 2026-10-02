@@ -166,6 +166,7 @@ public static class GuaTimedSegmentReplay
             {
                 ulong cleanupId;
                 double cleanupOrigin;
+                var ordinaryWasOutstanding = results.Any(result => result.SentMilliseconds is not null && result.ResultReceivedMilliseconds is null);
                 try { cleanupOrigin = realtime.Milliseconds; }
                 finally { cleanupId = host.ReleaseAll(); } // Still attempt safety cleanup if the clock throws.
                 bool WithinCleanupBudget()
@@ -187,6 +188,13 @@ public static class GuaTimedSegmentReplay
                     }
                     if (completed && cleanupSucceeded)
                     {
+                        if (!ordinaryWasOutstanding)
+                        {
+                            var empty = host.IsNeutral;
+                            PollAll(); // Keep the final health/epoch check after the neutral observation.
+                            neutral = empty && healthConfirmed && WithinCleanupBudget();
+                            break;
+                        }
                         // All ordinary in-flight work is finished; a final neutralization covers
                         // an adapter that completed cleanup before a delayed ordinary completion.
                         cleanupId = host.ReleaseAll();
@@ -220,16 +228,20 @@ public static class GuaTimedSegmentReplay
         var applicationConfirmed = outcome == GuaSegmentOutcome.Succeeded && applied.All(time => time is not null) && results.All(result =>
             result.HostAppliedMilliseconds >= result.ScheduledMilliseconds &&
             result.HostAppliedMilliseconds - result.ScheduledMilliseconds <= segment.MaxLatenessMilliseconds);
-        if (applicationConfirmed)
+        double? previousApplied = null;
+        long previousOffset = -1;
+        for (var i = 0; i < applied.Length; i++)
         {
-            for (var i = 1; i < applied.Length; i++)
-                if (applied[i] < applied[i - 1] || segment.RequireSameTickApplication &&
-                    results[i].ScheduledMilliseconds == results[i - 1].ScheduledMilliseconds && applied[i] != applied[i - 1])
-                {
-                    if (outcome == GuaSegmentOutcome.Succeeded)
-                    { outcome = GuaSegmentOutcome.Failed; failure = "application-order-or-tick-violation"; }
-                    applicationConfirmed = false;
-                }
+            if (applied[i] is not { } known) continue;
+            if (previousApplied is { } prior && (known < prior || segment.RequireSameTickApplication &&
+                    results[i].ScheduledMilliseconds == previousOffset && known != prior))
+            {
+                if (outcome == GuaSegmentOutcome.Succeeded)
+                { outcome = GuaSegmentOutcome.Failed; failure = "application-order-or-tick-violation"; }
+                applicationConfirmed = false;
+            }
+            previousApplied = known;
+            previousOffset = results[i].ScheduledMilliseconds;
         }
         return new(outcome, results, cleanupSucceeded, neutral, failure)
         {
