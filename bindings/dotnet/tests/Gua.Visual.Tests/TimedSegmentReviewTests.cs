@@ -11,6 +11,37 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Realtime, 5, 4, false)]
+    [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Realtime, 0, 50, false)]
+    [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Realtime, 0, 20, true)]
+    [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Realtime, 0, null, true)]
+    [TestCase(GuaSegmentOutcome.Cancelled, GuaSegmentClock.Realtime, 0, 50, true)]
+    [TestCase(GuaSegmentOutcome.Succeeded, GuaSegmentClock.Simulation, 50, 70, true)]
+    public void Review_KnownApplyEvidenceCannotContradictSuccessfulOutcome(GuaSegmentOutcome outcome,
+        GuaSegmentClock clock, long scheduled, double? applied, bool valid) =>
+        AssertResultAttachment(new GuaTimedSegmentResult(outcome,
+            [new(0, scheduled, clock == GuaSegmentClock.Realtime ? scheduled : 0, 1,
+                clock == GuaSegmentClock.Realtime ? Math.Max(scheduled, applied ?? scheduled) + 1 : 1, applied, true, 0)],
+            true, true, outcome == GuaSegmentOutcome.Succeeded ? null : "caller-cancelled")
+            { Clock = clock, SimulationScope = clock == GuaSegmentClock.Simulation ? "controlled" : null,
+              MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, valid);
+
+    [TestCase(GuaSegmentOutcome.Failed, false)]
+    [TestCase(GuaSegmentOutcome.Cancelled, false)]
+    [TestCase(GuaSegmentOutcome.TimedOut, false)]
+    [TestCase(GuaSegmentOutcome.Late, false)]
+    [TestCase(GuaSegmentOutcome.Failed, true)]
+    [TestCase(GuaSegmentOutcome.Cancelled, true)]
+    [TestCase(GuaSegmentOutcome.TimedOut, true)]
+    [TestCase(GuaSegmentOutcome.Late, true)]
+    public void Review_ConfirmedNeutralityRequiresSuccessfulCleanup(GuaSegmentOutcome outcome, bool cleanup)
+    {
+        var code = outcome switch { GuaSegmentOutcome.Cancelled => "caller-cancelled", GuaSegmentOutcome.TimedOut => "execution-timeout",
+            GuaSegmentOutcome.Late => "max-lateness-exceeded", _ => "host-health-failed" };
+        AssertResultAttachment(new GuaTimedSegmentResult(outcome, [new(0, 0, 0, 1, 1, null, true, 0)], cleanup, true, code)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, cleanup);
+    }
+
     [TestCase(GuaSegmentClock.Realtime, 0, false)]
     [TestCase(GuaSegmentClock.Realtime, 50, true)]
     [TestCase(GuaSegmentClock.Realtime, 70, true)]

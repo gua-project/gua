@@ -31,6 +31,9 @@ public static class GuaRecordingTrace
                 if (result.Outcome == GuaSegmentOutcome.Succeeded &&
                     (input.SentMilliseconds >= result.ExecutionTimeoutMilliseconds || input.ResultReceivedMilliseconds >= result.ExecutionTimeoutMilliseconds))
                     throw new InvalidDataException("Successful input exceeded the execution deadline.");
+                if (result.Outcome == GuaSegmentOutcome.Succeeded && input.HostAppliedMilliseconds is { } knownApplied &&
+                    (knownApplied < input.ScheduledMilliseconds || knownApplied - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds))
+                    throw new InvalidDataException("Known application evidence contradicts a successful outcome.");
             }
             var requestIds = new HashSet<ulong>();
             if (result.Inputs.Any(input => input.RequestId is { } id && !requestIds.Add(id)))
