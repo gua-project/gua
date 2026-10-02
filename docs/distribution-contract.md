@@ -66,6 +66,8 @@ Tool installation with new empty caches and only that feed. The resulting
 license expressions/files and repository commits. Retain this manifest, the
 local feed, dependency license files and `project.assets.json` with external
 consumer evidence. Gua is MIT; the Viewer contains React-family MIT code;
+Both the extracted archive and Tool payload include a `notices/` directory with
+Gua/Viewer notices, dependency license files and Microsoft runtime notices.
 `JsonSchema.Net` and its transitive dependencies retain their own package
 licenses. A self-contained .NET archive also includes Microsoft runtime files
 and their notices. A .NET Tool requires a compatible installed .NET runtime.

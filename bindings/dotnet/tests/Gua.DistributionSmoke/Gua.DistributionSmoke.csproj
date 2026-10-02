@@ -11,6 +11,7 @@
     <Version>$(GuaPackageVersion)</Version>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="notices/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Gua.Runtime" Version="[$(GuaPackageVersion)]" />
     <PackageReference Include="Gua.Testing.Recording" Version="[$(GuaPackageVersion)]" />
     <PackageReference Include="Gua.Testing.Godot" Version="[$(GuaPackageVersion)]" />

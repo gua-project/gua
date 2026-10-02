@@ -41,6 +41,8 @@ try {
         $destination = Join-Path $feed $package.Name
         if (-not (Test-Path -LiteralPath $destination)) { Copy-Item -LiteralPath $package.FullName -Destination $destination }
     }
+    & (Join-Path $PSScriptRoot 'write-distribution-manifest.ps1') -PackageDirectory $feed -Version $Version -SourceCommit $SourceCommit -OutputPath (Join-Path $output 'distribution-manifest.json')
+    Copy-Item -LiteralPath (Join-Path $output 'dependency-licenses') -Destination (Join-Path $consumer 'notices') -Recurse
     $env:NUGET_PACKAGES = Join-Path $temporary 'empty-archive-cache'
     Run-Dotnet -Arguments @('restore', $project, "-p:GuaPackageVersion=$Version", '-r', $Rid, '-p:SelfContained=true', '--configfile', $offlineConfig, '--no-http-cache', '-p:NuGetAudit=false')
     Run-Dotnet -Arguments @('publish', $project, '-c', 'Release', '-r', $Rid, '--self-contained', '--no-restore', "-p:GuaPackageVersion=$Version", '-o', (Join-Path $temporary 'publish'))

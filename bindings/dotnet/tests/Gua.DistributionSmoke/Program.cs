@@ -10,6 +10,10 @@ foreach (var variable in new[] { "GUA_NATIVE_DIR", "GUA_RUNTIME_NATIVE_DIR" })
         throw new InvalidOperationException("Native override is forbidden: " + variable);
 var output = Path.GetFullPath(args.LastOrDefault() ?? "evidence");
 Directory.CreateDirectory(output);
+var notices = Path.Combine(AppContext.BaseDirectory, "notices");
+if (!Directory.Exists(notices) || !File.Exists(Path.Combine(notices, "Gua-MIT.LICENSE.txt")) ||
+    !Directory.EnumerateFiles(notices).Any(path => Path.GetFileName(path).StartsWith("JsonSchema.Net-", StringComparison.Ordinal)))
+    throw new Exception("Redistribution license notices are absent from the consumer output.");
 var required = new[] { "recording.schema.json", "trace.schema.json", "selector.schema.json", "game-input-actions-v2.schema.json", "input-value-schema-v1.schema.json", "observe-v1.schema.json", "spatial-r1.schema.json" };
 var expectedCommit = Environment.GetEnvironmentVariable("GUA_EXPECTED_COMMIT") ?? throw new Exception("Expected source commit is required.");
 using var viewerMetadata = JsonDocument.Parse(GuaDistribution.ViewerMetadata);

@@ -9,6 +9,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $root = Split-Path -Parent $PSScriptRoot
 $noticeDirectory = Join-Path (Split-Path -Parent ([IO.Path]::GetFullPath($OutputPath))) 'dependency-licenses'
 New-Item -ItemType Directory -Force $noticeDirectory | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $noticeDirectory 'Gua-MIT.LICENSE.txt') -Force
 $packages = foreach ($file in Get-ChildItem -LiteralPath $PackageDirectory -Filter '*.nupkg' -File | Sort-Object Name) {
     $zip = [IO.Compression.ZipFile]::OpenRead($file.FullName)
     try {
@@ -21,6 +22,7 @@ $packages = foreach ($file in Get-ChildItem -LiteralPath $PackageDirectory -Filt
         $packageVersion = $metadata.SelectSingleNode('*[local-name()="version"]').InnerText
         $repository = $metadata.SelectSingleNode('*[local-name()="repository"]')
         $license = $metadata.SelectSingleNode('*[local-name()="license"]')
+        $copyright = $metadata.SelectSingleNode('*[local-name()="copyright"]')
         if ($null -eq $license) { throw "Package license metadata is missing: $id" }
         if ($id -like 'Gua.*' -and $id -ne 'Gua.DistributionSmoke') {
             if ($packageVersion -ne $Version -or $null -eq $repository -or $repository.commit -ne $SourceCommit) { throw "Package provenance mismatch: $id" }
@@ -37,6 +39,18 @@ $packages = foreach ($file in Get-ChildItem -LiteralPath $PackageDirectory -Filt
             try { $licenseReader.ReadToEnd() | Set-Content -LiteralPath (Join-Path $noticeDirectory "$id-$packageVersion.txt") -Encoding utf8NoBOM }
             finally { $licenseReader.Dispose() }
         }
+        $notices = @($zip.Entries | Where-Object FullName -Match '(?i)(^|/)(LICENSE(?:\.txt|\.md)?|THIRD-PARTY-NOTICES\.TXT|Viewer\.LICENSES\.txt)$')
+        foreach ($notice in $notices) {
+            $noticeReader = [IO.StreamReader]::new($notice.Open())
+            try { $noticeReader.ReadToEnd() | Set-Content -LiteralPath (Join-Path $noticeDirectory "$id-$packageVersion-$([IO.Path]::GetFileName($notice.FullName))") -Encoding utf8NoBOM }
+            finally { $noticeReader.Dispose() }
+        }
+        if ($notices.Count -eq 0 -and $license.type -eq 'expression' -and $license.InnerText -eq 'MIT' -and $copyright) {
+            # The package's own attribution plus the standard MIT permission text.
+            $mit = Get-Content -LiteralPath (Join-Path $root 'LICENSE') -Raw
+            $terms = $mit.Substring($mit.IndexOf('Permission is hereby granted'))
+            "$id $packageVersion`n$($copyright.InnerText)`n`n$terms" | Set-Content -LiteralPath (Join-Path $noticeDirectory "$id-$packageVersion-MIT.txt") -Encoding utf8NoBOM
+        }
         if ($id -eq 'Gua.Testing') {
             foreach ($source in Get-ChildItem -LiteralPath (Join-Path $root 'protocol/schema') -File | Where-Object { $_.Name -like '*.schema.json' -or $_.Extension -eq '.mjs' }) {
                 $schemaEntry = $zip.GetEntry("schemas/$($source.Name)")
@@ -50,7 +64,7 @@ $packages = foreach ($file in Get-ChildItem -LiteralPath $PackageDirectory -Filt
             }
         }
         [ordered]@{ id = $id; version = $packageVersion; sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant();
-            licenseType = $license.type; license = $license.InnerText; repositoryCommit = $(if ($repository) { $repository.commit } else { $null });
+            licenseType = $license.type; license = $license.InnerText; copyright = $(if ($copyright) { $copyright.InnerText } else { $null }); repositoryCommit = $(if ($repository) { $repository.commit } else { $null });
             dependencies = @($metadata.SelectNodes('.//*[local-name()="dependency"]') | ForEach-Object { @{ id = $_.id; version = $_.version } }) }
     } finally { $zip.Dispose() }
 }
