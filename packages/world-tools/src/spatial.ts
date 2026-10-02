@@ -1,9 +1,6 @@
 import { spatialBatchInputSchema } from "./spatial-schema.generated.js";
-const failureReasons = new Set<string>(spatialBatchInputSchema.$defs.batchResult.properties.items.items.oneOf[1]!.properties.reason!.enum);
-/** Use the protocol-generated safe enum, never backend diagnostic text. */
-export function isSpatialFailureReason(value: unknown): value is string {
-  return typeof value === "string" && failureReasons.has(value);
-}
+/** Output validation uses the same protocol-generated definitions as the tools. */
+export const spatialBatchResultSchema = { $ref: "#/$defs/batchResult", $defs: spatialBatchInputSchema.$defs };
 export interface GuaSpatialVector { x: number; y: number; z: number }
 export interface GuaSpatialBasis { x: GuaSpatialVector; y: GuaSpatialVector; z: GuaSpatialVector }
 export type GuaSpatialOperation = "raycast" | "overlap" | "sweep";

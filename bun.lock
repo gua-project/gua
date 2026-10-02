@@ -41,6 +41,7 @@
         "gui-mcp": "./dist/cli.js",
       },
       "dependencies": {
+        "ajv": "^8.17.1",
         "pngjs": "^7.0.0",
       },
       "devDependencies": {

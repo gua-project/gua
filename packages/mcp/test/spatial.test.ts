@@ -5,6 +5,7 @@ import { GuaBridgeClient } from "../src/index";
 import type { GuaSpatialBatch } from "gua-world-tools";
 import { assertSpatialRouteResult, spatialMcpResult } from "../../../scripts/spatial-route-assertions";
 import fixtureData from "../../../protocol/fixtures/spatial-host-r1.json";
+import legacyFixture from "../../../protocol/fixtures/spatial-r1.json";
 
 const batch = fixtureData.valid.find(v => v.id === "batch")!.json as GuaSpatialBatch;
 const partial = fixtureData.valid.find(v => v.id === "batchResult")!.json;
@@ -108,6 +109,10 @@ const violations: [string, (r: any) => void, string][] = [
   ["extra failed field", r => { r.items[1].state = "failed"; r.items[1].diagnostic = "private-wall"; }, "Invalid spatial terminal result"],
   ["extra completed item field", r => { r.items[0].diagnostic = "private-wall"; }, "Invalid spatial terminal result"],
   ["extra batch field", r => { r.diagnostic = "private-wall"; }, "Invalid spatial terminal result"],
+  ["missing completed facts", r => { for (const key of ["outcome", "coverage", "truncated", "sample", "hits"]) delete r.items[0].result[key]; }, "Invalid spatial terminal result"],
+  ["extra completed result field", r => { r.items[0].result.diagnostic = "private-wall"; }, "Invalid spatial terminal result"],
+  ["extra sample field", r => { r.items[0].result.sample.diagnostic = "private-wall"; }, "Invalid spatial terminal result"],
+  ["invalid geometry outcome", r => { r.items[0].result.outcome = "clear"; }, "Invalid spatial terminal result"],
   ["failed geometry", r => { r.items[1].result = r.items[0].result; }, "Invalid spatial terminal result"],
 ];
 for (const [name, mutate, error] of violations) test(`invalid ${name} is rejected on TypeScript and MCP paths`, async () => {
@@ -170,16 +175,24 @@ for (const fault of ["stall_accept", "stall_poll"] as const) test(`abort and MCP
 // Deliberately corrupt acceptance replies: the exact production verifier must
 // reject each fault, even when both routes could return the same broken reply.
 test("real-engine route assertions reject incomplete, miscorrelated and noncompleted replies", () => {
-  const routeBatch = structuredClone(batch); routeBatch.queries.push({ ...routeBatch.queries[0]!, requestId: 3, queryId: "q3" });
+  const geometries = ["ray-hit-published-world", "overlap-detected-no-details", "blocked-estimate"].map(id =>
+    JSON.parse(legacyFixture.valid.find(v => v.id === id)!.json));
+  const routeBatch: GuaSpatialBatch = { ...batch, queries: geometries.map((geometry, i) => {
+    const query = { ...batch.queries[0]!, requestId: i+1, queryId: `q${i+1}`, kind: geometry.kind };
+    if (query.kind !== "raycast") { delete query.segment; query.shape = { type: "sphere", center: { x: 0, y: 0, z: 0 }, radius: 0.5 }; }
+    if (query.kind === "sweep") query.delta = { x: 1, y: 0, z: 0 };
+    return query;
+  }) };
   const good: any = { ...partial, items: routeBatch.queries.map((q, i) => ({ requestId: q.requestId, queryId: q.queryId,
-    state: "completed", result: { ...(partial.items[0] as any).result, requestId: q.requestId, queryId: q.queryId, outcome: ["hit", "detected", "blocked"][i] } })) };
+    state: "completed", result: { ...geometries[i], schemaVersion: "spatial-host-r1", requestId: q.requestId, queryId: q.queryId,
+      sessionEpoch: q.sessionEpoch, spaceId: q.spaceId, spaceEpoch: q.spaceEpoch, sample: (partial.items[0] as any).result.sample } })) };
   expect(() => assertSpatialRouteResult(routeBatch, good)).not.toThrow();
   for (const [name, mutate] of violations.filter(([name]) => name !== "missing failure reason" && name !== "failed geometry")) {
     const broken = structuredClone(good); mutate(broken);
     expect(() => assertSpatialRouteResult(routeBatch, broken), name).toThrow("Spatial route");
   }
   for (const mutate of [(r: any) => { r.items[0].result.status = "failed"; }, (r: any) => { r.items[0].state = "failed"; r.items[0].reason = "internal"; }]) {
-    const broken = structuredClone(good); mutate(broken); expect(() => assertSpatialRouteResult(routeBatch, broken)).toThrow("completion/correlation/outcome");
+    const broken = structuredClone(good); mutate(broken); expect(() => assertSpatialRouteResult(routeBatch, broken)).toThrow("Spatial route");
   }
   const rpc = { id: 3, result: { content: [{ type: "text", text: JSON.stringify(good) }] } };
   expect(spatialMcpResult([rpc], 3)).toEqual(good);

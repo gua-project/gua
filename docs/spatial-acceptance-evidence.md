@@ -69,11 +69,18 @@ client now uses the protocol-generated safe reason enum; two additional actual
 TypeScript/MCP reply cases require rejection without forwarding backend text.
 These focused unsafe-reason tests and the acceptance-helper test pass. A second
 supported GitHub finding concerned unknown diagnostic fields in terminal items.
-The client and route verifier now require the strict four-field terminal item
-and batch envelope shapes; four TS/MCP extra-field regressions reject replies
-with identifiable diagnostic text instead of forwarding them. This validates
-terminal envelopes, not every physics fact or cross-path confidentiality gate.
-Local
+The client and route verifier reject unknown terminal item and batch fields;
+four TS/MCP extra-field regressions reject identifiable diagnostic text. A third
+supported finding exposed missing/extra fields inside completed geometry.
+The final client and route helper validate the entire batch-result document,
+including nested results/sample/hits, against the protocol-generated JSON
+Schema using Ajv (already locked for schema tests, now a native MCP runtime
+dependency). Four additional TS/MCP regressions reject absent completed facts,
+extra result/sample fields and invalid outcomes. Query count and outer/inner
+correlation remain separate checks. Physics, authorization, native semantic
+validation and the cross-path confidentiality gate remain host responsibilities.
+The route helper's positive cases reuse valid contract ray/overlap/sweep result
+fixtures rather than inventing geometry payloads. Local
 logs are `artifacts/typescript-check.log`, `artifacts/spatial-mcp-tests.log`,
 `artifacts/spatial-native-tests.log`, `artifacts/pre-fix-detection.log`.
 The portable native CI lane now builds the MCP CLI and shared Trace viewer

@@ -1,5 +1,6 @@
 import path from "node:path";
-import { spatialTools, spatialBatchArguments, isSpatialFailureReason, type GuaSpatialAdvertisement, type GuaSpatialBatch, type GuaSpatialBatchResult } from "gua-world-tools";
+import { spatialTools, spatialBatchArguments, type GuaSpatialAdvertisement, type GuaSpatialBatch, type GuaSpatialBatchResult } from "gua-world-tools";
+import { isSpatialBatchResult } from "./spatial-result.js";
 import { ObserveWireRejectionError, decodeObserveWireResponse, observeTools, observeSubscriptionId, parseObserveTransport } from "gua-value";
 
 import {
@@ -1078,20 +1079,15 @@ export class GuaBridgeClient {
           if (!isRecord(result) || result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" || result.batchId !== batch.batchId ||
             !Array.isArray(result.items) || result.items.length !== batch.queries.length || result.items.some((item, index) => !isRecord(item) || item.requestId !== batch.queries[index]!.requestId || item.queryId !== batch.queries[index]!.queryId))
             throw new Error("Spatial correlation mismatch.");
-          if (result.items.some((item, index) => {
+          if (!isSpatialBatchResult(result) || result.items.some((item, index) => {
             const query = batch.queries[index]!;
-            // Both protocol terminal variants have exactly four fields. Do
-            // not forward arbitrary backend diagnostics from a faulty peer.
-            if (Object.keys(item).length !== 4) return true;
-            if (item.state === "failed" || item.state === "notExecuted")
-              return !isSpatialFailureReason(item.reason) || item.result !== undefined;
+            if (item.state !== "completed") return false;
             const geometry = item.result;
-            return item.state !== "completed" || item.reason !== undefined || !isRecord(geometry) ||
-              geometry.schemaVersion !== "spatial-host-r1" || geometry.documentType !== "result" || geometry.status !== "completed" ||
+            return !isRecord(geometry) ||
               geometry.requestId !== query.requestId || geometry.queryId !== query.queryId ||
               geometry.sessionEpoch !== query.sessionEpoch || geometry.spaceId !== query.spaceId || geometry.spaceEpoch !== query.spaceEpoch ||
               geometry.kind !== query.kind;
-          }) || Object.keys(result).length !== 4) throw new Error("Invalid spatial terminal result.");
+          })) throw new Error("Invalid spatial terminal result.");
           return result;
         }
         await new Promise(resolve => setTimeout(resolve, 10));

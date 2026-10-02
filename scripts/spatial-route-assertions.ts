@@ -1,4 +1,5 @@
 import type { GuaSpatialBatch, GuaSpatialBatchResult } from "gua-world-tools";
+import { isSpatialBatchResult } from "../packages/mcp/src/spatial-result";
 
 /** Acceptance assertions for the three-query real-engine fixture, on each route
  * independently. Comparing two equally incomplete replies is not evidence. */
@@ -7,6 +8,7 @@ export function assertSpatialRouteResult(batch: GuaSpatialBatch, value: unknown)
   if (!result || result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" ||
       result.batchId !== batch.batchId || Object.keys(result).length !== 4 || !Array.isArray(result.items) || result.items.length !== batch.queries.length ||
       batch.queries.length !== 3) throw new Error("Spatial route batch count/correlation mismatch.");
+  if (!isSpatialBatchResult(result)) throw new Error("Spatial route terminal schema mismatch.");
   const expected = ["hit", "detected", "blocked"];
   for (const [index, item] of result.items.entries()) {
     const query = batch.queries[index]!;
