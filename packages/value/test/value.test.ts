@@ -7,9 +7,11 @@ import catalogSchema from "../../../protocol/schema/enum-catalog-v1.schema.json"
 import worldSchema from "../../../protocol/schema/world-object-tree.schema.json";
 import world from "../../../protocol/fixtures/world-object-tree-v1.json";
 import commands from "../../../protocol/schema/commands.schema.json";
+import spatialHost from "../../../protocol/schema/spatial-host-r1.schema.json";
 
 const catalog = EnumCatalog.fromJSON(JSON.stringify(fixture.catalog));
 const ajv = new Ajv({ strict: false });
+ajv.addSchema(spatialHost);
 const validate = ajv.compile(schema);
 const codes = (fn: () => unknown, code: string) => { try { fn(); throw new Error("Expected Value rejection"); } catch (e) { expect(e).toBeInstanceOf(ValueError); expect((e as ValueError).code).toBe(code); expect((e as ValueError).path.startsWith("$")).toBe(true); expect((e as Error).message).not.toContain("DO_NOT_LOG"); } };
 describe("shared Value v1 corpus", () => {
