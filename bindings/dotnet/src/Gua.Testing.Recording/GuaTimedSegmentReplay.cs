@@ -14,9 +14,10 @@ public static class GuaTimedSegmentReplay
         if (segment is null) throw new ArgumentNullException(nameof(segment));
         segment = segment with { Inputs = segment.Inputs?.Select(input => input is null ? null! : input with { Value = input.Value?.Clone() }).ToArray()! };
         GuaTimedSegmentFile.Validate(segment);
+        var simulationScope = segment.Clock == GuaSegmentClock.Simulation ? host.SimulationScope : null;
         if (!host.OrderedApplication || (segment.RequireApplicationTimes || segment.RequireSameTickApplication) && !host.ApplicationTimes ||
             segment.RequireSameTickApplication && !host.SameTickApplication ||
-            segment.Clock == GuaSegmentClock.Simulation && string.IsNullOrWhiteSpace(host.SimulationScope))
+            segment.Clock == GuaSegmentClock.Simulation && string.IsNullOrWhiteSpace(simulationScope))
             throw new NotSupportedException("The host cannot satisfy the requested segment timing capabilities.");
         // Freeze caller-owned plans before any await; resolve secrets before reserving/starting a segment.
         JsonElement?[] secrets;
@@ -29,8 +30,7 @@ public static class GuaTimedSegmentReplay
         realtime ??= new StopwatchRealtime();
         var results = segment.Inputs.Select((input, index) => new GuaTimedInputResult(
             index, input.OffsetMilliseconds, null, null, null, null, null, null)).ToArray();
-        host.Begin(segment);
-        var origin = realtime.Milliseconds;
+        var origin = 0.0;
         var simulationOrigin = 0.0;
         var lastScheduleTime = 0.0;
         var outcome = GuaSegmentOutcome.Succeeded;
@@ -66,17 +66,19 @@ public static class GuaTimedSegmentReplay
                         !double.IsNaN(stamp) && !double.IsInfinity(stamp) && stamp >= 0 ? stamp : null };
                 if (!receipt.Succeeded && outcome == GuaSegmentOutcome.Succeeded)
                 { outcome = GuaSegmentOutcome.Failed; failure = "host-rejected-or-failed"; }
-                if ((segment.RequireApplicationTimes || segment.RequireSameTickApplication) && receipt.HostAppliedMilliseconds is null)
+                if (outcome == GuaSegmentOutcome.Succeeded && (segment.RequireApplicationTimes || segment.RequireSameTickApplication) && receipt.HostAppliedMilliseconds is null)
                 { outcome = GuaSegmentOutcome.Failed; failure = "application-time-unconfirmed"; }
-                if (receipt.HostAppliedMilliseconds is { } applied &&
+                if (outcome == GuaSegmentOutcome.Succeeded && receipt.HostAppliedMilliseconds is { } applied &&
                     (double.IsNaN(applied) || double.IsInfinity(applied) || applied < result.ScheduledMilliseconds ||
                     applied - result.ScheduledMilliseconds > segment.MaxLatenessMilliseconds))
                 { outcome = GuaSegmentOutcome.Late; failure = "application-time-violation"; }
             }
             return complete;
         }
+        host.Begin(segment);
         try
         {
+            origin = realtime.Milliseconds;
             if (segment.Clock == GuaSegmentClock.Simulation) simulationOrigin = host.SimulationMilliseconds;
             for (var i = 0; i < results.Length && outcome == GuaSegmentOutcome.Succeeded; i++)
             {
@@ -139,10 +141,10 @@ public static class GuaTimedSegmentReplay
         finally
         {
             // Safety deadlines and cleanup do not use simulation time or caller cancellation.
-            var cleanupOrigin = realtime.Milliseconds;
             try
             {
                 var cleanupId = host.ReleaseAll();
+                var cleanupOrigin = realtime.Milliseconds;
                 while (realtime.Milliseconds - cleanupOrigin < segment.CleanupTimeoutMilliseconds)
                 {
                     var completed = PollAll();
@@ -161,7 +163,13 @@ public static class GuaTimedSegmentReplay
                         while (realtime.Milliseconds - cleanupOrigin < segment.CleanupTimeoutMilliseconds)
                         {
                             var final = host.Poll(cleanupId);
-                            if (final is not null) { cleanupSucceeded = final.Succeeded; neutral = cleanupSucceeded && host.IsNeutral; break; }
+                            if (final is not null)
+                            {
+                                cleanupSucceeded = final.Succeeded;
+                                PollAll(); // Includes lifecycle/epoch health through the final host completion.
+                                neutral = cleanupSucceeded && host.IsNeutral;
+                                break;
+                            }
                             await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), CancellationToken.None).ConfigureAwait(false);
                         }
                         break;
@@ -183,11 +191,15 @@ public static class GuaTimedSegmentReplay
             for (var i = 1; i < applied.Length; i++)
                 if (applied[i] < applied[i - 1] || segment.RequireSameTickApplication &&
                     results[i].ScheduledMilliseconds == results[i - 1].ScheduledMilliseconds && applied[i] != applied[i - 1])
-                { outcome = GuaSegmentOutcome.Failed; failure = "application-order-or-tick-violation"; applicationConfirmed = false; }
+                {
+                    if (outcome == GuaSegmentOutcome.Succeeded)
+                    { outcome = GuaSegmentOutcome.Failed; failure = "application-order-or-tick-violation"; }
+                    applicationConfirmed = false;
+                }
         }
         return new(outcome, results, cleanupSucceeded, neutral, failure)
         {
-            Clock = segment.Clock, SimulationScope = segment.Clock == GuaSegmentClock.Simulation ? host.SimulationScope : null,
+            Clock = segment.Clock, SimulationScope = simulationScope,
             MaxLatenessMilliseconds = segment.MaxLatenessMilliseconds, ExecutionTimeoutMilliseconds = segment.ExecutionTimeoutMilliseconds,
             CleanupTimeoutMilliseconds = segment.CleanupTimeoutMilliseconds, ApplicationTimingConfirmed = applicationConfirmed,
         };

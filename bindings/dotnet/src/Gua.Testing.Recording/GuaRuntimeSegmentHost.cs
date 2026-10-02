@@ -18,6 +18,7 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
     private string source = "";
     private string? health;
     private long epoch;
+    private ulong actionRevision;
 
     public GuaRuntimeSegmentHost(GuaRuntime runtime, bool adapterAppliesInOrder,
         GuaObservationProfile profile = GuaObservationProfile.Debug, Func<GuaGameInputAction, bool>? confirmation = null)
@@ -38,21 +39,37 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
             confirmedActions.Clear();
             var capabilities = runtime.GetGameInputCapabilities(profile);
             foreach (var input in segment.Inputs)
+                if (Required(input.Kind) is var needed && needed != GuaGameInputCapabilities.None && (capabilities & needed) != needed)
+                    throw new NotSupportedException("Input capability is not initialized/authorized.");
+            if (!runtime.SupportsGuardedGameInput) throw new NotSupportedException("Native guarded input is unavailable.");
+            using var startTree = JsonDocument.Parse(runtime.GetUiTreeJson());
+            epoch = startTree.RootElement.GetProperty("sessionEpoch").GetInt64();
+            actionRevision = segment.Inputs.Any(input => input.Kind == GuaGameInputKind.Semantic && input.Operation != GuaGameInputOperation.Release)
+                ? runtime.FindGameInputActionsV2(new(Limit: 1), profile).Revision : 0;
+            foreach (var input in segment.Inputs)
             {
                 var required = Required(input.Kind);
                 if (required != GuaGameInputCapabilities.None && (capabilities & required) != required) throw new NotSupportedException("Input capability is not initialized/authorized.");
                 if (input.Kind == GuaGameInputKind.Semantic && input.Operation != GuaGameInputOperation.Release)
                 {
                     var action = Find(input.Target);
-                    if (input.Operation == GuaGameInputOperation.Set && !action.Holdable)
+                    if (input.SemanticValueType is { } type && action.ValueType != (type switch
+                        { GuaGameInputValueType.Button => "button", GuaGameInputValueType.Axis1D => "axis1d", GuaGameInputValueType.Vector2 => "vector2", _ => "text" }))
+                        throw new InvalidOperationException("Semantic value type declaration does not match the action.");
+                    if (input.Operation == GuaGameInputOperation.Set && action.ValueType == "text" && input.SemanticValueType != GuaGameInputValueType.Text)
+                        throw new InvalidOperationException("Text Set requires an explicit stateless Text value type.");
+                    if (input.Operation == GuaGameInputOperation.Set && action.ValueType == "button" && !action.Holdable)
                         throw new InvalidOperationException("Segment Set requires a holdable action.");
+                    if (input.Operation == GuaGameInputOperation.Press && action.ValueType != "button")
+                        throw new InvalidOperationException("Segment Press requires a button action.");
                     if (action.RequiresConfirmation && (confirm is null || !confirm(action)))
                         throw new InvalidOperationException("Fresh confirmation was declined or unavailable.");
                     confirmedActions[input.Target] = JsonSerializer.Serialize(action);
                 }
             }
             using var tree = JsonDocument.Parse(runtime.GetUiTreeJson());
-            epoch = tree.RootElement.GetProperty("sessionEpoch").GetInt64();
+            if (epoch != tree.RootElement.GetProperty("sessionEpoch").GetInt64())
+                throw new InvalidOperationException("Segment session changed during preflight.");
             health = null;
             using var diagnostics = JsonDocument.Parse(runtime.GetDiagnosticsJson());
             var journal = diagnostics.RootElement.GetProperty("traceLifecycle");
@@ -76,7 +93,7 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
                 throw new InvalidOperationException("Action map changed since segment preflight.");
             confirmed = current.RequiresConfirmation;
         }
-        return owner.Send(input.Kind, input.Operation, input.Target, input.Sensitive ? secret : input.Value,
+        return owner.SendGuarded(checked((ulong)epoch), actionRevision, input.Kind, input.Operation, input.Target, input.Sensitive ? secret : input.Value,
             input.LeaseMilliseconds == 0 ? null : TimeSpan.FromMilliseconds(input.LeaseMilliseconds),
             input.X, input.Y, input.DeviceIndex, input.Sensitive, confirmed, verifySendBoundary);
     }
@@ -126,6 +143,8 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
     private GuaGameInputAction Find(string target)
     {
         var result = runtime.FindGameInputActionsV2(new(Id: target), profile);
+        if (result.Revision != actionRevision || result.SessionEpoch != checked((ulong)epoch))
+            throw new InvalidOperationException("Action map or session changed since segment preflight.");
         var action = result.Actions.SingleOrDefault();
         return action is { Active: true } ? action : throw new InvalidOperationException("Action is no longer active/published.");
     }

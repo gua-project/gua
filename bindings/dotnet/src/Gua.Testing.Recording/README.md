@@ -94,6 +94,10 @@ maxLateness 超過時は未送信を止める。結果は全入力（未送信�
 host は現在の capability と Action Map を確認し、保護 action には呼出しごとの
 confirmation delegate が必要。変更された map では未送信操作を止める。秘密値は
 `Func<string, JsonElement?>` resolver で供給し、結果・ファイルへコピーしない。
+local host は native guarded enqueue を必須とし、承認時の epoch / Action Map revision を
+enqueue / consume の両方で照合する。対応しない古い native runtime は owner 作成前に拒否する。
+semantic text Set は `SemanticValueType: GuaGameInputValueType.Text` を明示すれば stateless
+として扱い、lease / release を要求しない。axis / vector の Holdable=false は許容する。
 local runtime host は realtime / game-input FIFO だけを扱い、simulation / 厳密適用
 時刻 / 同 tick 一括適用は拒否する。`IGuaTimedSegmentHost` を実装する host は、
 その時計の制御対象と apply 順序を明示し、全メソッドを短時間・non-blocking に保つ。
@@ -104,11 +108,14 @@ enqueue しない。送信後に ID が取得できない場合は中立未確�
 `GuaTimedSegmentFile.Save/Load` は独立 v1 plan を保存する。`GuaTimedSegmentImport.FromRecording`
 は game-input-only v2 の明示変換で、元 offset / 順序と secretKey を保存するが元時計の
 意味は `legacy-unknown`。UI、条件 wait、座標、閉じない hold、不十分な lease は拒否。
+省略 / 0 lease は実効 5000ms、wheelUnit 省略は pixels を保存する。秘密 semantic text の
+変換は `semanticValueType: id => GuaGameInputValueType.Text` のように型を明示する。
 MCP / Inspector の通常 Replay はこの能力を広告せず、既存互換を維持する。
 詳細契約は [Timed Segment v1](../../../../protocol/specs/timed-segment-v1.md)。
 
 `GuaRecordingTrace.AttachTimedResult(trace, stepId, timed, profile)` は値を含まない
 タイミング結果を `gua.timed-segment-result.v1` として明示添付する。Trace は再生しない。
+添付 schema の検証に失敗した結果は保存しない。
 # Trace integration
 
 `GuaRecordingTrace.Attach(trace, stepId, recorder.Recording, profile)` validates and

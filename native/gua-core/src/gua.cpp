@@ -226,6 +226,8 @@ struct GameInputRequest {
     double remaining_lease_ms = 0.0;
     int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG;
     unsigned long long trace_epoch = 0;
+    bool guarded = false;
+    unsigned long long action_revision = 0;
 };
 
 struct HeldGameInput {
@@ -3791,8 +3793,9 @@ extern "C" int gua_enqueue_game_input_v2(gua_context_t* ctx,
     return gua_enqueue_game_input_for_profile_v2(ctx, descriptor, GUA_OBSERVATION_PROFILE_DEBUG, out_request_id);
 }
 
-extern "C" int gua_enqueue_game_input_for_profile_v2(gua_context_t* ctx,
-    const gua_game_input_request_descriptor_v2_t* descriptor, int observation_profile, uint64_t* out_request_id)
+static int enqueue_game_input(gua_context_t* ctx,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int observation_profile, uint64_t* out_request_id,
+    bool guarded, uint64_t expected_session_epoch, uint64_t expected_action_revision)
 {
     if (ctx == nullptr || descriptor == nullptr || descriptor->struct_size < sizeof(*descriptor) ||
         !one_of(observation_profile, { GUA_OBSERVATION_PROFILE_DEBUG, GUA_OBSERVATION_PROFILE_PLAYER }) ||
@@ -3803,6 +3806,10 @@ extern "C" int gua_enqueue_game_input_for_profile_v2(gua_context_t* ctx,
         return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
     const std::lock_guard lock(ctx->mutex);
     if (!ctx->game_input_owners.contains(descriptor->owner_id)) return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
+    const auto revision = observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_game_input_revision : ctx->game_input_revision;
+    if (guarded && (expected_session_epoch != ctx->session_epoch ||
+        (descriptor->kind == GUA_GAME_INPUT_SEMANTIC && descriptor->operation != GUA_GAME_INPUT_RELEASE && expected_action_revision != revision)))
+        return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
     const std::string target = descriptor->target != nullptr ? descriptor->target : "";
     const std::string value = descriptor->value_json != nullptr ? descriptor->value_json : "null";
     if (target.size() >= 128 || !valid_json_value(value)) return GUA_GAME_INPUT_ERROR_INVALID_VALUE;
@@ -3861,11 +3868,21 @@ extern "C" int gua_enqueue_game_input_for_profile_v2(gua_context_t* ctx,
         lease, descriptor->device_index, descriptor->sensitive != 0, false, descriptor->confirmed != 0 };
     request.observation_profile = observation_profile;
     request.trace_epoch = ctx->session_epoch;
+    request.guarded = guarded;
+    request.action_revision = revision;
     trace_input(*ctx, request, request_releases_hold(request) || request.operation == GUA_GAME_INPUT_RELEASE_ALL ? "release-requested" : "enqueue");
     ctx->game_input_requests.push_back(std::move(request));
     if (out_request_id != nullptr) *out_request_id = request_id;
     return GUA_GAME_INPUT_OK;
 }
+
+extern "C" int gua_enqueue_game_input_for_profile_v2(gua_context_t* ctx,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t* out_request_id)
+{ return enqueue_game_input(ctx, descriptor, profile, out_request_id, false, 0, 0); }
+
+extern "C" int gua_enqueue_game_input_guarded_v2(gua_context_t* ctx,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t epoch, uint64_t revision, uint64_t* out_request_id)
+{ return enqueue_game_input(ctx, descriptor, profile, out_request_id, true, epoch, revision); }
 
 extern "C" int gua_consume_game_input_request(gua_context_t* ctx, gua_game_input_request_v1_t* out_request)
 {
@@ -3873,9 +3890,12 @@ extern "C" int gua_consume_game_input_request(gua_context_t* ctx, gua_game_input
     const std::lock_guard lock(ctx->mutex);
     while (!ctx->game_input_requests.empty()) {
         const auto& request = ctx->game_input_requests.front();
-        if (request.kind != GUA_GAME_INPUT_SEMANTIC) break;
-        const int validation = validate_semantic_game_input(ctx->game_input_actions, request.operation,
-            request.target, request.value_json, request.confirmed, request.observation_profile);
+        const auto revision = request.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_game_input_revision : ctx->game_input_revision;
+        const bool stale = request.guarded && (request.trace_epoch != ctx->session_epoch ||
+            (request.kind == GUA_GAME_INPUT_SEMANTIC && request.operation != GUA_GAME_INPUT_RELEASE && request.action_revision != revision));
+        const int validation = stale ? GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT : request.kind == GUA_GAME_INPUT_SEMANTIC ?
+            validate_semantic_game_input(ctx->game_input_actions, request.operation,
+                request.target, request.value_json, request.confirmed, request.observation_profile) : GUA_GAME_INPUT_OK;
         if (validation == GUA_GAME_INPUT_OK) break;
         trace_input(*ctx, request, "completion", 0, validation);
         append_game_input_result(*ctx, GameInputResult { request.request_id, request.owner_id, false, validation });

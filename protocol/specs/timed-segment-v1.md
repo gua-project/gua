@@ -20,7 +20,11 @@ game-input-only Recording v2 の元 offset と配列順を保存し、`legacy-un
 fallback は拒否する。秘密参照だけを保持し、実値は実行時 resolver から取得する。
 Recording の schemaVersion 1/2 は変更せず、区間は独立した version 1 DTO とする。
 既存 v1 UI と v2 混在 Recording は逐次 Replay を使う。独立 queue を跨ぐ順序を
-証明できないため timed 変換を拒否する。省略された hold lease も勝手に延長しない。
+証明できないため timed 変換を拒否する。省略 / 0 の hold lease は既存経路の実効 default
+5000ms として明示化し、勝手に延長しない。wheelUnit 省略は既存 bridge と同じ pixels。
+semantic text Set は stateless であり、`semanticValueType: 4` を宣言し host が現在の
+descriptor と照合する。秘密参照の変換で型を取得できない場合は caller が明示 resolver を
+渡す。axis/vector Set の Holdable=false は拒否理由にしない。
 
 ## 時計・順序・能力
 
@@ -30,6 +34,12 @@ realtime の game-input FIFO のみ対応する。UI と game-input は独立 qu
 混在順序を仮定してはいけない。MCP / Inspector の既存 completion-only callback も
 能力証拠にならない。simulation、strict application time、same-tick atomic application
 を要求した未対応経路は実行前に拒否し、暗黙の realtime 降格をしない。
+
+local host は新しい `gua_runtime_enqueue_game_input_guarded_v2` を必須とする。
+承認時の sessionEpoch / profile ごとの Action Map revision を native context lock 内で
+enqueue と consume の両方に照合し、変化した要求は失敗 completion として返し適用しない。
+旧 enqueue API の互換挙動は変更しない。cleanup は従来の owner-scoped path で送信し、
+世代変更時にも自 owner の解除を試みる。対応 entry point が無ければ owner 作成前に拒否する。
 
 同 offset は配列順に送信する。host はこの順に consume/apply する契約が必要である。
 send 時刻は client の呼出し境界、resultReceived は client の poll 成功時刻であり、
@@ -75,5 +85,7 @@ resultReceived は別時計である。simulation scope、maxLateness と両実�
 検証成功を意味しない。runtime host は lease-expired の owner journal と欠損も照合する。
 lease の早期失効、journal の取りこぼし、epoch 変更は正常再現としない。
 Trace 添付の request ID は十進文字列で、未取得の時刻 / ID は null を明示する。
+添付前に schema を検証する。cancel / timeout は後から取得した timing evidence で
+上書きせず、適用時間は未確認として記録する。simulation scope は host teardown 前に保存する。
 添付 schema は `timed-segment-result-v1.schema.json`。入力値を持たない独立 envelope で、
 旧 Recording ファイルや Trace の自動再生入力としては読まない。

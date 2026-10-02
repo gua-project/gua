@@ -9,7 +9,7 @@ using NUnit.Framework;
 
 namespace Gua.Visual.Tests;
 
-public sealed class TimedSegmentTests
+public sealed partial class TimedSegmentTests
 {
     [Test]
     public void FileRoundTripMatchesProtocolAndRejectsWaitsAndBranches()
@@ -391,7 +391,8 @@ public sealed class TimedSegmentTests
         public bool ThrowAfterDispatch { get; set; }
         public string? SimulationScope { get; set; }
         public double SimulationMilliseconds => 0;
-        public string? ExecutionFailureCode => null;
+        public Func<string?>? Health { get; set; }
+        public string? ExecutionFailureCode => Health?.Invoke();
         public double ResultDelay { get; set; }
         public bool CleanupFails { get; set; }
         public bool Began { get; private set; }
@@ -412,8 +413,10 @@ public sealed class TimedSegmentTests
             pending.Remove(requestId);
             return new(!request.Cleanup || !CleanupFails, HostAppliedMilliseconds: request.Cleanup ? null : Applied?.Invoke(requestId));
         }
-        public ulong ReleaseAll() { pending[++next] = (clock.Milliseconds, true); return next; }
+        public ulong ReleaseAll() { CleanupCount++; pending[++next] = (clock.Milliseconds, true); return next; }
         public bool IsNeutral => !CleanupFails;
-        public void End() => Ended = true;
+        public void End() { Ended = true; if (ClearScopeOnEnd) SimulationScope = null; }
+        public bool ClearScopeOnEnd { get; set; }
+        public int CleanupCount { get; private set; }
     }
 }

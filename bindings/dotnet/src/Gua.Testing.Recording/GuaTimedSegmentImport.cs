@@ -9,7 +9,8 @@ public static class GuaTimedSegmentImport
     /// intentions with unknown provenance, never evidence of original host application time.
     /// UI v1/v2, conditions and coordinate fallback require the existing condition-based Replay.</summary>
     public static GuaTimedSegment FromRecording(string json, long durationMilliseconds, long maxLatenessMilliseconds,
-        long executionTimeoutMilliseconds, long cleanupTimeoutMilliseconds)
+        long executionTimeoutMilliseconds, long cleanupTimeoutMilliseconds,
+        Func<string, GuaGameInputValueType?>? semanticValueType = null)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -27,7 +28,7 @@ public static class GuaTimedSegmentImport
             if (sensitive && (step.TryGetProperty("value", out _) || args.TryGetProperty("value", out _) || args.TryGetProperty("text", out _)))
                 throw new InvalidDataException("Sensitive legacy input contains plaintext.");
             var secret = step.TryGetProperty("secretKey", out var secretKey) ? secretKey.GetString() : null;
-            var lease = args.TryGetProperty("leaseMs", out var leaseMs) ? leaseMs.GetUInt32() : 0;
+            var lease = args.TryGetProperty("leaseMs", out var leaseMs) && leaseMs.GetUInt32() != 0 ? leaseMs.GetUInt32() : 5000;
             var device = args.TryGetProperty("gamepadIndex", out var index) ? index.GetInt32() : 0;
             var operation = step.GetProperty("operation").GetString();
             string Text(string key) => args.GetProperty(key).GetString() ?? throw new InvalidDataException("Missing input target.");
@@ -47,7 +48,7 @@ public static class GuaTimedSegmentImport
                 "pointer_move" when Text("mode") == "absolute" => new(offset, GuaGameInputKind.Pointer, GuaGameInputOperation.MoveAbsolute,
                     "absolute:" + Text("coordinateSpace"), X: Number("x"), Y: Number("y")),
                 "pointer_wheel" => new(offset, GuaGameInputKind.Pointer, GuaGameInputOperation.Wheel,
-                    args.TryGetProperty("wheelUnit", out var unit) ? unit.GetString()! : "lines", X: Number("deltaX"), Y: Number("deltaY")),
+                    args.TryGetProperty("wheelUnit", out var unit) ? unit.GetString()! : "pixels", X: Number("deltaX"), Y: Number("deltaY")),
                 "gamepad_button_down" => new(offset, GuaGameInputKind.Gamepad, GuaGameInputOperation.Down, Text("button"), LeaseMilliseconds: lease, DeviceIndex: device),
                 "gamepad_button_up" => new(offset, GuaGameInputKind.Gamepad, GuaGameInputOperation.Up, Text("button"), DeviceIndex: device),
                 "set_gamepad_axis" => new(offset, GuaGameInputKind.Gamepad, GuaGameInputOperation.Set, Text("axis"), Value("value"), lease, DeviceIndex: device),
@@ -56,7 +57,9 @@ public static class GuaTimedSegmentImport
                 "release_all_game_inputs" => new(offset, GuaGameInputKind.Cleanup, GuaGameInputOperation.ReleaseAll, ""),
                 _ => throw new InvalidDataException("Unsupported legacy input operation."),
             };
-            inputs.Add(mapped with { Sensitive = sensitive, SecretKey = secret });
+            var type = mapped.Kind == GuaGameInputKind.Semantic ? semanticValueType?.Invoke(mapped.Target) ??
+                (mapped.Operation == GuaGameInputOperation.Set && mapped.Value?.ValueKind == JsonValueKind.String ? GuaGameInputValueType.Text : (GuaGameInputValueType?)null) : null;
+            inputs.Add(mapped with { Sensitive = sensitive, SecretKey = secret, SemanticValueType = type });
         }
         var segment = new GuaTimedSegment(1, durationMilliseconds, maxLatenessMilliseconds, executionTimeoutMilliseconds,
             cleanupTimeoutMilliseconds, inputs, TimingProvenance: "legacy-unknown");

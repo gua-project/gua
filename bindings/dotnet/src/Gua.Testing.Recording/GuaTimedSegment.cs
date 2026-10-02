@@ -10,7 +10,8 @@ public enum GuaSegmentOutcome { Succeeded, Failed, Cancelled, TimedOut, Late }
 public sealed record GuaTimedInput(
     long OffsetMilliseconds, GuaGameInputKind Kind, GuaGameInputOperation Operation, string Target,
     JsonElement? Value = null, uint LeaseMilliseconds = 0, double X = 0, double Y = 0,
-    int DeviceIndex = 0, bool Sensitive = false, string? SecretKey = null);
+    int DeviceIndex = 0, bool Sensitive = false, string? SecretKey = null,
+    GuaGameInputValueType? SemanticValueType = null);
 
 public sealed record GuaTimedSegment(
     int SchemaVersion, long DurationMilliseconds, long MaxLatenessMilliseconds,
@@ -56,7 +57,7 @@ public static class GuaTimedSegmentFile
         {
             Require(input, "offsetMilliseconds", "kind", "operation", "target");
             RejectUnknown(input, "offsetMilliseconds", "kind", "operation", "target", "value", "leaseMilliseconds",
-                "x", "y", "deviceIndex", "sensitive", "secretKey");
+                "x", "y", "deviceIndex", "sensitive", "secretKey", "semanticValueType");
         }
         var segment = JsonSerializer.Deserialize<GuaTimedSegment>(json, Options)
             ?? throw new InvalidDataException("Empty timed segment.");
@@ -86,6 +87,7 @@ public static class GuaTimedSegmentFile
             previous = input.OffsetMilliseconds;
             if (input.Target is null || (string.IsNullOrWhiteSpace(input.Target) && input.Kind is not (GuaGameInputKind.Cleanup or GuaGameInputKind.TextInput) &&
                 !(input.Kind == GuaGameInputKind.Gamepad && input.Operation == GuaGameInputOperation.Reset)) || input.Target.Contains('\0') ||
+                input.Target.Contains('\r') || input.Target.Contains('\n') ||
                 !Finite(input.X) || !Finite(input.Y) || input.DeviceIndex < 0 || input.DeviceIndex > 3 ||
                 (input.Kind != GuaGameInputKind.Gamepad && input.DeviceIndex != 0))
                 throw new InvalidDataException("Invalid input target, coordinate or device.");
@@ -104,9 +106,14 @@ public static class GuaTimedSegmentFile
                 _ => false,
             };
             if (!allowed) throw new InvalidDataException("Unsupported operation in a timed segment.");
+            if (input.SemanticValueType is { } type && (input.Kind != GuaGameInputKind.Semantic ||
+                !Enum.IsDefined(typeof(GuaGameInputValueType), type)))
+                throw new InvalidDataException("Invalid semantic value type declaration.");
+            ValidateRawTarget(input);
             var key = (input.Kind, input.Target, input.DeviceIndex);
             if (input.Kind == GuaGameInputKind.Cleanup) held.Clear();
-            else if (input.Kind == GuaGameInputKind.TextInput) { }
+            else if (input.Kind == GuaGameInputKind.TextInput || input.Kind == GuaGameInputKind.Semantic &&
+                input.SemanticValueType == GuaGameInputValueType.Text) { }
             else if (input.Operation is GuaGameInputOperation.Set or GuaGameInputOperation.Down)
             {
                 if (input.LeaseMilliseconds > 60000 || input.LeaseMilliseconds <=
@@ -121,6 +128,31 @@ public static class GuaTimedSegmentFile
         if (held.Count != 0) throw new InvalidDataException("Every hold must have an explicit release inside the segment.");
     }
     private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+    private static void ValidateRawTarget(GuaTimedInput input)
+    {
+        bool Is(params string[] targets) => targets.Contains(input.Target);
+        var valid = input.Kind switch
+        {
+            GuaGameInputKind.Keyboard => System.Text.RegularExpressions.Regex.IsMatch(input.Target,
+                "^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Numpad[0-9]|Backquote|Backslash|Backspace|BracketLeft|BracketRight|CapsLock|Comma|ContextMenu|Delete|End|Enter|Equal|Escape|Home|Insert|MetaLeft|MetaRight|Minus|NumLock|PageDown|PageUp|Pause|Period|Quote|ScrollLock|Semicolon|ShiftLeft|ShiftRight|Slash|Space|Tab|ControlLeft|ControlRight|AltLeft|AltRight|ArrowDown|ArrowLeft|ArrowRight|ArrowUp|PrintScreen|NumpadAdd|NumpadDecimal|NumpadDivide|NumpadEnter|NumpadMultiply|NumpadSubtract)$"),
+            GuaGameInputKind.Pointer => input.Operation switch
+            {
+                GuaGameInputOperation.Down or GuaGameInputOperation.Up => Is("primary", "secondary", "auxiliary", "back", "forward"),
+                GuaGameInputOperation.MoveAbsolute => Is("absolute:viewport_pixels") || Is("absolute:viewport_normalized") &&
+                    input.X is >= 0 and <= 1 && input.Y is >= 0 and <= 1,
+                GuaGameInputOperation.MoveDelta => Is("delta:"),
+                GuaGameInputOperation.Wheel => Is("pixels", "lines"), _ => false,
+            },
+            GuaGameInputKind.Gamepad => input.Operation switch
+            {
+                GuaGameInputOperation.Down or GuaGameInputOperation.Up => Is("south", "east", "west", "north", "left_shoulder", "right_shoulder", "left_trigger", "right_trigger", "back", "start", "left_stick", "right_stick", "dpad_up", "dpad_down", "dpad_left", "dpad_right"),
+                GuaGameInputOperation.Set => Is("left_stick_x", "left_stick_y", "right_stick_x", "right_stick_y"),
+                GuaGameInputOperation.Reset => true, _ => false,
+            },
+            _ => true,
+        };
+        if (!valid) throw new InvalidDataException("Unsupported fixed raw-input target.");
+    }
     private static void RejectUnknown(JsonElement value, params string[] names)
     {
         var seen = new HashSet<string>();
