@@ -84,6 +84,13 @@ Godot addon archives include the MIT notice for the pinned godot-cpp dependency
 ## Compatibility and completion gates
 
 Existing package names, native ABI and public managed signatures are retained.
+The current native version API reports `abiVersion: 1` and
+`protocolSchemaVersion: "2"`; versioned descriptor structs remain additive C ABI
+extensions. The external consumer asserts these values and retains
+`core-version.json` / `runtime-version.json`, including actual capability lists.
+Use `GuaVersion.EnsureCompatible` to check a consumer's required ABI/protocol and
+capabilities before operation. Those lists describe the connected context and
+must not be copied into an engine-wide support claim.
 The resource API and `schemas/` package directory are additive; existing `trace/`
 entries stay available. UI tree schema v2, Trace v1, Selector and InputAction
 metadata schemas retain their independent versions. The Recording JSON schema
@@ -91,6 +98,15 @@ accepts v1/v2, while the managed Recording reader must be checked against its
 declared versions after #122; schema acceptance alone does not prove a replay
 reader can read v2. The external smoke retains a legacy v1 Recording round trip,
 rejects an unknown version and checks the embedded Viewer.
+
+| Serialized contract | Read/write support at this candidate boundary |
+| --- | --- |
+| UI tree | v2; additive optional state fields remain omitted when unsupported |
+| Trace | v1 reader/writer; unknown major versions rejected, additive fields retained |
+| Recording | JSON schema v1/v2; managed legacy semantic v1 file round trip is tested; #122 timing acceptance remains required |
+| Semantic Selector | Existing `selector.schema.json` string-criterion objects; no new selector grammar |
+| InputAction map | Existing v1 preserved; explicit v2 metadata map/search use their separate schemas and `semantic_game_input_metadata_v1` capability |
+| Observe / Value / Spatial | Independently pinned v1/r1 schemas; execution/provider support negotiated separately |
 
 `syntax-check.yml` runs package-only acceptance on all four real RID runners and
 uploads `gua-distribution-<rid>-<commit>` evidence. No skip counts as a pass.
