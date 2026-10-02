@@ -47,7 +47,8 @@ try {
     Run-Dotnet -Arguments @('restore', $project, "-p:GuaPackageVersion=$Version", '-r', $Rid, '-p:SelfContained=true', '--configfile', $offlineConfig, '--no-http-cache', '-p:NuGetAudit=false')
     Run-Dotnet -Arguments @('publish', $project, '-c', 'Release', '-r', $Rid, '--self-contained', '--no-restore', "-p:GuaPackageVersion=$Version", '-o', (Join-Path $temporary 'publish'))
     $archive = Join-Path $output "consumer-$Rid.zip"
-    Compress-Archive -Path (Join-Path $temporary 'publish/*') -DestinationPath $archive
+    # ZipFile preserves relative directories when macOS resolves /var through /private/var.
+    [IO.Compression.ZipFile]::CreateFromDirectory((Join-Path $temporary 'publish'), $archive)
     $extracted = Join-Path $temporary 'archive-extracted'
     Expand-Archive -LiteralPath $archive -DestinationPath $extracted
     & (Join-Path $PSScriptRoot 'verify-native-dependency-closure.ps1') -NativeDirectory $extracted -Rid $Rid -OutputPath (Join-Path $output 'native-dependencies.json')
