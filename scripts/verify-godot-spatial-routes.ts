@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, writeFile, mkdtemp } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
+import { assertCandidateLibraries } from "./spatial-candidate-assertions";
 const [executableArg, addonArg, outputArg, packageArg] = process.argv.slice(2);
 const executable=resolve(executableArg!), addon=resolve(addonArg!), output=resolve(outputArg!);
 await mkdir(output,{recursive:true});
@@ -18,11 +19,11 @@ if(packageArg) {
   await cp("examples/spatial-fixtures/client/Program.cs",join(consumer,"Program.cs"));
   await cp("examples/spatial-fixtures/client/SpatialClient.csproj",join(consumer,"SpatialClient.csproj"));
   const feed=resolve(packageArg), config=join(consumer,"NuGet.Config");
-  await writeFile(config,`<configuration><packageSources><clear/><add key="local" value="${feed.replaceAll("&","&amp;")}"/><add key="nuget" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>`);
+  await writeFile(config,`<configuration><packageSources><clear/><add key="local" value="${feed.replaceAll("&","&amp;")}"/><add key="nuget" value="https://api.nuget.org/v3/index.json"/></packageSources><packageSourceMapping><packageSource key="local"><package pattern="Gua.*"/></packageSource><packageSource key="nuget"><package pattern="*"/></packageSource></packageSourceMapping></configuration>`);
   const env={NUGET_PACKAGES:join(consumer,"cache"),GUA_NATIVE_DIR:"",GUA_RUNTIME_NATIVE_DIR:""};
-  await run(["dotnet","build",join(consumer,"SpatialClient.csproj"),"-c","Release","-p:GuaUsePackages=true","-p:GuaPackageVersion=0.0.0-ci"],"consumer-build.log",env);
+  await run(["dotnet","build",join(consumer,"SpatialClient.csproj"),"-c","Release",`-p:RestoreConfigFile=${config}`,"-p:GuaUsePackages=true","-p:GuaPackageVersion=[0.0.0-ci]"],"consumer-build.log",env);
   const assets=JSON.parse(await readFile(join(consumer,"obj/project.assets.json"),"utf8"));
-  if(Object.values(assets.libraries).some((library:any)=>library.type==="project")) throw Error("Consumer used a project reference");
+  assertCandidateLibraries(assets.libraries);
   await writeFile(join(output,"consumer-assets.json"),JSON.stringify(assets,null,2));
   await writeFile(join(output,"consumer-provenance.json"),JSON.stringify({project:consumer,feed,assembly:join(consumer,"bin/Release/net10.0/SpatialClient.dll"),nativeDirectoryOverrides:"cleared",projectReferences:0},null,2));
 }

@@ -74,6 +74,13 @@ safe discovery rejection and absent provider metadata in both declarations.
 packages/mcp/test/spatial-redaction-assertions.test.ts directly exercises that
 production helper with empty/missing/duplicate replies and stale declarations.
 
+GitHub review identified that a bare NuGet candidate version permits newer
+published fallback. The runner now uses exact [0.0.0-ci], maps Gua.* exclusively
+to the local candidate feed, and requires resolved Gua.Core/Gua.Testing candidate
+packages while rejecting any differently versioned Gua package or project
+library. spatial-candidate-assertions.test.ts verifies those rejection paths;
+final-head candidate builds and engine execution must still pass independently.
+
 ## Gates retained
 
 - #129 requires an owner-selected public version/channel and acceptance on the
