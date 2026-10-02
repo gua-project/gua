@@ -1,12 +1,77 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Gua.Core;
+using Json.Schema;
 
 namespace Gua.Testing.Recording;
 
 /// <summary>Recording remains a separate format. Trace records non-replayable failures separately.</summary>
 public static class GuaRecordingTrace
 {
+    private static readonly Lazy<Json.Schema.JsonSchema> TimedResultSchema = new(() =>
+    {
+        using var stream = typeof(GuaRecordingTrace).Assembly.GetManifestResourceStream("Gua.Recording.TimedResult.schema.json")!;
+        using var reader = new StreamReader(stream);
+        return Json.Schema.JsonSchema.FromText(reader.ReadToEnd());
+    });
+    /// <summary>Attach values-free timing evidence without executing Replay or guessing application times.</summary>
+    public static bool AttachTimedResult(GuaTraceSession trace, string stepId, GuaTimedSegmentResult result,
+        GuaObservationProfile profile = GuaObservationProfile.Debug) =>
+        GuaTraceCapture.JsonAttachment(trace, stepId, "gua.timed-segment-result.v1", () =>
+        {
+            result = result with { Inputs = result.Inputs.ToArray() };
+            double? previousKnownApplication = null;
+            for (var i = 0; i < result.Inputs.Count; i++)
+            {
+                var input = result.Inputs[i];
+                if (input.Index != i || i > 0 && input.ScheduledMilliseconds < result.Inputs[i - 1].ScheduledMilliseconds)
+                    throw new InvalidDataException("Invalid timed input sequence.");
+                if (result.Clock == GuaSegmentClock.Realtime && input.SentMilliseconds is { } sent &&
+                    (sent < input.ScheduledMilliseconds || result.Outcome == GuaSegmentOutcome.Succeeded &&
+                     sent - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds))
+                    throw new InvalidDataException("Invalid realtime send schedule evidence.");
+                if (result.Outcome == GuaSegmentOutcome.Succeeded &&
+                    (input.SentMilliseconds >= result.ExecutionTimeoutMilliseconds || input.ResultReceivedMilliseconds >= result.ExecutionTimeoutMilliseconds))
+                    throw new InvalidDataException("Successful input exceeded the execution deadline.");
+                if (result.Outcome == GuaSegmentOutcome.Succeeded && input.HostAppliedMilliseconds is { } knownApplied &&
+                    (knownApplied < input.ScheduledMilliseconds || knownApplied - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds ||
+                     previousKnownApplication is { } prior && knownApplied < prior))
+                    throw new InvalidDataException("Known application evidence contradicts a successful outcome.");
+                if (input.HostAppliedMilliseconds is { } known) previousKnownApplication = known;
+            }
+            var requestIds = new HashSet<ulong>();
+            if (result.Inputs.Any(input => input.RequestId is { } id && !requestIds.Add(id)))
+                throw new InvalidDataException("Duplicate timed input request correlation.");
+            if (result.Inputs.Any(input => input.ResultReceivedMilliseconds is { } received &&
+                (input.SentMilliseconds is not { } sent || received < sent)))
+                throw new InvalidDataException("Invalid client timing evidence.");
+            if (result.ApplicationTimingConfirmed)
+                for (var i = 0; i < result.Inputs.Count; i++)
+                {
+                    var input = result.Inputs[i];
+                    if (input.HostAppliedMilliseconds is not { } applied || applied < input.ScheduledMilliseconds ||
+                        applied - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds ||
+                        i > 0 && applied < result.Inputs[i - 1].HostAppliedMilliseconds)
+                        throw new InvalidDataException("Invalid application timing confirmation.");
+                }
+            var json = JsonSerializer.Serialize(new { schemaVersion = 1, result = new
+            {
+                result.Outcome, result.CleanupSucceeded, result.NeutralConfirmed, result.FailureCode,
+                result.Clock, result.SimulationScope, result.MaxLatenessMilliseconds,
+                result.ExecutionTimeoutMilliseconds, result.CleanupTimeoutMilliseconds, result.ApplicationTimingConfirmed,
+                inputs = result.Inputs.Select(input => new
+                {
+                    input.Index, input.ScheduledMilliseconds, input.SentMilliseconds,
+                    requestId = input.RequestId?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    input.ResultReceivedMilliseconds, input.HostAppliedMilliseconds, input.Succeeded, input.ErrorCode,
+                }),
+            } }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            using var document = JsonDocument.Parse(json);
+            if (!TimedResultSchema.Value.Evaluate(document.RootElement).IsValid)
+                throw new InvalidDataException("Invalid timed segment result attachment.");
+            return json;
+        }, profile);
+
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 

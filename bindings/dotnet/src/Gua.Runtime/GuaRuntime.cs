@@ -256,6 +256,8 @@ public sealed partial class GuaRuntime : IDisposable
     public string GetUiTreeJson() { ThrowIfDisposed(); return CopyUiTree(_handle); }
     public string GetPlayerUiTreeJson() { ThrowIfDisposed(); return CopyJson(_handle, JsonSource.PlayerUiTree); }
     public string GetVersionJson() { ThrowIfDisposed(); return CopyVersion(_handle); }
+    /// <summary>Read-only, redacted Debug diagnostics, including the bounded native lifecycle journal.</summary>
+    public string GetDiagnosticsJson() { ThrowIfDisposed(); return Observations.GetDiagnosticsJson(); }
 
     public void Dispose()
     {

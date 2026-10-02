@@ -40,6 +40,7 @@ struct gua_runtime_t {
         int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG;
         uint64_t owner_id = 0;
         bool consumed = false;
+        bool guarded = false;
     };
 
     gua_context_t* context = nullptr;
@@ -1176,8 +1177,9 @@ extern "C" int gua_runtime_enqueue_game_input_v2(gua_runtime_t* runtime,
         valid_runtime(runtime) ? runtime->observation_profile : GUA_OBSERVATION_PROFILE_DEBUG, out_request_id);
 }
 
-extern "C" int gua_runtime_enqueue_game_input_for_profile_v2(gua_runtime_t* runtime,
-    const gua_game_input_request_descriptor_v2_t* descriptor, int observation_profile, uint64_t* out_request_id)
+static int enqueue_runtime_game_input(gua_runtime_t* runtime,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int observation_profile, uint64_t* out_request_id,
+    bool guarded, uint64_t epoch, uint64_t revision, bool validate_only = false)
 {
     if (!valid_runtime(runtime) || descriptor == nullptr ||
         (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER))
@@ -1190,13 +1192,27 @@ extern "C" int gua_runtime_enqueue_game_input_for_profile_v2(gua_runtime_t* runt
     if (required == UINT32_MAX || (required != 0 && (available & required) == 0))
         return GUA_GAME_INPUT_ERROR_UNSUPPORTED;
     uint64_t request_id = 0;
-    const int result = gua_enqueue_game_input_for_profile_v2(runtime->context, descriptor, observation_profile, &request_id);
-    if (result == GUA_GAME_INPUT_OK) {
-        runtime->game_input_request_profiles[request_id] = { observation_profile, descriptor->owner_id, false };
+    const int result = validate_only ? gua_validate_game_input_guarded_v2(runtime->context, descriptor, observation_profile, epoch, revision) :
+        guarded ? gua_enqueue_game_input_guarded_v2(runtime->context, descriptor, observation_profile, epoch, revision, &request_id) :
+        gua_enqueue_game_input_for_profile_v2(runtime->context, descriptor, observation_profile, &request_id);
+    if (result == GUA_GAME_INPUT_OK && !validate_only) {
+        runtime->game_input_request_profiles[request_id] = { observation_profile, descriptor->owner_id, false, guarded };
         if (out_request_id != nullptr) *out_request_id = request_id;
     }
     return result;
 }
+
+extern "C" int gua_runtime_enqueue_game_input_for_profile_v2(gua_runtime_t* runtime,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t* out_request_id)
+{ return enqueue_runtime_game_input(runtime, descriptor, profile, out_request_id, false, 0, 0); }
+
+extern "C" int gua_runtime_enqueue_game_input_guarded_v2(gua_runtime_t* runtime,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t epoch, uint64_t revision, uint64_t* out_request_id)
+{ return enqueue_runtime_game_input(runtime, descriptor, profile, out_request_id, true, epoch, revision); }
+
+extern "C" int gua_runtime_validate_game_input_guarded_v2(gua_runtime_t* runtime,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t epoch, uint64_t revision)
+{ return enqueue_runtime_game_input(runtime, descriptor, profile, nullptr, true, epoch, revision, true); }
 
 extern "C" int gua_runtime_consume_game_input_request(gua_runtime_t* runtime, gua_game_input_request_v1_t* out_request)
 {
@@ -1210,7 +1226,9 @@ extern "C" int gua_runtime_consume_game_input_request(gua_runtime_t* runtime, gu
         if (profile != runtime->game_input_request_profiles.end()) profile->second.consumed = true;
         const uint32_t required = required_game_input_capability(out_request->kind);
         const uint32_t available = effective_game_input_capabilities(runtime, observation_profile);
-        if (internal_cleanup || required == 0 || (required != UINT32_MAX && (available & required) != 0)) return 1;
+        const bool profile_denied = profile != runtime->game_input_request_profiles.end() && profile->second.guarded &&
+            runtime->observation_profile == GUA_OBSERVATION_PROFILE_PLAYER && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER;
+        if (internal_cleanup || required == 0 || (!profile_denied && required != UINT32_MAX && (available & required) != 0)) return 1;
         (void)gua_complete_game_input_request(runtime->context, out_request->request_id, 0, GUA_GAME_INPUT_ERROR_UNSUPPORTED);
         runtime->game_input_request_profiles.erase(out_request->request_id);
     }
@@ -1284,6 +1302,14 @@ extern "C" int gua_runtime_copy_game_input_state_json(gua_runtime_t* runtime, ui
     if (!valid_runtime(runtime)) return copy_json_string("{}", out_json, out_json_size);
     const std::lock_guard lock(runtime->context_mutex);
     return gua_copy_game_input_state_json(runtime->context, owner_id, out_json, out_json_size);
+}
+
+extern "C" int gua_runtime_get_game_input_owner_health(gua_runtime_t* runtime, uint64_t owner_id,
+    uint64_t* out_session_epoch, int* out_lease_expired)
+{
+    if (!valid_runtime(runtime)) return 0;
+    const std::lock_guard lock(runtime->context_mutex);
+    return gua_get_game_input_owner_health(runtime->context, owner_id, out_session_epoch, out_lease_expired);
 }
 
 extern "C" int gua_runtime_copy_game_input_result_json(gua_runtime_t* runtime, uint64_t owner_id, uint64_t request_id,

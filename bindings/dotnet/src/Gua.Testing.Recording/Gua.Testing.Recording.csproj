@@ -21,7 +21,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Gua.Testing\Gua.Testing.csproj" />
+    <ProjectReference Include="..\Gua.Runtime\Gua.Runtime.csproj" />
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <EmbeddedResource Include="../../../../protocol/schema/timed-segment-result-v1.schema.json" LogicalName="Gua.Recording.TimedResult.schema.json" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
     <PackageReference Include="System.Text.Json" Version="10.0.0" />

@@ -59,6 +59,66 @@ payload forced synthetic sequence-based timing. Use `FromDiagnostics` only when
 that import metadata is not needed.
 
 Recording version 1 follows `protocol/schema/recording.schema.json`.
+
+## 有限 Timed Segment（明示的な拡張）
+
+既存 Replay は逐次 completion 待ちであり、`PreserveDelays` は応答待ち時間を
+次の delay に加える。厳密な送信予定には `GuaReplayer.ReplayTimedSegmentAsync` を使う。
+条件 wait は区間の前後で既存 assertions を使い、区間内には入れない。
+
+```csharp
+using Gua.Runtime;
+
+// 組み込み Unity / Godot と同じ同期 FIFO apply pump が動作している local runtime。
+var segmentHost = new GuaRuntimeSegmentHost(runtime, adapterAppliesInOrder: true);
+var segment = new GuaTimedSegment(1, 300, 50, 1000, 500,
+[
+    new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Down, "KeyW", LeaseMilliseconds: 5000),
+    new(0, GuaGameInputKind.Pointer, GuaGameInputOperation.MoveDelta, "delta:", X: 2),
+    new(100, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space"),
+    new(300, GuaGameInputKind.Keyboard, GuaGameInputOperation.Up, "KeyW"),
+]);
+var timed = await GuaReplayer.ReplayTimedSegmentAsync(segmentHost, segment);
+// 成功でも HostAppliedMilliseconds は取得不能なら null。適用時間の証明にはしない。
+if (!timed.NeutralConfirmed) throw new InvalidOperationException("区間境界の解除が未確認です。");
+```
+
+offset は区間開始基準であり、開始応答が遅れても jump / release を遅らせない。
+maxLateness 超過時は未送信を止める。結果は全入力（未送信も含む）、時間違反、
+部分実行、cleanup の成功と中立確認を保持する。cleanup は caller cancel と独立した
+実時間予算で、自 owner だけを扱う。未完了入力が残れば中立は未確認となる。
+保持は明示 release で閉じ、lease は実時間 execution 予算 + lateness より長くする。
+全操作数と execution + cleanup 時間を先に caller の予算に予約する。再送・lease
+延長・途中再開はしない。再生ごとに新 owner を作る。同一 host の同時区間は禁止。
+
+host は現在の capability と Action Map を確認し、保護 action には呼出しごとの
+confirmation delegate が必要。変更された map では未送信操作を止める。秘密値は
+`Func<string, JsonElement?>` resolver で供給し、結果・ファイルへコピーしない。
+local host は native guarded enqueue / pure value preflight / owner health を必須とし、承認時の epoch / Action Map revision を
+enqueue / consume の両方で照合する。対応しない古い native runtime は owner 作成前に拒否する。
+全 payload と解決済み秘密を同一 native validator で開始前に検査する。owner の lease expiry
+flag は disconnect まで保持され、既存 256 件の Trace journal の切詰めと他 owner の流量に依存しない。
+ready result の chunk を取得できた場合は追加 sleep せず、実時間 deadline を照合して続ける。
+semantic text Set は `SemanticValueType: GuaGameInputValueType.Text` を明示すれば stateless
+として扱い、lease / release を要求しない。axis / vector の Holdable=false は許容する。
+local runtime host は realtime / game-input FIFO だけを扱い、simulation / 厳密適用
+時刻 / 同 tick 一括適用は拒否する。`IGuaTimedSegmentHost` を実装する host は、
+その時計の制御対象と apply 順序を明示し、全メソッドを短時間・non-blocking に保つ。
+`Send` は preflight / marshal 後に `verifySendBoundary` を一度だけ呼び、その例外時は
+enqueue しない。送信後に ID が取得できない場合は中立未確認として扱う。
+停止 simulation でも実時間 execution / cleanup 期限は働く。
+
+`GuaTimedSegmentFile.Save/Load` は独立 v1 plan を保存する。`GuaTimedSegmentImport.FromRecording`
+は game-input-only v2 の明示変換で、元 offset / 順序と secretKey を保存するが元時計の
+意味は `legacy-unknown`。UI、条件 wait、座標、閉じない hold、不十分な lease は拒否。
+省略 / 0 lease は実効 5000ms、wheelUnit 省略は pixels を保存する。秘密 semantic text の
+変換は `semanticValueType: id => GuaGameInputValueType.Text` のように型を明示する。
+MCP / Inspector の通常 Replay はこの能力を広告せず、既存互換を維持する。
+詳細契約は [Timed Segment v1](../../../../protocol/specs/timed-segment-v1.md)。
+
+`GuaRecordingTrace.AttachTimedResult(trace, stepId, timed, profile)` は値を含まない
+タイミング結果を `gua.timed-segment-result.v1` として明示添付する。Trace は再生しない。
+添付 schema の検証に失敗した結果は保存しない。
 # Trace integration
 
 `GuaRecordingTrace.Attach(trace, stepId, recorder.Recording, profile)` validates and

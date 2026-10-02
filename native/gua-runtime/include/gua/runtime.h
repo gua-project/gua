@@ -143,6 +143,10 @@ int gua_runtime_enqueue_game_input_v2(gua_runtime_t* runtime, const gua_game_inp
 int gua_runtime_enqueue_game_input_for_profile_v2(gua_runtime_t* runtime, const gua_game_input_request_descriptor_v2_t* descriptor,
     int observation_profile, uint64_t* out_request_id);
 int gua_runtime_consume_game_input_request(gua_runtime_t* runtime, gua_game_input_request_v1_t* out_request);
+int gua_runtime_enqueue_game_input_guarded_v2(gua_runtime_t* runtime, const gua_game_input_request_descriptor_v2_t* descriptor,
+    int observation_profile, uint64_t expected_session_epoch, uint64_t expected_action_revision, uint64_t* out_request_id);
+int gua_runtime_validate_game_input_guarded_v2(gua_runtime_t* runtime, const gua_game_input_request_descriptor_v2_t* descriptor,
+    int observation_profile, uint64_t expected_session_epoch, uint64_t expected_action_revision);
 int gua_runtime_complete_game_input_request(gua_runtime_t* runtime, uint64_t request_id, int succeeded, int error_code);
 int gua_runtime_tick_game_input_leases(gua_runtime_t* runtime, double elapsed_ms);
 int gua_runtime_copy_game_input_actions_json(gua_runtime_t* runtime, char* out_json, int out_json_size);
@@ -150,6 +154,7 @@ int gua_runtime_copy_player_game_input_actions_json(gua_runtime_t* runtime, char
 int gua_runtime_query_game_input_actions_json(gua_runtime_t* runtime, const gua_game_input_action_selector_v1_t* selector,
     int observation_profile, char* out_json, int out_json_size);
 int gua_runtime_copy_game_input_state_json(gua_runtime_t* runtime, uint64_t owner_id, char* out_json, int out_json_size);
+int gua_runtime_get_game_input_owner_health(gua_runtime_t* runtime, uint64_t owner_id, uint64_t* out_session_epoch, int* out_lease_expired);
 int gua_runtime_copy_game_input_result_json(gua_runtime_t* runtime, uint64_t owner_id, uint64_t request_id, char* out_json, int out_json_size);
 /* Adapter opt-in: enable only after the host publishes world frames. */
 void gua_runtime_set_world_object_tree_enabled(gua_runtime_t* runtime, int enabled);
