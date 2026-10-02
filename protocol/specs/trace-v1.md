@@ -295,10 +295,11 @@ native-stop-timeoutを残してreaderの追記を停止する。期限後の取�
 `.NET GuaActionCompletion` は opt-in 自動記録に接続済み。取得できない epoch は
 unconfirmed として扱い、completion が返した epoch でのみ確定相関する。
 
-親 #109 を閉じるには以下が残る。汎用 attachment/API で表現できることを
-依存先との実接続済みと取り違えない。
+子作業の実装と保証境界は以下の通り。親 #109 の統合受け入れは
+[trace-integrated-acceptance](trace-integrated-acceptance.md) に条件・assertion・
+対象commit・実行結果を対応付ける。汎用APIだけの証拠と実接続の証拠を区別する。
 
-| 子 Issue | この変更 | 残る受け入れ条件 |
+| 子 Issue | 実装済みの範囲 | 保証境界・利用側の責務 |
 | --- | --- | --- |
 | #123 T-01 | schema、writer/reader、有限上限、4 保存組合せ、部分末尾、redaction、容量/中断の故障 fixture | 強制終了時の未flush/メモリのみの保存は保証対象外 |
 | #124 T-02 | Selector/解決ID、明示/自動Step、native UI/Input/cleanup lifecycle、遅い結果、非破壊履歴 | native履歴未提供hostのphaseは未提供と表示。ゲーム画面でのGodot/Unity E2Eは別途 |

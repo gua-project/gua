@@ -1,5 +1,9 @@
 # #109 Trace 基盤の検証記録
 
+親Issueの2026-10-02追加条件とcurrent-head統合検証は
+[trace-integrated-acceptance](trace-integrated-acceptance.md) に記載する。
+以下は各子作業の過去の検証であり、最終親PRの再実行証拠とは扱わない。
+
 ## #125 review追加検証（2026-10-01）
 
 追加の接続世代reviewではsubscribeの送信前に世代を保持し、失敗cleanupがその世代だけを
@@ -303,7 +307,8 @@ remote CIはPRの最終headで別に確認する。
 既存Trace/Observe/owner/privacy/Screenshot/retention故障試験も上記全suiteに含む。
 Screenshotのpixel保護、認可済みgetter、取得時点の相関、baselineのprofile/build variantは
 呼出側の責務。実ゲームE2EやPlaytest P-16、未公開の内部変化、失われた履歴の復元は
-このGua-only統合fixtureの証拠に含めない。親#109の製品E2Eを完了扱いにしない。
+このGua-only統合fixtureの証拠に含めない。利用側の製品E2Eの完了を主張しない。
+親#109自体はGua-only fixtureで統合確認し、Playtest製品E2Eを利用側へ分離する。
 
 ### #128 automated review follow-up
 

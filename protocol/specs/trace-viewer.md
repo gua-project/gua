@@ -45,7 +45,8 @@ or continuity across a missing notification interval.
 Unknown annotations, event/envelope fields and schema-identified attachments are
 preserved as escaped JSON. Lint, comparison, logs/diagnostics and Recording are
 references/content, not automatically executed or externally fetched. Actual
-Lint/comparison producer integrations remain T-06 (#128).
+Lint/comparison producer integrations are implemented in T-06 (#128); current
+integrated acceptance is mapped in [trace-integrated-acceptance](trace-integrated-acceptance.md).
 
 Quality warnings distinguish an absent Trace, no retained records, reader errors,
 unknown version, unfinalized tail, missing blobs, acquisition failures, stale or
