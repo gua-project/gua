@@ -24,6 +24,10 @@ public static class GuaRecordingTrace
                 var input = result.Inputs[i];
                 if (input.Index != i || i > 0 && input.ScheduledMilliseconds < result.Inputs[i - 1].ScheduledMilliseconds)
                     throw new InvalidDataException("Invalid timed input sequence.");
+                if (result.Clock == GuaSegmentClock.Realtime && input.SentMilliseconds is { } sent &&
+                    (sent < input.ScheduledMilliseconds || result.Outcome == GuaSegmentOutcome.Succeeded &&
+                     sent - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds))
+                    throw new InvalidDataException("Invalid realtime send schedule evidence.");
                 if (result.Outcome == GuaSegmentOutcome.Succeeded &&
                     (input.SentMilliseconds >= result.ExecutionTimeoutMilliseconds || input.ResultReceivedMilliseconds >= result.ExecutionTimeoutMilliseconds))
                     throw new InvalidDataException("Successful input exceeded the execution deadline.");

@@ -126,6 +126,8 @@ Button / Axis1D / Vector2 / Text の値型は protocol schema と file validator
 simulation の証拠は非空 scope を必要とし、終端 outcome と failure code の組合せも検証する。
 各 input の index は array の0-based位置と一致し、予定 offset は非減少とする。
 Succeeded の send / receipt は実時間 execution deadline より前でなければならない。
+realtime の send は予定 offset より前を許可せず、Succeeded は maxLateness 内とする。
+simulation の offset と realtime send は異なる時計のため、この比較を適用しない。
 これらの cross-field比較と request ID 重複は標準 JSON Schema だけで表現できないため、
 消費者は schema 検査に加えて意味検査を行う。参照実装の AttachTimedResult は両方を実行する。
 ID は native uint64 上限内の正の十進文字列。hostApplied / completion status は receipt を、

@@ -11,6 +11,17 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase(GuaSegmentClock.Realtime, 0, false)]
+    [TestCase(GuaSegmentClock.Realtime, 50, true)]
+    [TestCase(GuaSegmentClock.Realtime, 70, true)]
+    [TestCase(GuaSegmentClock.Realtime, 71, false)]
+    [TestCase(GuaSegmentClock.Simulation, 0, true)]
+    public void Review_SendEvidenceRespectsItsScheduleClock(GuaSegmentClock clock, double sent, bool valid) =>
+        AssertResultAttachment(new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded,
+            [new(0, 50, sent, 1, sent + 1, null, true, 0)], true, true, null)
+            { Clock = clock, SimulationScope = clock == GuaSegmentClock.Simulation ? "controlled" : null,
+              MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, valid);
+
     [TestCase(100, 101, false)]
     [TestCase(0, 100, false)]
     [TestCase(0, 99, true)]
