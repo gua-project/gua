@@ -81,6 +81,14 @@ packages while rejecting any differently versioned Gua package or project
 library. spatial-candidate-assertions.test.ts verifies those rejection paths;
 final-head candidate builds and engine execution must still pass independently.
 
+Re-review strengthened the private-fixture prerequisite shared by both native
+transport and Trace controls: require two uniquely correlated items, completed
+item and nested-result states, matching inner request/query/session/space/kind,
+and private markers in each result. An actual native positive response is then
+modified to missing/duplicate/partial/nested-ID/nested-state variants; the old
+marker/count checks accept the selected two-item violations, and the strengthened
+control fails its intended count/correlation/completion assertion.
+
 ## Gates retained
 
 - #129 requires an owner-selected public version/channel and acceptance on the

@@ -162,6 +162,46 @@ public sealed class SpatialTransportTests
     }
     static string DocJson(int index) { using var document=Doc(index); return document.ToJson(); }
     const string PrivateMarker="PRIVATE_SPATIAL_SENTINEL";
+    static void AssertPrivatePositiveControl(JsonNode result)
+    {
+        using var batch=Doc(2); var expected=JsonNode.Parse(batch.ToJson())!;
+        Assert.That(result["batchId"]!.GetValue<long>(),Is.EqualTo(expected["batchId"]!.GetValue<long>()));
+        var items=result["items"]!.AsArray();
+        Assert.That(items.Count,Is.EqualTo(2),"Positive control requires two results.");
+        foreach(var query in expected["queries"]!.AsArray()) {
+            var requestId=query!["requestId"]!.GetValue<long>(); var queryId=query["queryId"]!.GetValue<string>();
+            var matches=items.Where(item=>item!["requestId"]!.GetValue<long>()==requestId && item["queryId"]!.GetValue<string>()==queryId).ToArray();
+            Assert.That(matches.Length,Is.EqualTo(1),"Positive control requires one correlated result per request.");
+            var item=matches[0]!;
+            Assert.That(item["state"]!.GetValue<string>(),Is.EqualTo("completed"),"Positive control item must be completed.");
+            Assert.That(item["result"],Is.Not.Null);
+            var geometry=item["result"]!;
+            Assert.That(geometry["status"]!.GetValue<string>(),Is.EqualTo("completed"),"Positive control nested result must be completed.");
+            foreach(var field in new[]{"requestId","queryId","sessionEpoch","spaceId","spaceEpoch","kind"})
+                Assert.That(geometry[field]!.ToJsonString(),Is.EqualTo(query[field]!.ToJsonString()),$"Positive control nested correlation: {field}.");
+            Assert.That(geometry.ToJsonString(),Does.Contain(PrivateMarker).And.Contain("0.314159265358979"),"Each completed result must contain private fixture geometry.");
+        }
+    }
+    [Test]
+    public void PrivateGeometryPositiveControlRejectsIncompleteAndMiscorrelatedResults()
+    {
+        using var h=new Host(); using var batch=Doc(2); using var client=h.Runtime.CreateSpatialClient();
+        client.Enqueue(batch.ReadBatch()); CompletePrivateBatch(h); using var positive=client.Poll(1)!;
+        var actual=JsonNode.Parse(positive.ToJson())!; AssertPrivatePositiveControl(actual);
+        foreach(var violation in new[]{"missing","duplicate","partial","nested-id","nested-state"}) {
+            var invalid=actual.DeepClone(); var items=invalid["items"]!.AsArray();
+            if(violation=="missing") items.RemoveAt(1);
+            else if(violation=="duplicate") items[1]=items[0]!.DeepClone();
+            else if(violation=="partial") {items[1]!["state"]="failed"; items[1]!.AsObject().Remove("result");}
+            else if(violation=="nested-id") items[1]!["result"]!["requestId"]=999;
+            else items[1]!["result"]!["status"]="failed";
+            // The former marker-only/count control accepts all but missing.
+            Assert.That(invalid.ToJsonString(),Does.Contain(PrivateMarker).And.Contain("0.314159265358979"));
+            if(violation!="missing") Assert.That(items.Count,Is.EqualTo(2));
+            var detected=Assert.Throws<AssertionException>(()=>AssertPrivatePositiveControl(invalid));
+            Assert.That(detected!.Message,Does.Contain("Positive control"),violation);
+        }
+    }
     static void CompletePrivateBatch(Host h)
     {
         using var boundary=Doc(3); var lease=h.Spatial.Begin(h.Provider,boundary);
@@ -221,8 +261,7 @@ public sealed class SpatialTransportTests
         // completed native result before invalidation. Empty fixtures cannot pass.
         using(var authorized=h.Runtime.CreateSpatialClient()) {
             authorized.Enqueue(batch.ReadBatch()); CompletePrivateBatch(h); using var result=authorized.Poll(1)!;
-            Assert.That(result.ReadBatchResult().Items.Length,Is.EqualTo(2));
-            Assert.That(result.ToJson(),Does.Contain(PrivateMarker).And.Contain("0.314159265358979"));
+            AssertPrivatePositiveControl(JsonNode.Parse(result.ToJson())!);
         }
         var listener=new TcpListener(IPAddress.Loopback,0); listener.Start(); var port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
         Assert.That(h.Runtime.StartInspectorBridge(port),Is.True); var url=$"ws://127.0.0.1:{port}";
@@ -250,7 +289,7 @@ public sealed class SpatialTransportTests
         using var h=new Host(); using var batch=Doc(2);
         using(var authorized=h.Runtime.CreateSpatialClient()) {
             authorized.Enqueue(batch.ReadBatch()); CompletePrivateBatch(h); using var positive=authorized.Poll(1)!;
-            Assert.That(positive.ToJson(),Does.Contain(PrivateMarker).And.Contain("0.314159265358979"));
+            AssertPrivatePositiveControl(JsonNode.Parse(positive.ToJson())!);
         }
         var listener=new TcpListener(IPAddress.Loopback,0); listener.Start(); var port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
         Assert.That(h.Runtime.StartInspectorBridge(port),Is.True); var url=$"ws://127.0.0.1:{port}";
