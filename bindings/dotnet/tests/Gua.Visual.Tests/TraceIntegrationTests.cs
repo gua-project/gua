@@ -33,6 +33,10 @@ public sealed class TraceIntegrationTests
         [Values(GuaTraceOutcome.Passed, GuaTraceOutcome.Failed, GuaTraceOutcome.Interrupted)] GuaTraceOutcome primary)
     {
         using var context = new GuaContext(); Publish(context, 0);
+        Assert.That(context.InstallClock(TimeSpan.FromMilliseconds(123), TimeSpan.FromMilliseconds(17)), Is.EqualTo(GuaClockResult.Ok));
+        Assert.That(context.PauseClock(), Is.EqualTo(GuaClockResult.Ok));
+        Assert.That(context.RunClockFor(TimeSpan.FromMilliseconds(34)), Is.EqualTo(GuaClockResult.Ok));
+        var clockBefore = context.GetClockStatus();
         var baseline = GuaSemanticSnapshots.CompareSnapshot(context, "integration", Snapshot(update: true));
         var beforeBaseline = File.ReadAllBytes(baseline.BaselinePath);
         await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, CaptureMode = mode, SavePolicy = policy, Secrets = new[] { "SECRET-MARKER" } });
@@ -80,6 +84,7 @@ public sealed class TraceIntegrationTests
         GuaTraceCapture.Ui(trace, cleanup, context, "local", "after-cleanup");
         trace.EndStep(cleanup, GuaTraceOutcome.Passed);
         Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.True);
+        Assert.That(context.GetClockStatus(), Is.EqualTo(clockBefore), "Trace must not pause, resume, consume or advance the caller's clock.");
         if (primary == GuaTraceOutcome.Passed && policy == GuaTraceSavePolicy.OnFailure)
         {
             Assert.That(trace.Status.Issues, Is.Empty);
@@ -124,6 +129,10 @@ public sealed class TraceIntegrationTests
         [Values("capture", "flush")] string fault)
     {
         using var context = new GuaContext(); Publish(context, 0);
+        Assert.That(context.InstallClock(TimeSpan.FromMilliseconds(123), TimeSpan.FromMilliseconds(17)), Is.EqualTo(GuaClockResult.Ok));
+        Assert.That(context.PauseClock(), Is.EqualTo(GuaClockResult.Ok));
+        Assert.That(context.RunClockFor(TimeSpan.FromMilliseconds(34)), Is.EqualTo(GuaClockResult.Ok));
+        var clockBefore = context.GetClockStatus();
         await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, CaptureMode = mode,
             FlushTimeout = TimeSpan.FromMilliseconds(250), Secrets = new[] { "FAULT-SECRET" } });
         var step = trace.BeginStep(GuaTraceStepKind.Action, "terminal fault");
@@ -152,6 +161,7 @@ public sealed class TraceIntegrationTests
             Assert.That(trace.Status.Issues, Does.Contain("flush-timeout"));
         }
         Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.EqualTo(fault == "capture"));
+        Assert.That(context.GetClockStatus(), Is.EqualTo(clockBefore), "Capture/flush faults must not consume or advance the caller's clock.");
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo(primary.ToString().ToLowerInvariant()));
         Assert.That(read.Manifest.Finalized, Is.True);
