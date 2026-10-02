@@ -121,6 +121,7 @@ struct host_batch {
     uint64_t owner=0,provider=0,id=0,lease=0,order=0;
     json input,boundary; std::vector<json> items;
     std::vector<bool> dispatched;
+    std::vector<std::optional<bounds>> prepared;
     size_t next=0; bool inflight=false,done=false,cancelled=false,owner_closed=false;
     double accepted=0,started=0; uint64_t revision=0;
     size_t retained_bytes=512;
@@ -147,13 +148,19 @@ bool owner_authorized(gua_spatial_host_t& h,const host_batch& b,const json& q) {
     auto o=h.owners.find(b.owner);
     if(o==h.owners.end()) return false;
     const auto& g=o->second.grants;
-    return boolean(g.at("enabled"))&&(text(g,"profile")=="Debug"||text(g,"profile")=="Testing")&&sequence(g.at("sessionEpoch"))==sequence(q.at("sessionEpoch"))&&contains(g.at("policies"),text(q,"queryPolicyId"))&&fits(query_bounds(q),aabb(g.at("region")));
+    bounds volume=query_bounds(q);
+    const auto& qs=b.input.at("queries").items;
+    for(size_t i=0;i<b.prepared.size();++i) if(sequence(qs[i].at("requestId"))==sequence(q.at("requestId"))&&b.prepared[i]) volume=*b.prepared[i];
+    return boolean(g.at("enabled"))&&(text(g,"profile")=="Debug"||text(g,"profile")=="Testing")&&sequence(g.at("sessionEpoch"))==sequence(q.at("sessionEpoch"))&&contains(g.at("policies"),text(q,"queryPolicyId"))&&fits(volume,aabb(g.at("region")));
 }
 const json* authorized(gua_spatial_host_t& h,const host_batch& b,const json& q) {
     auto p=h.providers.find(b.provider);
     if(p==h.providers.end()||!owner_authorized(h,b,q)) return nullptr;
     auto pol=policy(p->second,text(q,"queryPolicyId")); if(!pol) return nullptr;
-    return fits(query_bounds(q),aabb(pol->at("region")))?pol:nullptr;
+    bounds volume=query_bounds(q);
+    const auto& qs=b.input.at("queries").items;
+    for(size_t i=0;i<b.prepared.size();++i) if(sequence(qs[i].at("requestId"))==sequence(q.at("requestId"))&&b.prepared[i]) volume=*b.prepared[i];
+    return fits(volume,aabb(pol->at("region")))?pol:nullptr;
 }
 json item(const json& q,const char* state,const char* reason) {
     return obj({{"requestId",q.at("requestId")},{"queryId",q.at("queryId")},{"state",str(state)},{"reason",str(reason)}});
@@ -281,7 +288,7 @@ int gua_spatial_host_enqueue(gua_spatial_host_t* h,uint64_t o,const gua_spatial_
         require(h->batches.size()<h->limits.max_queue_depth,GUA_SPATIAL_CAPACITY);
         for(const auto& q:qs) b.retained_bytes+=dump(item(q,"notExecuted","provider_unregistered")).size();
         require(b.retained_bytes<=1024*1024,GUA_SPATIAL_CAPACITY);
-        b.accepted=now(*h); b.order=++h->order; b.items.resize(qs.size()); b.dispatched.resize(qs.size()); h->batches.emplace(std::make_pair(o,b.id),std::move(b));
+        b.accepted=now(*h); b.order=++h->order; b.items.resize(qs.size()); b.dispatched.resize(qs.size()); b.prepared.resize(qs.size()); h->batches.emplace(std::make_pair(o,b.id),std::move(b));
     });
 }
 int gua_spatial_host_describe(gua_spatial_host_t* h,uint64_t o,uint64_t p,gua_spatial_document_t** out,gua_spatial_error_t* e) {
@@ -330,6 +337,25 @@ int gua_spatial_host_take(gua_spatial_host_t* h,uint64_t lease,gua_spatial_docum
         auto owned=doc(1,q); b.revision=static_cast<uint64_t>(sequence(pol->at("revision"))); b.inflight=true; b.dispatched[b.next]=true; *out=owned.release();
     });
 }
+int gua_spatial_host_check_engine_bounds(gua_spatial_host_t* h,uint64_t lease,const gua_spatial_engine_bounds_v1_t* input,uint32_t* loaded,gua_spatial_error_t* e) {
+    if(loaded) *loaded=0;
+    return boundary(e,[&] {
+        host(h); require(input&&loaded&&input->struct_size==sizeof(*input));
+        bounds volume{{input->min_x,input->min_y,input->min_z},{input->max_x,input->max_y,input->max_z}};
+        for(size_t i=0;i<3;++i) require(std::isfinite(volume.lo[i])&&std::isfinite(volume.hi[i])&&volume.lo[i]<=volume.hi[i]);
+        std::lock_guard lock(h->mutex); auto& b=leased(*h,lease);
+        require(b.inflight&&!b.owner_closed&&b.items[b.next].type==json::null,GUA_SPATIAL_NOT_READY);
+        require(!b.prepared[b.next],GUA_SPATIAL_NOT_READY);
+        if(auto reason=stopped(*h,b)) { finish(*h,b,reason); fail(GUA_SPATIAL_NOT_READY); }
+        const auto& q=b.input.at("queries").items[b.next];
+        require(fits(query_bounds(q),volume),GUA_SPATIAL_GEOMETRY);
+        auto pol=authorized(*h,b,q); require(pol,GUA_SPATIAL_NOT_AUTHORIZED);
+        require(fits(volume,aabb(pol->at("region")))&&fits(volume,aabb(h->owners.at(b.owner).grants.at("region"))),GUA_SPATIAL_NOT_AUTHORIZED);
+        b.prepared[b.next]=volume;
+        const auto& registration=h->providers.at(b.provider).registration;
+        *loaded=has(registration,"loadedRegion")&&fits(volume,aabb(registration.at("loadedRegion")))?1u:0u;
+    });
+}
 int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spatial_document_t* d,gua_spatial_error_t* e) {
     return boundary(e,[&] {
         host(h); document(d,10); std::lock_guard lock(h->mutex); auto& b=leased(*h,lease); require(b.inflight,GUA_SPATIAL_NOT_READY);
@@ -349,7 +375,8 @@ int gua_spatial_host_complete(gua_spatial_host_t* h,uint64_t lease,const gua_spa
         } else {
             auto r=d->value; auto& registration=h->providers.at(b.provider).registration;
             if(text(r.at("coverage"),"state")=="complete") {
-                if(!has(registration,"loadedRegion")||!fits(query_bounds(q),aabb(registration.at("loadedRegion")))||!fits(aabb(r.at("coverage").at("loadedRegion")),aabb(registration.at("loadedRegion")))||!fits(query_bounds(q),aabb(r.at("coverage").at("loadedRegion")))) { finish(*h,b,"internal"); fail(GUA_SPATIAL_SEMANTICS); }
+                const auto volume=b.prepared[b.next].value_or(query_bounds(q));
+                if(!has(registration,"loadedRegion")||!fits(volume,aabb(registration.at("loadedRegion")))||!fits(aabb(r.at("coverage").at("loadedRegion")),aabb(registration.at("loadedRegion")))||!fits(volume,aabb(r.at("coverage").at("loadedRegion")))) { finish(*h,b,"internal"); fail(GUA_SPATIAL_SEMANTICS); }
             }
             json s=obj({{"physicsSampleId",b.boundary.at("physicsSampleId")},{"clockId",str(h->clock)},{"observedFromMs",number(b.started)},{"observedToMs",number(now(*h))},{"queryPolicyRevision",integer(b.revision)}});
             if(has(b.boundary,"tick")) s.fields["tick"]=b.boundary.at("tick");

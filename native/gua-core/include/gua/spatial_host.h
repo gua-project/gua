@@ -55,6 +55,17 @@ int gua_spatial_host_begin(gua_spatial_host_t*, uint64_t provider,
     const gua_spatial_document_t* boundary, uint64_t* lease, gua_spatial_error_t*);
 int gua_spatial_host_take(gua_spatial_host_t*, uint64_t lease,
     gua_spatial_document_t** request, gua_spatial_error_t*);
+/* Trusted adapter-only conservative bound of the prepared engine query,
+ * including its entire translation. Must contain the original request bounds.
+ * Checked before physics and retained for revocation/publication checks. This
+ * does not authorize a new query or prove backend numerical error bounds.
+ * Call after take, at most once per item. loaded_complete is cleared on error. */
+typedef struct gua_spatial_engine_bounds_v1_t {
+    uint32_t struct_size;
+    double min_x, min_y, min_z, max_x, max_y, max_z;
+} gua_spatial_engine_bounds_v1_t;
+int gua_spatial_host_check_engine_bounds(gua_spatial_host_t*, uint64_t lease,
+    const gua_spatial_engine_bounds_v1_t*, uint32_t* loaded_complete, gua_spatial_error_t*);
 int gua_spatial_host_complete(gua_spatial_host_t*, uint64_t lease,
     const gua_spatial_document_t* result, gua_spatial_error_t*);
 int gua_spatial_host_end(gua_spatial_host_t*, uint64_t lease, gua_spatial_error_t*);

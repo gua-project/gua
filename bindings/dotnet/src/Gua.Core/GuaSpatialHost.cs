@@ -10,6 +10,14 @@ public struct GuaSpatialHostOptions
     public uint MaxProviders, MaxOwners, MaxQueueDepth, MaxQueriesPerBatch, MaxHitsPerQuery;
     public double QueryDeadlineMs, MaxBatchWorkMs;
 }
+/// <summary>Conservative binary64 bounds of prepared engine geometry plus the
+/// original query. Trusted adapter input; never accept this from a client.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct GuaSpatialEngineBounds
+{
+    internal uint StructSize;
+    public double MinX, MinY, MinZ, MaxX, MaxY, MaxZ;
+}
 internal sealed class SpatialHostHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     internal SpatialHostHandle(nint p) : base(true) => SetHandle(p);
@@ -84,6 +92,15 @@ public sealed class GuaSpatialHost : IDisposable
         using var refs = new SpatialReferences();
         Check(Native.gua_spatial_host_complete(_handle, lease, execution.Use(refs), out var e), e);
     }
+    /// <summary>After Take and before physics, check prepared engine bounds
+    /// against current grants. Retained for subsequent revocation checks.
+    /// Returns whether the explicit loaded region contains the entire bound.</summary>
+    public bool CheckEngineBounds(ulong lease, GuaSpatialEngineBounds bounds)
+    {
+        bounds.StructSize = (uint)Marshal.SizeOf<GuaSpatialEngineBounds>();
+        Check(Native.gua_spatial_host_check_engine_bounds(_handle, lease, in bounds, out var loaded, out var e), e);
+        return loaded != 0;
+    }
     public void End(ulong lease) => Check(Native.gua_spatial_host_end(_handle, lease, out var e), e);
     public void Dispose() => _handle.Dispose();
 }
@@ -103,5 +120,6 @@ internal static partial class Native
     [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_spatial_host_begin(SpatialHostHandle host, ulong provider, nint doc, out ulong lease, out SpatialError e);
     [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_spatial_host_take(SpatialHostHandle host, ulong lease, out nint doc, out SpatialError e);
     [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_spatial_host_complete(SpatialHostHandle host, ulong lease, nint doc, out SpatialError e);
+    [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_spatial_host_check_engine_bounds(SpatialHostHandle host, ulong lease, in GuaSpatialEngineBounds bounds, out uint loaded, out SpatialError e);
     [DllImport(ValueLibrary, CallingConvention = CallingConvention.Cdecl)] internal static extern int gua_spatial_host_end(SpatialHostHandle host, ulong lease, out SpatialError e);
 }

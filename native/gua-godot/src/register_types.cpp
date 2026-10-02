@@ -1,6 +1,7 @@
 #include "gua/godot/register_types.hpp"
 
 #include "gua/godot/gua_context.hpp"
+#include "gua/godot/spatial_host.hpp"
 
 #include <gdextension_interface.h>
 
@@ -15,6 +16,7 @@ void initialize_gua_godot_module(ModuleInitializationLevel level)
     }
 
     GDREGISTER_CLASS(GuaContext);
+    GDREGISTER_CLASS(GuaSpatialHost);
 }
 
 void uninitialize_gua_godot_module(ModuleInitializationLevel level)
