@@ -9,6 +9,7 @@ on:
 jobs:
   godot-desktop-addon-contract:
     name: Godot desktop / ${{ matrix.rid }}
+    needs: pack-native-nuget
     strategy:
       fail-fast: false
       matrix:
@@ -141,6 +142,31 @@ jobs:
             $executable = $candidates[0].FullName
           }
           bun scripts/verify-godot-desktop-release.ts $executable '${{ matrix.rid }}'
+
+      - name: Set up .NET for spatial package consumer
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download candidate NuGet packages
+        uses: actions/download-artifact@v4
+        with:
+          name: gua-native-nuget
+          path: artifacts/spatial-packages
+
+      - name: Verify real GodotPhysics and Jolt spatial routes
+        shell: pwsh
+        run: |
+          bun run --filter gui-mcp build
+          bun scripts/verify-godot-spatial-routes.ts '.godot-editor/${{ matrix.executable }}' artifacts/packaged-addon/addons/gua artifacts/spatial-route-acceptance artifacts/spatial-packages
+
+      - name: Preserve spatial route acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spatial-routes-${{ matrix.rid }}-${{ github.sha }}
+          path: artifacts/spatial-route-acceptance
+          if-no-files-found: ignore
 
   godot-web-addon-contract:
     name: Godot Web Debug / Release

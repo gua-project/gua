@@ -14,6 +14,14 @@ foreach(var q in queries) { q.SessionEpoch=1; q.SpaceId=provider.SpaceId; q.Spac
 using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=output,SavePolicy=GuaTraceSavePolicy.Always});
 var result=remote.QuerySpatialBatch(new() {BatchId=100,Consistency="samePhysicsSample",Queries=queries},TimeSpan.FromSeconds(5),trace:trace);
 var expected=new[]{"hit","detected","blocked"};
+if(result.BatchId!=100 || result.Items.Length!=queries.Length) throw new Exception("Required spatial batch count/correlation mismatch.");
+foreach(var (item,index) in result.Items.Select((item,index)=>(item,index))) {
+    var query=queries[index]; var geometry=item.Result;
+    if(item.RequestId!=query.RequestId || item.QueryId!=query.QueryId || geometry is null ||
+        geometry.RequestId!=query.RequestId || geometry.QueryId!=query.QueryId || geometry.Status!="completed" ||
+        geometry.SessionEpoch!=query.SessionEpoch || geometry.SpaceId!=query.SpaceId || geometry.SpaceEpoch!=query.SpaceEpoch || geometry.Kind!=query.Kind)
+        throw new Exception("Required spatial item completion/correlation mismatch.");
+}
 if(result.Items.Where((i,index)=>i.State!="completed" || i.Result?.Status!="completed" || i.Result.Outcome!=expected[index]).Any()) throw new Exception("Real geometry route did not produce ray hit, overlap detection and blocked sweep.");
 if(result.Items.Select(i=>i.Result!.Sample!.PhysicsSampleId).Distinct().Count()!=1) throw new Exception("Sample correlation drift.");
 await trace.CompleteAsync(GuaTraceOutcome.Passed);
