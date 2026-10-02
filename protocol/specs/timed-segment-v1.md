@@ -46,6 +46,9 @@ enqueue と consume の両方に照合し、変化した要求は失敗 completi
 runtime の Player ceiling を host preflight と guarded consume で照合する。固定 raw input は
 target だけでなく text string / gamepad axis [-1,1] の payload を Load / Validate で検証し、
 秘密 text の解決値も owner 作成前に検証する。
+semantic target は native と同じ小文字 ASCII の Action ID grammar と127 byte上限を
+file / schema で検査する。固定 TextInput と宣言済み semantic Text Set は40 Unicode
+code pointまでとし、値契約のない操作は null / 省略以外の payload を保存・実行しない。
 
 semantic Set の型、descriptor の範囲、bounded ValueSchema、および既存 native payload
 上限も、同じ native validator で全操作を開始前に検査する。純粋な validate API は owner、
@@ -105,7 +108,8 @@ owner-lifetime lease expiry flag を取得する。この値なし flag は owne
 256 件の diagnostics journal の切詰めと他 owner の流量に依存しない。旧 Trace journal の
 schema と保持上限は変えない。lease の早期失効、health 不取得、epoch 変更は正常再現としない。
 Trace 添付の request ID は十進文字列で、未取得の時刻 / ID は null を明示する。
-添付前に schema を検証する。cancel / timeout は後から取得した timing evidence で
+添付前に schema を検証する。非 null request ID の重複も拒否し、一つの completion を
+複数入力の証拠にしない。cancel / timeout は後から取得した timing evidence で
 上書きせず、適用時間は未確認として記録する。simulation scope は host teardown 前に保存する。
 `ApplicationTimingConfirmed` は Succeeded と cleanup / neutral 確認、および全入力の
 取得済み・順序通り・lateness 内の適用時間を必要とし、Trace 添付でも検証する。host の任意の

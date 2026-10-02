@@ -132,10 +132,23 @@ public static class GuaTimedSegmentFile
     private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     internal static void ValidatePayload(GuaTimedInput input, JsonElement? value)
     {
+        var hasValueContract = input.Operation == GuaGameInputOperation.Set &&
+            input.Kind is GuaGameInputKind.Semantic or GuaGameInputKind.Gamepad or GuaGameInputKind.TextInput;
+        if (!hasValueContract && value is { ValueKind: not JsonValueKind.Null })
+            throw new InvalidDataException("This operation has no value contract.");
         if ((input.Kind == GuaGameInputKind.TextInput || input.Kind == GuaGameInputKind.Semantic &&
             input.SemanticValueType == GuaGameInputValueType.Text) && input.Operation == GuaGameInputOperation.Set &&
             value?.ValueKind != JsonValueKind.String)
             throw new InvalidDataException("Text Set requires a JSON string value.");
+        if ((input.Kind == GuaGameInputKind.TextInput || input.Kind == GuaGameInputKind.Semantic &&
+            input.SemanticValueType == GuaGameInputValueType.Text) && input.Operation == GuaGameInputOperation.Set)
+        {
+            var text = value!.Value.GetString()!;
+            var points = 0;
+            for (var i = 0; i < text.Length; i++, points++)
+                if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1])) i++;
+            if (points > 40) throw new InvalidDataException("Text input exceeds 40 Unicode code points.");
+        }
         if (input.Kind == GuaGameInputKind.Gamepad && input.Operation == GuaGameInputOperation.Set &&
             (value is not { ValueKind: JsonValueKind.Number } axis || !axis.TryGetDouble(out var number) ||
              !Finite(number) || number < -1 || number > 1))
@@ -158,6 +171,8 @@ public static class GuaTimedSegmentFile
         bool Is(params string[] targets) => targets.Contains(input.Target);
         var valid = input.Kind switch
         {
+            GuaGameInputKind.Semantic => input.Target.Length <= 127 &&
+                System.Text.RegularExpressions.Regex.IsMatch(input.Target, "\\A[a-z][a-z0-9_.-]*\\z"),
             GuaGameInputKind.Keyboard => System.Text.RegularExpressions.Regex.IsMatch(input.Target,
                 "^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Numpad[0-9]|Backquote|Backslash|Backspace|BracketLeft|BracketRight|CapsLock|Comma|ContextMenu|Delete|End|Enter|Equal|Escape|Home|Insert|MetaLeft|MetaRight|Minus|NumLock|PageDown|PageUp|Pause|Period|Quote|ScrollLock|Semicolon|ShiftLeft|ShiftRight|Slash|Space|Tab|ControlLeft|ControlRight|AltLeft|AltRight|ArrowDown|ArrowLeft|ArrowRight|ArrowUp|PrintScreen|NumpadAdd|NumpadDecimal|NumpadDivide|NumpadEnter|NumpadMultiply|NumpadSubtract)$"),
             GuaGameInputKind.Pointer => input.Operation switch

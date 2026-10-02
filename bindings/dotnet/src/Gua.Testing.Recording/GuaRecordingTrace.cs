@@ -19,6 +19,9 @@ public static class GuaRecordingTrace
         GuaObservationProfile profile = GuaObservationProfile.Debug) =>
         GuaTraceCapture.JsonAttachment(trace, stepId, "gua.timed-segment-result.v1", () =>
         {
+            var requestIds = new HashSet<ulong>();
+            if (result.Inputs.Any(input => input.RequestId is { } id && !requestIds.Add(id)))
+                throw new InvalidDataException("Duplicate timed input request correlation.");
             if (result.Inputs.Any(input => input.ResultReceivedMilliseconds is { } received &&
                 (input.SentMilliseconds is not { } sent || received < sent)))
                 throw new InvalidDataException("Invalid client timing evidence.");

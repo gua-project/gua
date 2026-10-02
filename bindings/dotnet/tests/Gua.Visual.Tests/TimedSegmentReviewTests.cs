@@ -11,6 +11,91 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase("Bad ID", false)]
+    [TestCase("Upper", false)]
+    [TestCase("é", false)]
+    [TestCase("long", false)]
+    [TestCase("limit", true)]
+    [TestCase("move.forward-1", true)]
+    public void Review_SemanticIdGrammarMatchesSchemaAndFile(string target, bool valid)
+    {
+        if (target == "long") target = new string('a', 128);
+        if (target == "limit") target = new string('a', 127);
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100,
+            [new(0, GuaGameInputKind.Semantic, GuaGameInputOperation.Press, target)]);
+        AssertTimedFileAndSchema(plan, valid);
+    }
+
+    [TestCase(false, false, 41, false)]
+    [TestCase(true, false, 41, false)]
+    [TestCase(false, true, 41, false)]
+    [TestCase(true, true, 41, false)]
+    [TestCase(false, true, 40, true)]
+    [TestCase(true, true, 40, true)]
+    [TestCase(false, false, 0, true)]
+    public void Review_TextLimitCountsUnicodeCodePoints(bool semantic, bool astral, int count, bool valid)
+    {
+        var text = string.Concat(Enumerable.Repeat(astral ? "\U0001F600" : "a", count));
+        var input = new GuaTimedInput(0, semantic ? GuaGameInputKind.Semantic : GuaGameInputKind.TextInput,
+            GuaGameInputOperation.Set, semantic ? "text" : "", JsonSerializer.SerializeToElement(text),
+            SemanticValueType: semantic ? GuaGameInputValueType.Text : null);
+        AssertTimedFileAndSchema(new(1, 0, 20, 100, 100, [input]), valid);
+    }
+
+    [TestCase(GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]
+    [TestCase(GuaGameInputKind.Keyboard, GuaGameInputOperation.Down, "KeyW")]
+    [TestCase(GuaGameInputKind.Semantic, GuaGameInputOperation.Press, "jump")]
+    [TestCase(GuaGameInputKind.Semantic, GuaGameInputOperation.Release, "move")]
+    [TestCase(GuaGameInputKind.Pointer, GuaGameInputOperation.MoveDelta, "delta:")]
+    [TestCase(GuaGameInputKind.Gamepad, GuaGameInputOperation.Reset, "")]
+    [TestCase(GuaGameInputKind.Cleanup, GuaGameInputOperation.ReleaseAll, "")]
+    public void Review_ValuelessOperationsRejectIgnoredPayloads(GuaGameInputKind kind, GuaGameInputOperation operation, string target)
+    {
+        var input = new GuaTimedInput(0, kind, operation, target, JsonSerializer.SerializeToElement("ignored-private-data"));
+        var inputs = operation == GuaGameInputOperation.Down ? new[] { input, input with { OffsetMilliseconds = 1,
+            Operation = GuaGameInputOperation.Up, Value = null } } : new[] { input };
+        AssertTimedFileAndSchema(new(1, 1, 20, 100, 100, inputs), false);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Review_TraceRequestCorrelationMustBeUnique(bool duplicate)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gua-unique-correlation", Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
+            var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
+            var first = new GuaTimedInputResult(0, 0, 0, 1, 1, null, true, 0);
+            var result = new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded,
+                [first, first with { Index = 1, RequestId = duplicate ? 1ul : 2ul }], true, true, null)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 };
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, result), Is.EqualTo(!duplicate));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    private static void AssertTimedFileAndSchema(GuaTimedSegment plan, bool valid)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(plan, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var schema = Path.GetFullPath("../../../../../../../protocol/schema/timed-segment-v1.schema.json", TestContext.CurrentContext.TestDirectory);
+        Assert.That(Json.Schema.JsonSchema.FromFile(schema).Evaluate(document.RootElement).IsValid, Is.EqualTo(valid));
+        if (valid) Assert.DoesNotThrow(() => GuaTimedSegmentFile.Validate(plan));
+        else Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Validate(plan));
+        var root = Path.Combine(Path.GetTempPath(), "gua-file-contract", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var file = Path.Combine(root, "segment.json");
+            if (valid) Assert.DoesNotThrow(() => GuaTimedSegmentFile.Save(file, plan));
+            else Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Save(file, plan));
+            Directory.CreateDirectory(root);
+            File.WriteAllText(file, document.RootElement.GetRawText());
+            if (valid) Assert.DoesNotThrow(() => GuaTimedSegmentFile.Load(file));
+            else Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Load(file));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
     [Test]
     public async Task Review_NativeResetBetweenFinalCompletionAndNeutralReadCannotConfirmBoundary()
     {
