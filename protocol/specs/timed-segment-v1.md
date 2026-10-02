@@ -37,6 +37,7 @@ realtime の game-input FIFO のみ対応する。UI と game-input は独立 qu
 
 local host は新しい `gua_runtime_enqueue_game_input_guarded_v2` と
 `gua_runtime_validate_game_input_guarded_v2` を必須とする。
+owner-lifetime health の `gua_runtime_get_game_input_owner_health` も必須である。
 承認時の sessionEpoch / profile ごとの Action Map revision を native context lock 内で
 enqueue と consume の両方に照合し、変化した要求は失敗 completion として返し適用しない。
 旧 enqueue API の互換挙動は変更しない。cleanup は従来の owner-scoped path で送信し、
@@ -54,6 +55,7 @@ queue、request ID、result、Trace event を作らない。scheduler は option
 
 同 offset は配列順に送信する。host はこの順に consume/apply する契約が必要である。
 同 offset の送信間には結果 polling を挟まず、待機時は有限件数の round-robin polling を使う。
+ready completion を取得できた chunk の後は人工的に sleep せず、deadline を照合して続ける。
 結果 polling と境界時計の読取り後にも execution deadline / cancellation を照合する。
 send 時刻は client の呼出し境界、resultReceived は client の poll 成功時刻であり、
 hostApplied は独立した証拠がない限り null。completion を適用時刻に読み替えない。
@@ -96,8 +98,10 @@ Trace から自動 Replay しない。失敗結果から自動修復・teleport 
 `GuaTimedSegmentResult.Clock` の offset / hostApplied と、realtime の send /
 resultReceived は別時計である。simulation scope、maxLateness と両実時間予算も
 結果へ保存する。`ApplicationTimingConfirmed` が false の送信時間成功は、適用時刻の
-検証成功を意味しない。runtime host は lease-expired の owner journal と欠損も照合する。
-lease の早期失効、journal の取りこぼし、epoch 変更は正常再現としない。
+検証成功を意味しない。runtime host は native lock 内で owner の存続、sessionEpoch、
+owner-lifetime lease expiry flag を取得する。この値なし flag は owner disconnect まで残り、
+256 件の diagnostics journal の切詰めと他 owner の流量に依存しない。旧 Trace journal の
+schema と保持上限は変えない。lease の早期失効、health 不取得、epoch 変更は正常再現としない。
 Trace 添付の request ID は十進文字列で、未取得の時刻 / ID は null を明示する。
 添付前に schema を検証する。cancel / timeout は後から取得した timing evidence で
 上書きせず、適用時間は未確認として記録する。simulation scope は host teardown 前に保存する。
@@ -105,5 +109,8 @@ Trace 添付の request ID は十進文字列で、未取得の時刻 / ID は n
 取得済み・順序通り・lateness 内の適用時間を必要とし、Trace 添付でも検証する。host の任意の
 health text は証拠へコピーせず、既知の lifecycle code 以外を `host-health-failed` に置換する。
 添付 schema も failure code を既知の固定 code に制限する。
+Succeeded の添付は適用時刻取得の有無にかかわらず、全 ordinary completion の成功、
+cleanup / neutral 確認、null failure code を必要とする。宣言済み semantic Set の
+Button / Axis1D / Vector2 / Text の値型は protocol schema と file validator で一致させる。
 添付 schema は `timed-segment-result-v1.schema.json`。入力値を持たない独立 envelope で、
 旧 Recording ファイルや Trace の自動再生入力としては読まない。

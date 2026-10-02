@@ -722,6 +722,9 @@ int gua_complete_game_input_request(gua_context_t* ctx, uint64_t request_id, int
 /* Advance safety leases with unscaled host time, never GuaClock time. */
 int gua_tick_game_input_leases(gua_context_t* ctx, double elapsed_ms);
 int gua_copy_game_input_state_json(gua_context_t* ctx, uint64_t owner_id, char* out_json, int out_json_size);
+/* Atomic, values-free active-owner lifetime safety evidence, independent of journal retention.
+ * lease_expired remains set until this owner disconnects. Returns 0 for a missing owner. */
+int gua_get_game_input_owner_health(gua_context_t* ctx, uint64_t owner_id, uint64_t* out_session_epoch, int* out_lease_expired);
 int gua_copy_game_input_result_json(gua_context_t* ctx, uint64_t owner_id, uint64_t request_id, char* out_json, int out_json_size);
 
 #ifdef __cplusplus

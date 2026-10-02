@@ -1226,6 +1226,7 @@ struct gua_context_t {
     std::string previous_player_game_input_snapshot;
     unsigned long long next_game_input_owner_id = 1;
     std::unordered_set<unsigned long long> game_input_owners;
+    std::unordered_set<unsigned long long> expired_game_input_owners;
     unsigned long long next_game_input_request_id = 1;
     std::deque<GameInputRequest> game_input_cleanup_requests;
     std::deque<GameInputRequest> game_input_requests;
@@ -1242,6 +1243,9 @@ void trace_phase(gua_context_t& ctx, const char* domain, unsigned long long owne
     unsigned long long request, unsigned long long epoch, const char* phase,
     const std::string& details = "{}")
 {
+    // Owner-lifetime safety evidence must survive the bounded diagnostic journal.
+    if (std::string_view(domain) == "input" && std::string_view(phase) == "lease-expired" &&
+        ctx.game_input_owners.contains(owner)) ctx.expired_game_input_owners.insert(owner);
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - ctx.trace_started_at).count();
     ctx.trace_lifecycle.push_back("{\"sequence\":\"" + std::to_string(++ctx.trace_sequence) +
@@ -3754,6 +3758,7 @@ extern "C" int gua_release_game_input_owner(gua_context_t* ctx, uint64_t owner_i
     if (ctx == nullptr || owner_id == 0) return 0;
     const std::lock_guard lock(ctx->mutex);
     if (ctx->game_input_owners.erase(owner_id) == 0) return 0;
+    ctx->expired_game_input_owners.erase(owner_id);
     trace_phase(*ctx, "input", owner_id, 0, ctx->session_epoch, "owner-disconnected");
     const bool cleanup_required = owner_requires_game_input_cleanup(*ctx, owner_id);
     ctx->game_input_requests.erase(std::remove_if(ctx->game_input_requests.begin(), ctx->game_input_requests.end(),
@@ -4091,6 +4096,17 @@ extern "C" int gua_tick_game_input_leases(gua_context_t* ctx, double elapsed_ms)
         ++expired_count;
     }
     return expired_count;
+}
+
+extern "C" int gua_get_game_input_owner_health(gua_context_t* ctx, uint64_t owner_id,
+    uint64_t* out_session_epoch, int* out_lease_expired)
+{
+    if (ctx == nullptr || owner_id == 0 || out_session_epoch == nullptr || out_lease_expired == nullptr) return 0;
+    const std::lock_guard lock(ctx->mutex);
+    if (!ctx->game_input_owners.contains(owner_id)) return 0;
+    *out_session_epoch = ctx->session_epoch;
+    *out_lease_expired = ctx->expired_game_input_owners.contains(owner_id) ? 1 : 0;
+    return 1;
 }
 
 extern "C" int gua_copy_game_input_state_json(gua_context_t* ctx, uint64_t owner_id, char* out_json, int out_json_size)

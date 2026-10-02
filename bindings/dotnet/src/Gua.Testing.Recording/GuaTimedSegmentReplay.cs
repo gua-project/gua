@@ -39,6 +39,7 @@ public static class GuaTimedSegmentReplay
         string? failure = null;
         bool cleanupSucceeded = false, neutral = false;
         var pollCursor = 0;
+        var pollMadeProgress = false;
         double Elapsed() => realtime.Milliseconds - origin;
         double ScheduleElapsed()
         {
@@ -50,6 +51,7 @@ public static class GuaTimedSegmentReplay
         }
         bool PollAll()
         {
+            pollMadeProgress = false;
             if (host.ExecutionFailureCode is { } health && outcome == GuaSegmentOutcome.Succeeded)
             { outcome = GuaSegmentOutcome.Failed; failure = health is "lifecycle-source-changed" or
                 "lifecycle-evidence-gap" or "lease-expired-before-release" or "lifecycle-or-session-unconfirmed"
@@ -66,6 +68,7 @@ public static class GuaTimedSegmentReplay
                 polls++;
                 var receipt = host.Poll(id);
                 if (receipt is null) continue;
+                pollMadeProgress = true;
                 results[i] = result with { ResultReceivedMilliseconds = Elapsed(), Succeeded = receipt.Succeeded,
                     ErrorCode = receipt.ErrorCode, HostAppliedMilliseconds = receipt.HostAppliedMilliseconds is { } stamp &&
                         !double.IsNaN(stamp) && !double.IsInfinity(stamp) && stamp >= 0 ? stamp : null };
@@ -140,7 +143,8 @@ public static class GuaTimedSegmentReplay
                 if (Elapsed() >= segment.ExecutionTimeoutMilliseconds)
                 { outcome = GuaSegmentOutcome.TimedOut; failure = "completion-or-boundary-timeout"; break; }
                 if (boundaryReached) break;
-                await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), cancellationToken).ConfigureAwait(false);
+                if (!pollMadeProgress)
+                    await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -198,7 +202,8 @@ public static class GuaTimedSegmentReplay
                         }
                         break;
                     }
-                    await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), CancellationToken.None).ConfigureAwait(false);
+                    if (!pollMadeProgress)
+                        await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), CancellationToken.None).ConfigureAwait(false);
                 }
             }
             catch { cleanupSucceeded = false; neutral = false; }

@@ -89,8 +89,8 @@ public static class GuaTimedSegmentFile
                 !(input.Kind == GuaGameInputKind.Gamepad && input.Operation == GuaGameInputOperation.Reset)) || input.Target.Contains('\0') ||
                 input.Target.Contains('\r') || input.Target.Contains('\n') ||
                 !Finite(input.X) || !Finite(input.Y) || input.DeviceIndex < 0 || input.DeviceIndex > 3 ||
-                (input.Kind != GuaGameInputKind.Gamepad && input.DeviceIndex != 0))
-                throw new InvalidDataException("Invalid input target, coordinate or device.");
+                input.LeaseMilliseconds > 60000 || (input.Kind != GuaGameInputKind.Gamepad && input.DeviceIndex != 0))
+                throw new InvalidDataException("Invalid input target, coordinate, device or lease.");
             if (input.Sensitive ? input.Value is not null || string.IsNullOrWhiteSpace(input.SecretKey) : input.SecretKey is not null)
                 throw new InvalidDataException("Sensitive input requires only a secret reference.");
             if (input.Sensitive && (input.Kind is not (GuaGameInputKind.Semantic or GuaGameInputKind.TextInput) || input.Operation != GuaGameInputOperation.Set))

@@ -94,8 +94,11 @@ maxLateness 超過時は未送信を止める。結果は全入力（未送信�
 host は現在の capability と Action Map を確認し、保護 action には呼出しごとの
 confirmation delegate が必要。変更された map では未送信操作を止める。秘密値は
 `Func<string, JsonElement?>` resolver で供給し、結果・ファイルへコピーしない。
-local host は native guarded enqueue を必須とし、承認時の epoch / Action Map revision を
+local host は native guarded enqueue / pure value preflight / owner health を必須とし、承認時の epoch / Action Map revision を
 enqueue / consume の両方で照合する。対応しない古い native runtime は owner 作成前に拒否する。
+全 payload と解決済み秘密を同一 native validator で開始前に検査する。owner の lease expiry
+flag は disconnect まで保持され、既存 256 件の Trace journal の切詰めと他 owner の流量に依存しない。
+ready result の chunk を取得できた場合は追加 sleep せず、実時間 deadline を照合して続ける。
 semantic text Set は `SemanticValueType: GuaGameInputValueType.Text` を明示すれば stateless
 として扱い、lease / release を要求しない。axis / vector の Holdable=false は許容する。
 local runtime host は realtime / game-input FIFO だけを扱い、simulation / 厳密適用

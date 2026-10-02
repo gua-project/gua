@@ -13,7 +13,7 @@
         "index": { "type": "integer", "minimum": 0, "maximum": 999 },
         "scheduledMilliseconds": { "type": "integer", "minimum": 0, "maximum": 60000 },
         "sentMilliseconds": { "$ref": "#/$defs/time" },
-        "requestId": { "type": ["string", "null"], "pattern": "^[0-9]{1,20}$" },
+        "requestId": { "type": ["string", "null"], "pattern": "^[1-9][0-9]{0,19}$" },
         "resultReceivedMilliseconds": { "$ref": "#/$defs/time" },
         "hostAppliedMilliseconds": { "$ref": "#/$defs/time" },
         "succeeded": { "type": ["boolean", "null"] },
@@ -23,6 +23,7 @@
     "result": {
       "type": "object", "additionalProperties": false,
       "if": { "properties": { "applicationTimingConfirmed": { "const": true } }, "required": ["applicationTimingConfirmed"] },
+      "allOf": [{ "if": { "properties": { "outcome": { "const": 0 } }, "required": ["outcome"] }, "then": { "properties": { "cleanupSucceeded": { "const": true }, "neutralConfirmed": { "const": true }, "failureCode": { "type": "null" }, "inputs": { "items": { "properties": { "sentMilliseconds": { "type": "number" }, "requestId": { "type": "string" }, "resultReceivedMilliseconds": { "type": "number" }, "succeeded": { "const": true } } } } } } }],
       "then": { "properties": { "outcome": { "const": 0 }, "cleanupSucceeded": { "const": true }, "neutralConfirmed": { "const": true }, "inputs": { "items": { "properties": { "sentMilliseconds": { "type": "number" }, "requestId": { "type": "string" }, "resultReceivedMilliseconds": { "type": "number" }, "hostAppliedMilliseconds": { "type": "number" }, "succeeded": { "const": true } } } } } },
       "required": ["outcome", "cleanupSucceeded", "neutralConfirmed", "failureCode", "clock", "simulationScope", "maxLatenessMilliseconds", "executionTimeoutMilliseconds", "cleanupTimeoutMilliseconds", "applicationTimingConfirmed", "inputs"],
       "properties": {

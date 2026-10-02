@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Reflection;
+using Json.Schema;
 using Gua.Core;
 using Gua.Runtime;
 using Gua.Testing;
@@ -10,6 +11,137 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase("device")]
+    [TestCase("type")]
+    [TestCase("coordinate")]
+    [TestCase("lease")]
+    public void Review_ProtocolAndFileAgreeOnCommonInputMetadata(string invalid)
+    {
+        var input = invalid == "coordinate" ? new GuaTimedInput(0, GuaGameInputKind.Pointer,
+            GuaGameInputOperation.MoveAbsolute, "absolute:viewport_normalized", X: 2) :
+            new GuaTimedInput(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space",
+                LeaseMilliseconds: invalid == "lease" ? 60001u : 0,
+                DeviceIndex: invalid == "device" ? 1 : 0,
+                SemanticValueType: invalid == "type" ? GuaGameInputValueType.Button : null);
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [input]);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(plan, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var path = Path.GetFullPath("../../../../../../../protocol/schema/timed-segment-v1.schema.json", TestContext.CurrentContext.TestDirectory);
+        Assert.That(Json.Schema.JsonSchema.FromFile(path).Evaluate(document.RootElement).IsValid, Is.False);
+        Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Validate(plan));
+    }
+
+    [Test]
+    public async Task Review_ReadyThousandInputResultsDoNotSpendBudgetSleepingBetweenChunks()
+    {
+        var clock = new FakeRealtime();
+        var host = new FakeHost(clock);
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100,
+            Enumerable.Range(0, 1000).Select(_ => new GuaTimedInput(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")).ToArray());
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Succeeded));
+        Assert.That(clock.Milliseconds, Is.Zero);
+        Assert.That(result.NeutralConfirmed, Is.True);
+    }
+
+    [TestCase(257)]
+    [TestCase(1000)]
+    public async Task Review_NativeLargeBatchKeepsOwnerHealthEvidenceAfterJournalRollsOver(int count)
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Keyboard, () => { });
+        var clock = new FakeRealtime();
+        clock.OnDelay = () => { while (runtime.TryConsumeGameInput(out var request)) runtime.CompleteGameInput(request, true); };
+        var host = new GuaRuntimeSegmentHost(runtime, true);
+        var plan = new GuaTimedSegment(1, 0, 20, 1000, 500,
+            Enumerable.Range(0, count).Select(_ => new GuaTimedInput(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")).ToArray());
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Succeeded));
+        Assert.That(result.Inputs.All(input => input.Succeeded == true), Is.True);
+        Assert.That(result.NeutralConfirmed, Is.True);
+        using var diagnostics = JsonDocument.Parse(runtime.GetDiagnosticsJson());
+        Assert.That(diagnostics.RootElement.GetProperty("traceLifecycle").GetProperty("events").GetArrayLength(), Is.EqualTo(256));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Review_OwnerLeaseEvidenceSurvivesUnrelatedJournalTraffic(bool expired)
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Keyboard | GuaGameInputCapabilities.Pointer, () => { });
+        var host = new GuaRuntimeSegmentHost(runtime, true);
+        host.Begin(Plan());
+        try
+        {
+            if (expired)
+            {
+                host.Send(Plan().Inputs[0], null, () => { });
+                Assert.That(runtime.TryConsumeGameInput(out var held), Is.True);
+                runtime.CompleteGameInput(held, true);
+                runtime.TickGameInputLeases(TimeSpan.FromSeconds(6));
+            }
+            using var other = runtime.CreateGameInputSession();
+            for (var i = 0; i < 300; i++)
+            {
+                other.Send(GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space");
+                while (runtime.TryConsumeGameInput(out var request)) runtime.CompleteGameInput(request, true);
+            }
+            Assert.That(host.ExecutionFailureCode, Is.EqualTo(expired ? "lease-expired-before-release" : null));
+        }
+        finally { host.End(); }
+    }
+
+    [TestCase("cleanup")]
+    [TestCase("neutral")]
+    [TestCase("pending")]
+    [TestCase("failed-input")]
+    [TestCase("failure-code")]
+    [TestCase("request-id")]
+    [TestCase("receipt-time")]
+    public void Review_TraceSuccessRequiresSuccessfulCompletionsAndConfirmedCleanup(string invalid)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gua-success-invariant", Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
+            var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
+            var input = invalid == "pending" ? new GuaTimedInputResult(0, 0, null, null, null, null, null, null) :
+                new GuaTimedInputResult(0, 0, invalid == "receipt-time" ? 5 : 0, invalid == "request-id" ? 0ul : 1ul,
+                    1, null, invalid != "failed-input", 0);
+            var result = new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded, [input], invalid != "cleanup", invalid != "neutral",
+                invalid == "failure-code" ? "host-health-failed" : null)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 };
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, result), Is.False);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestCase(1, "true", true)]
+    [TestCase(1, "null", false)]
+    [TestCase(1, "missing", false)]
+    [TestCase(1, "123", false)]
+    [TestCase(2, "0.5", true)]
+    [TestCase(2, "null", false)]
+    [TestCase(2, "missing", false)]
+    [TestCase(2, "\"0.5\"", false)]
+    [TestCase(3, "{\"x\":0,\"y\":1}", true)]
+    [TestCase(3, "{\"x\":0}", false)]
+    [TestCase(3, "missing", false)]
+    [TestCase(3, "{\"x\":0,\"y\":\"1\"}", false)]
+    public void Review_ProtocolSchemaMatchesDeclaredSemanticSetPayloadTypes(int type, string json, bool valid)
+    {
+        var input = new GuaTimedInput(0, GuaGameInputKind.Semantic, GuaGameInputOperation.Set, "value",
+            json == "missing" ? null : JsonSerializer.Deserialize<JsonElement>(json), 5000, SemanticValueType: (GuaGameInputValueType)type);
+        var plan = new GuaTimedSegment(1, 1, 20, 100, 100,
+            [input, new(1, GuaGameInputKind.Semantic, GuaGameInputOperation.Release, "value")]);
+        var path = Path.GetFullPath("../../../../../../../protocol/schema/timed-segment-v1.schema.json", TestContext.CurrentContext.TestDirectory);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(plan, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
+        if (json == "missing") node["inputs"]![0]!.AsObject().Remove("value");
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        Assert.That(Json.Schema.JsonSchema.FromFile(path).Evaluate(document.RootElement).IsValid, Is.EqualTo(valid));
+        if (valid) Assert.DoesNotThrow(() => GuaTimedSegmentFile.Validate(plan));
+        else Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Validate(plan));
+    }
+
     [TestCase("missing")]
     [TestCase("late")]
     [TestCase("reordered")]

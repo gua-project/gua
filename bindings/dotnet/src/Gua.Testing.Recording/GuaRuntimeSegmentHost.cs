@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Gua.Core;
 using Gua.Runtime;
@@ -14,8 +13,6 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentValueHost
     private readonly Func<GuaGameInputAction, bool>? confirm;
     private GuaGameInputSession? session;
     private readonly Dictionary<string, string> confirmedActions = new();
-    private ulong sequence;
-    private string source = "";
     private string? health;
     private long epoch;
     private ulong actionRevision;
@@ -92,10 +89,6 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentValueHost
             if (epoch != tree.RootElement.GetProperty("sessionEpoch").GetInt64())
                 throw new InvalidOperationException("Segment session changed during preflight.");
             health = null;
-            using var diagnostics = JsonDocument.Parse(runtime.GetDiagnosticsJson());
-            var journal = diagnostics.RootElement.GetProperty("traceLifecycle");
-            source = journal.GetProperty("sourceId").GetString()!;
-            sequence = Ulong(journal.GetProperty("lastSequence"));
             session = runtime.CreateGameInputSession(profile);
         }
     }
@@ -134,18 +127,9 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentValueHost
         {
             try
             {
-                CheckEpoch();
-                using var document = JsonDocument.Parse(runtime.GetDiagnosticsJson());
-                var journal = document.RootElement.GetProperty("traceLifecycle");
-                if (journal.GetProperty("sourceId").GetString() != source) return health = "lifecycle-source-changed";
-                var latest = Ulong(journal.GetProperty("lastSequence"));
-                var facts = journal.GetProperty("events").EnumerateArray().Where(item => Ulong(item.GetProperty("sequence")) > sequence).ToArray();
-                if (latest > sequence && (facts.Length == 0 || Ulong(facts[0].GetProperty("sequence")) != sequence + 1))
-                    health = "lifecycle-evidence-gap";
-                foreach (var fact in facts)
-                    if (Ulong(fact.GetProperty("ownerId")) == session!.OwnerId && fact.GetProperty("phase").GetString() == "lease-expired")
-                        health = "lease-expired-before-release";
-                sequence = latest;
+                var snapshot = session!.GetHealth();
+                if (snapshot.SessionEpoch != checked((ulong)epoch)) return health = "lifecycle-or-session-unconfirmed";
+                if (snapshot.LeaseExpired) health = "lease-expired-before-release";
                 return health;
             }
             catch { return health = "lifecycle-or-session-unconfirmed"; }
@@ -169,7 +153,6 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentValueHost
         var action = result.Actions.SingleOrDefault();
         return action is { Active: true } ? action : throw new InvalidOperationException("Action is no longer active/published.");
     }
-    private static ulong Ulong(JsonElement value) => ulong.Parse(value.GetString()!, CultureInfo.InvariantCulture);
     private static GuaGameInputCapabilities Required(GuaGameInputKind kind) => kind switch
     {
         GuaGameInputKind.Semantic => GuaGameInputCapabilities.Semantic,

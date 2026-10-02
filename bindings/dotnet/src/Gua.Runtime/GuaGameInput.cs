@@ -97,6 +97,10 @@ public sealed class GuaGameInputSession : IDisposable
         return owner.EnqueueGameInput(OwnerId, ObservationProfile, kind, operation, target, value, lease, x, y, deviceIndex, sensitive, confirmed, beforeEnqueue);
     }
     public string GetStateJson() => (runtime ?? throw new ObjectDisposedException(nameof(GuaGameInputSession))).GetGameInputStateJson(OwnerId);
+    /// <summary>Atomic owner-lifetime safety evidence; lease expiry is retained independently
+    /// of diagnostic journal truncation until the owner disconnects.</summary>
+    public (ulong SessionEpoch, bool LeaseExpired) GetHealth() =>
+        (runtime ?? throw new ObjectDisposedException(nameof(GuaGameInputSession))).GetGameInputOwnerHealth(OwnerId);
     /// <summary>Bind dispatch and consumption to the epoch and semantic Action Map revision
     /// observed when consent/preflight occurred. Requires the guarded native entry point.</summary>
     public ulong SendGuarded(ulong expectedEpoch, ulong expectedRevision, GuaGameInputKind kind,
@@ -115,7 +119,8 @@ public sealed partial class GuaRuntime
     private unsafe delegate int CopyGameInputJsonDelegate(byte* output, int size);
     private Action? gameInputShutdown;
     private bool? metadataRegistrationSupported;
-    /// <summary>Whether the loaded native runtime exposes atomic epoch/Action Map guarded enqueue.</summary>
+    /// <summary>Whether the loaded native runtime exposes guarded segment enqueue, pure preflight,
+    /// and owner-lifetime health evidence.</summary>
     public bool SupportsGuardedGameInput
     {
         get
@@ -126,6 +131,7 @@ public sealed partial class GuaRuntime
                 var probe = new Native.GameInputRequestDescriptorV2 { StructSize = (uint)Marshal.SizeOf<Native.GameInputRequestDescriptorV2>() };
                 Native.gua_runtime_enqueue_game_input_guarded_v2(_handle, in probe, (int)GuaObservationProfile.Debug, 0, 0, out _);
                 Native.gua_runtime_validate_game_input_guarded_v2(_handle, in probe, (int)GuaObservationProfile.Debug, 0, 0);
+                Native.gua_runtime_get_game_input_owner_health(_handle, 0, out _, out _);
                 return true; // Invalid owner/kind cannot enqueue; only tests entry-point availability.
             }
             catch (EntryPointNotFoundException) { return false; }
@@ -139,6 +145,14 @@ public sealed partial class GuaRuntime
         double x, double y, int deviceIndex, bool sensitive, bool confirmed) =>
         EnqueueGameInput(0, profile, kind, operation, target, value, lease, x, y, deviceIndex, sensitive,
             confirmed, null, expectedEpoch, expectedRevision, true);
+
+    internal (ulong SessionEpoch, bool LeaseExpired) GetGameInputOwnerHealth(ulong ownerId)
+    {
+        ThrowIfDisposed();
+        if (Native.gua_runtime_get_game_input_owner_health(_handle, ownerId, out var epoch, out var expired) != 1)
+            throw new InvalidOperationException("Game input owner health is unavailable.");
+        return (epoch, expired != 0);
+    }
 
     public void EnableGameInput(GuaGameInputCapabilities capabilities, Action shutdown,
         GuaGameInputCapabilities playerCapabilities = GuaGameInputCapabilities.None)
