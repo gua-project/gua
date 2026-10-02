@@ -11,13 +11,21 @@ public static class GuaDistribution
     private const string Prefix = "Gua.Distribution.";
     private static readonly Assembly Assembly = typeof(GuaDistribution).Assembly;
     public static IReadOnlyList<string> SchemaNames { get; } = Array.AsReadOnly(Assembly.GetManifestResourceNames()
-        .Where(name => name.StartsWith(Prefix, StringComparison.Ordinal) && name.EndsWith(".schema.json", StringComparison.Ordinal))
-        .Select(name => name.Substring(Prefix.Length)).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+        .Where(name => name.StartsWith("Gua.Trace.", StringComparison.Ordinal) && name.EndsWith(".schema.json", StringComparison.Ordinal))
+        .Select(name => name.Substring("Gua.Trace.".Length) switch {
+            "UiTree.schema.json" => "ui-tree.schema.json",
+            "WorldTree.schema.json" => "world-object-tree.schema.json",
+            var canonical => canonical
+        }).OrderBy(name => name, StringComparer.Ordinal).ToArray());
 
     public static string ReadSchema(string name)
     {
         if (!SchemaNames.Contains(name, StringComparer.Ordinal)) throw new ArgumentException("Unknown packaged schema.", nameof(name));
-        return ReadResource(name);
+        return ReadResource(name switch {
+            "ui-tree.schema.json" => "UiTree.schema.json",
+            "world-object-tree.schema.json" => "WorldTree.schema.json",
+            _ => name
+        }, "Gua.Trace.");
     }
 
     public static string License => ReadResource("LICENSE");
@@ -37,9 +45,9 @@ public static class GuaDistribution
         return schema.Evaluate(JsonNode.Parse(json), options).IsValid;
     }
 
-    private static string ReadResource(string name)
+    private static string ReadResource(string name, string prefix = Prefix)
     {
-        using var stream = Assembly.GetManifestResourceStream(Prefix + name)
+        using var stream = Assembly.GetManifestResourceStream(prefix + name)
             ?? throw new InvalidDataException("Packaged resource is missing.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd();

@@ -32,24 +32,21 @@
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="../../../../protocol/schema/*.schema.json;../../../../protocol/schema/*.mjs" Pack="true" PackagePath="schemas/" />
-    <EmbeddedResource Include="../../../../protocol/schema/*.schema.json" LogicalName="Gua.Distribution.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../../../protocol/schema/*.schema.json" LogicalName="Gua.Trace.%(Filename)%(Extension)" />
+    <EmbeddedResource Update="../../../../protocol/schema/ui-tree.schema.json" LogicalName="Gua.Trace.UiTree.schema.json" />
+    <EmbeddedResource Update="../../../../protocol/schema/world-object-tree.schema.json" LogicalName="Gua.Trace.WorldTree.schema.json" />
     <EmbeddedResource Include="../../../../protocol/schema/trace-observe-semantics.mjs" LogicalName="Gua.Distribution.trace-observe-semantics.mjs" />
     <EmbeddedResource Include="../../../../LICENSE" LogicalName="Gua.Distribution.LICENSE" />
     <EmbeddedResource Include="../../../../artifacts/trace-viewer/version.json" LogicalName="Gua.Distribution.Viewer.version.json" Condition="Exists('../../../../artifacts/trace-viewer/version.json')" />
     <EmbeddedResource Include="../../../../artifacts/trace-viewer/Viewer.LICENSES.txt" LogicalName="Gua.Distribution.Viewer.LICENSES.txt" Condition="Exists('../../../../artifacts/trace-viewer/Viewer.LICENSES.txt')" />
     <None Include="../../../../artifacts/trace-viewer/Viewer.LICENSES.txt;../../../../LICENSE" Pack="true" PackagePath="trace/" Condition="Exists('../../../../artifacts/trace-viewer/Viewer.LICENSES.txt')" />
     <None Include="../../../../protocol/schema/spatial-r1.schema.json;../../../../protocol/schema/spatial-host-r1.schema.json" Pack="true" PackagePath="trace/" />
-    <EmbeddedResource Include="../../../../protocol/schema/spatial-host-r1.schema.json" LogicalName="Gua.Trace.spatial-host-r1.schema.json" />
     <EmbeddedResource Include="../../../../artifacts/trace-viewer/viewer.js" LogicalName="Gua.Trace.Viewer.js"
                       Condition="Exists('../../../../artifacts/trace-viewer/viewer.js')" />
     <None Include="../../../../protocol/schema/trace.schema.json" Pack="true" PackagePath="trace/" />
     <None Include="../../../../protocol/schema/trace-screenshot.schema.json;../../../../protocol/schema/trace-lifecycle.schema.json" Pack="true" PackagePath="trace/" />
     <None Include="../../../../protocol/schema/trace-observe-semantics.mjs" Pack="true" PackagePath="trace/" />
     <None Include="../../../../protocol/schema/observe-transport-v1.schema.json;../../../../protocol/schema/observe-v1.schema.json;../../../../protocol/schema/enum-catalog-v1.schema.json;../../../../protocol/schema/value-v1.schema.json" Pack="true" PackagePath="trace/" />
-    <EmbeddedResource Include="../../../../protocol/schema/ui-tree.schema.json" LogicalName="Gua.Trace.UiTree.schema.json" />
-    <EmbeddedResource Include="../../../../protocol/schema/value-v1.schema.json;../../../../protocol/schema/enum-catalog-v1.schema.json;../../../../protocol/schema/observe-v1.schema.json;../../../../protocol/schema/observe-transport-v1.schema.json" LogicalName="Gua.Trace.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="../../../../protocol/schema/world-object-tree.schema.json" LogicalName="Gua.Trace.WorldTree.schema.json" />
-    <EmbeddedResource Include="../../../../protocol/schema/diagnostics.schema.json;../../../../protocol/schema/version.schema.json;../../../../protocol/schema/logs.schema.json;../../../../protocol/schema/screenshot.schema.json;../../../../protocol/schema/trace-lifecycle.schema.json;../../../../protocol/schema/trace-diagnostics.schema.json;../../../../protocol/schema/trace-recording.schema.json" LogicalName="Gua.Trace.%(Filename)%(Extension)" />
     <None Include="../../../../protocol/schema/diagnostics.schema.json;../../../../protocol/schema/version.schema.json;../../../../protocol/schema/logs.schema.json;../../../../protocol/schema/screenshot.schema.json;../../../../protocol/schema/ui-tree.schema.json;../../../../protocol/schema/trace-diagnostics.schema.json;../../../../protocol/schema/trace-recording.schema.json" Pack="true" PackagePath="trace/" />
     <None Include="../../../../artifacts/trace-viewer/index.html" Pack="true" PackagePath="trace/"
           Condition="Exists('../../../../artifacts/trace-viewer/index.html')" />
