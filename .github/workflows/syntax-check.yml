@@ -71,6 +71,23 @@ jobs:
         shell: pwsh
         run: scripts/verify-godot-desktop-addon.ps1 -Rid '${{ matrix.rid }}' -RequireBinaries
 
+      - name: Verify release addon archive composition
+        shell: pwsh
+        run: |
+          $addon = 'artifacts/packaged-addon/addons/gua'
+          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $addon
+          New-Item -ItemType Directory -Force "$addon/bin" | Out-Null
+          Copy-Item examples/godot-gdscript/addons/gua/bin/gua_godot.* "$addon/bin"
+          Compress-Archive -Path artifacts/packaged-addon/addons -DestinationPath artifacts/gua-godot-candidate.zip
+          scripts/verify-godot-addon-archive.ps1 -ArchivePath artifacts/gua-godot-candidate.zip -Rid '${{ matrix.rid }}'
+
+      - name: Upload candidate Godot archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: gua-godot-candidate-${{ matrix.rid }}-${{ github.sha }}
+          path: artifacts/gua-godot-candidate.zip
+          if-no-files-found: error
+
       - name: Install Godot 4.7 editor and export templates
         shell: pwsh
         run: |
@@ -225,7 +242,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Configure portable native targets
-        run: cmake -S . -B build/portable -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF
+        run: cmake -S . -B build/portable -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF "-DGUA_VERSION=0.0.0-ci" "-DGUA_BUILD_ID=${{ github.sha }}"
 
       - name: Build portable native targets
         run: |
@@ -297,8 +314,8 @@ jobs:
 
       - name: Pack native packages
         run: |
-          dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
-          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
+          dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
 
       - name: Set up Bun for the packaged Trace Viewer
         uses: oven-sh/setup-bun@v2
@@ -309,7 +326,10 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run --filter @gua/inspector build:trace
-          dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci
+          dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:RepositoryCommit=${{ github.sha }}
 
       - name: Verify native package contents
         shell: pwsh
@@ -361,6 +381,44 @@ jobs:
         env:
           GUA_NATIVE_DIR: ""
           GUA_RUNTIME_NATIVE_DIR: ""
+
+      - name: Accept external archive, offline resources and .NET Tool
+        shell: pwsh
+        run: scripts/verify-distribution-consumer.ps1 -PackageDirectory artifacts/packages -Version 0.0.0-ci -SourceCommit '${{ github.sha }}' -Rid '${{ matrix.rid }}' -OutputDirectory artifacts/distribution-evidence
+
+      - name: Upload distribution acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gua-distribution-${{ matrix.rid }}-${{ github.sha }}
+          path: artifacts/distribution-evidence
+          if-no-files-found: error
+
+      - name: Set up Bun for packaged Viewer browser QA
+        if: matrix.rid == 'linux-x64'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Set up Chrome for packaged Viewer browser QA
+        if: matrix.rid == 'linux-x64'
+        id: distribution-chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Render the packaged offline Viewer
+        if: matrix.rid == 'linux-x64'
+        shell: pwsh
+        run: scripts/verify-distribution-viewer.ps1 -ChromeExecutable '${{ steps.distribution-chrome.outputs.chrome-path }}' -OutputDirectory artifacts/distribution-evidence
+
+      - name: Upload packaged Viewer browser evidence
+        if: always() && matrix.rid == 'linux-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gua-distribution-viewer-${{ github.sha }}
+          path: |
+            artifacts/distribution-evidence/viewer.png
+            artifacts/distribution-evidence/viewer-browser.json
+          if-no-files-found: error
 
       - name: Restore package-only external Trace runner
         shell: pwsh

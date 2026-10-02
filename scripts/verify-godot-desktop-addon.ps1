@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $addon = if ([IO.Path]::IsPathRooted($AddonDirectory)) { $AddonDirectory } else { Join-Path $root $AddonDirectory }
+& (Join-Path $PSScriptRoot 'verify-godot-addon-sources.ps1') -AddonDirectory $addon
 $descriptor = Get-Content -LiteralPath (Join-Path $addon "gua.gdextension") -Raw
 $libraries = [ordered]@{
     "win-x64" = @{

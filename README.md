@@ -143,6 +143,9 @@ for installation and verification details.
 
 ## NuGet Packages
 
+See the [external distribution contract](docs/distribution-contract.md) for pinned
+schemas, the embedded offline Viewer, package-only consumers and acceptance gates.
+
 - **Gua.Core:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Core)](https://www.nuget.org/packages/Gua.Core) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Core)<br>
   P/Invoke bindings for using the Gua C ABI runtime from .NET, including native assets for Windows x64, Linux x64, Intel macOS, and Apple Silicon macOS.
 - **Gua.Testing:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing)](https://www.nuget.org/packages/Gua.Testing) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing)<br>

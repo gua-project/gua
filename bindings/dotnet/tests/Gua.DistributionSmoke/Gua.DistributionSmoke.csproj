@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>gua-distribution-smoke</ToolCommandName>
+    <PackageId>Gua.DistributionSmoke</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Version>$(GuaPackageVersion)</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="notices/**/*" TargetPath="notices/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <PackageReference Include="Gua.Runtime" Version="[$(GuaPackageVersion)]" />
+    <PackageReference Include="Gua.Testing.Recording" Version="[$(GuaPackageVersion)]" />
+    <PackageReference Include="Gua.Testing.Godot" Version="[$(GuaPackageVersion)]" />
+    <PackageReference Include="Gua.Testing.Unity" Version="[$(GuaPackageVersion)]" />
+  </ItemGroup>
+</Project>

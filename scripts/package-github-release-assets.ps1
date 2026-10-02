@@ -37,6 +37,8 @@ if (Test-Path -LiteralPath $OutputDirectory) {
 
 $godotArchive = Require-File (Join-Path $GodotAddonDirectory "gua-godot-addon-v$Version.zip")
 $legacyWindowsGodotArchive = Require-File (Join-Path $WindowsAssetsDirectory "gua-godot-plugin-windows-v$Version.zip")
+& (Join-Path $PSScriptRoot 'verify-godot-addon-archive.ps1') -ArchivePath $godotArchive
+& (Join-Path $PSScriptRoot 'verify-godot-addon-archive.ps1') -ArchivePath $legacyWindowsGodotArchive -Rid win-x64
 $unityArchive = Require-File (Join-Path $UnityPackageDirectory "com.link1345.gua-$Version.tgz")
 
 Copy-Item -LiteralPath $godotArchive -Destination $OutputDirectory
