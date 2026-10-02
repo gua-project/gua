@@ -31,9 +31,11 @@ actual source-only game, packaged addon and native transport instead.
 - #133 analytical spatial-engine-r1 fixtures cover 33 scenarios plus the door
   transition, batches, 34 lease races and 360 actual callback profile samples.
   Windows Godot 4.7 (GodotPhysics/Jolt) and Unity 6000.5.3f1/PhysX are pinned.
-- #134 common Trace and legacy route tests continue to run. The previous
-  support table is historical until the current head's engine/package checks
-  finish; native synthetic-provider CI alone does not establish engine routes.
+- #134 common Trace and legacy route tests continue to run. The measured
+  support table distinguishes the actual four-RID Godot engine/consumer CI
+  routes from full pinned Windows geometry/profiling. Native synthetic-provider
+  CI alone does not establish engine routes. Exact heads/artifacts are retained
+  in the PR and parent execution record.
 
 ## Commands and records
 
@@ -93,10 +95,12 @@ control fails its intended count/correlation/completion assertion.
 
 - #129 requires an owner-selected public version/channel and acceptance on the
   actually published artifacts. Candidate packs/runs cannot close that gate.
-- Actual Unity Linux/macOS engine/Mono consumer routes require suitable licensed
-  non-Windows engine hosts. The available workstation is Windows; no license or
-  credential changes are authorized, and no existing CI Unity engine job is
-  configured. This does not block feasible Godot desktop coverage.
+- Actual Unity Linux/macOS engine/Mono consumer routes need an available
+  player-build/runtime-host pipeline. This Windows editor has only Windows
+  standalone and WebGL modules; Linux/macOS build modules and an existing Unity
+  engine CI job are absent. A suitable editor build host with applicable license,
+  or cross-build modules plus target runtime hosts, could provide it. No license/credential
+  changes are authorized. This does not block Godot desktop coverage.
 - Other patches/backends, meshes/one-way gameplay and physics error bounds
   remain outside the measured support claims documented in spatial-engine-r1.
 - Built-in privileged browser spatial remains Unsupported; #116 Codex routing

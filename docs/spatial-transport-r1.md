@@ -107,11 +107,22 @@ before packing Gua.Testing. No release or deployment is performed by these check
 
 | Engine / OS / backend | Native scheduler & bindings | WebSocket / Native MCP | Built-in browser privilege |
 | --- | --- | --- | --- |
-| Godot 4.7 stable / Windows x64 / GodotPhysics3D | Real packaged addon and host pump | TypeScript, built native MCP and .NET passed; report inspected in Chrome | Unsupported |
+| Godot 4.7 stable / Windows x64 / GodotPhysics3D | Real packaged addon and host pump | TypeScript, built native MCP and isolated candidate NuGet consumer passed; common Trace/report generated | Unsupported |
 | Godot 4.7 stable / Windows x64 / Jolt | Real packaged addon and host pump | TypeScript, built native MCP and isolated NuGet consumer passed; offline report generated | Unsupported |
-| Unity 6000.5.3f1 / Windows x64 / PhysX | Real standalone Mono Player and FixedUpdate pump | TypeScript, built native MCP and .NET passed; report inspected in Chrome | Unsupported |
-| Linux/macOS/other patches/backends | Unverified for #134; no inherited transport acceptance claim | Unverified | Unsupported built-in privilege path |
+| Godot 4.7 stable / Linux x64, macOS x64, macOS arm64 / GodotPhysics3D and Jolt | Real packaged addon and physics callback pump in each desktop CI lane | TypeScript, built native MCP and isolated candidate NuGet consumer passed; common Trace/report generated | Unsupported |
+| Unity 6000.5.3f1 / Windows x64 / PhysX | Real standalone Mono Player and FixedUpdate pump | TypeScript, built native MCP and isolated candidate NuGet consumer passed; common Trace/report generated | Unsupported |
+| Unity Linux/macOS / other engine patches/backends | Unverified for #134; no inherited transport acceptance claim | Unverified | Unsupported built-in privilege path |
 | Godot Web / Unity WebGL | Existing ports project Player/PublicAgent | No authorized r1 Testing/Debug browser channel | Unsupported; tools absent |
+
+The current engine/consumer execution record is [PR #168](https://github.com/gua-project/gua/pull/168)
+and [parent #130](https://github.com/gua-project/gua/issues/130): tested commits,
+commands, per-RID CI artifacts and unverified scope are recorded there. The
+desktop Godot CI checks require three actual physics batches (TypeScript, MCP,
+NuGet consumer) and a clean engine exit. Full 67-result geometry, 360-sample CPU
+profiling and 34 lease-race reruns were measured on the pinned Windows engines;
+those full-fixture measurements are not inherited by the other OS route checks.
+Candidate package checks do not establish published-artifact acceptance for #129.
+Report payload/HTML checks do not imply a new browser visual QA pass.
 
 `guaSpatialBrowserSupport` reports Unsupported. Registering tool names or a fake
 `document.modelContext` does not authorize physics. The existing browser UI/World/
