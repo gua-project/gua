@@ -67,6 +67,13 @@ the actual reply and successful MCP payload contain the retained private hit.
 The clean native build passes all nine cases. See
 artifacts/redaction-mutation-detection.log. The mutation is not submitted.
 
+The initial bounded audit also reproduced duplicate inspection replies and
+stale diagnostics.version.spatial passing the original inspection block.
+spatial-redaction-assertions.ts now requires exactly one of each inspection ID,
+safe discovery rejection and absent provider metadata in both declarations.
+packages/mcp/test/spatial-redaction-assertions.test.ts directly exercises that
+production helper with empty/missing/duplicate replies and stale declarations.
+
 ## Gates retained
 
 - #129 requires an owner-selected public version/channel and acceptance on the

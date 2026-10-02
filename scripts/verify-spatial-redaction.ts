@@ -4,6 +4,7 @@ import { expect } from "bun:test";
 import { createInterface } from "node:readline";
 import { GuaBridgeClient } from "../packages/mcp/src/index";
 import fixture from "../protocol/fixtures/spatial-host-r1.json";
+import { assertSpatialRedactionInspection } from "./spatial-redaction-assertions";
 const [url, route, transition] = process.argv.slice(2);
 const batch = fixture.valid.find(v => v.id === "batch")!.json as any;
 let release!: () => void;
@@ -64,11 +65,7 @@ try {
   }
   expect(held).toBe(true);
   expect(commands.filter(c=>c.type==="query_spatial_batch")).toHaveLength(1);
-  const version = replies.find(r=>r.id===9001); const diagnostics = replies.find(r=>r.id===9002); const info = replies.find(r=>r.id===9003);
-  expect(version?.ok).toBe(true); expect(version.result.capabilities).not.toContain("spatial_read_r1");
-  expect(version.result.spatial).toBeUndefined();
-  expect(diagnostics?.ok).toBe(true); expect(diagnostics.result.version.capabilities).not.toContain("spatial_read_r1");
-  expect(info?.ok).toBe(false);
+  assertSpatialRedactionInspection(replies);
   const evidence = {route,transition,replies,clientResult,submissions:1};
   expect(JSON.stringify(evidence)).not.toContain("PRIVATE_SPATIAL_SENTINEL");
   expect(JSON.stringify(evidence)).not.toContain("0.314159265358979");
