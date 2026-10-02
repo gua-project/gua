@@ -161,6 +161,174 @@ public sealed class SpatialTransportTests
         Assert.That(html,Does.Contain("boundary_ended").And.Contain("notExecuted"));
     }
     static string DocJson(int index) { using var document=Doc(index); return document.ToJson(); }
+    const string PrivateMarker="PRIVATE_SPATIAL_SENTINEL";
+    static void AssertPrivatePositiveControl(JsonNode result)
+    {
+        using var batch=Doc(2); var expected=JsonNode.Parse(batch.ToJson())!;
+        Assert.That(result["batchId"]!.GetValue<long>(),Is.EqualTo(expected["batchId"]!.GetValue<long>()));
+        var items=result["items"]!.AsArray();
+        Assert.That(items.Count,Is.EqualTo(2),"Positive control requires two results.");
+        foreach(var query in expected["queries"]!.AsArray()) {
+            var requestId=query!["requestId"]!.GetValue<long>(); var queryId=query["queryId"]!.GetValue<string>();
+            var matches=items.Where(item=>item!["requestId"]!.GetValue<long>()==requestId && item["queryId"]!.GetValue<string>()==queryId).ToArray();
+            Assert.That(matches.Length,Is.EqualTo(1),"Positive control requires one correlated result per request.");
+            var item=matches[0]!;
+            Assert.That(item["state"]!.GetValue<string>(),Is.EqualTo("completed"),"Positive control item must be completed.");
+            Assert.That(item["result"],Is.Not.Null);
+            var geometry=item["result"]!;
+            Assert.That(geometry["status"]!.GetValue<string>(),Is.EqualTo("completed"),"Positive control nested result must be completed.");
+            foreach(var field in new[]{"requestId","queryId","sessionEpoch","spaceId","spaceEpoch","kind"})
+                Assert.That(geometry[field]!.ToJsonString(),Is.EqualTo(query[field]!.ToJsonString()),$"Positive control nested correlation: {field}.");
+            Assert.That(geometry.ToJsonString(),Does.Contain(PrivateMarker).And.Contain("0.314159265358979"),"Each completed result must contain private fixture geometry.");
+        }
+    }
+    [Test]
+    public void PrivateGeometryPositiveControlRejectsIncompleteAndMiscorrelatedResults()
+    {
+        using var h=new Host(); using var batch=Doc(2); using var client=h.Runtime.CreateSpatialClient();
+        client.Enqueue(batch.ReadBatch()); CompletePrivateBatch(h); using var positive=client.Poll(1)!;
+        var actual=JsonNode.Parse(positive.ToJson())!; AssertPrivatePositiveControl(actual);
+        foreach(var violation in new[]{"missing","duplicate","partial","nested-id","nested-state"}) {
+            var invalid=actual.DeepClone(); var items=invalid["items"]!.AsArray();
+            if(violation=="missing") items.RemoveAt(1);
+            else if(violation=="duplicate") items[1]=items[0]!.DeepClone();
+            else if(violation=="partial") {items[1]!["state"]="failed"; items[1]!.AsObject().Remove("result");}
+            else if(violation=="nested-id") items[1]!["result"]!["requestId"]=999;
+            else items[1]!["result"]!["status"]="failed";
+            // The former marker-only/count control accepts all but missing.
+            Assert.That(invalid.ToJsonString(),Does.Contain(PrivateMarker).And.Contain("0.314159265358979"));
+            if(violation!="missing") Assert.That(items.Count,Is.EqualTo(2));
+            var detected=Assert.Throws<AssertionException>(()=>AssertPrivatePositiveControl(invalid));
+            Assert.That(detected!.Message,Does.Contain("Positive control"),violation);
+        }
+    }
+    static void CompletePrivateBatch(Host h)
+    {
+        using var boundary=Doc(3); var lease=h.Spatial.Begin(h.Provider,boundary);
+        Assert.That(lease,Is.Not.Null,"The accepted batch must reach the actual native scheduler.");
+        try {
+            using var original=Doc(4); var execution=JsonNode.Parse(original.ToJson())!;
+            execution["outcome"]="hit"; execution["nearest"]="returnedHits";
+            execution["hits"]=JsonNode.Parse("[{\"relation\":\"contact\",\"position\":{\"x\":0,\"y\":0,\"z\":0.314159265358979},\"distance\":0.314159265358979,\"normal\":{\"x\":0,\"y\":0,\"z\":-1},\"collisionRef\":\"PRIVATE_SPATIAL_SENTINEL\",\"worldObjectId\":\"PRIVATE_SPATIAL_SENTINEL\",\"missing\":{}}]");
+            while(true) {
+                using var query=h.Spatial.Take(lease!.Value); if(query is null) break;
+                var request=query.ReadRequest(); execution["requestId"]=request.RequestId; execution["queryId"]=request.QueryId;
+                using var completed=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Execution,execution.ToJsonString());
+                h.Spatial.Complete(lease.Value,completed);
+            }
+        } finally { h.Spatial.End(lease!.Value); }
+    }
+    static void InvalidatePrivateBatch(Host h,string transition,string url)
+    {
+        if(transition=="revocation") h.Runtime.DisableSpatial();
+        else if(transition=="scene") h.Spatial.Unregister(h.Provider);
+        else {
+            using var control=new GuaWebSocketContext(url);
+            var report=control.Reset(new(ExpectedSessionEpoch:1));
+            Assert.That(report.Result,Is.EqualTo(GuaResetResult.Succeeded));
+            Assert.That(report.SessionEpoch,Is.EqualTo(2));
+        }
+    }
+    static void VerifyFreshBindingAfterInvalidation(Host h,string transition,string url)
+    {
+        using var original=Doc(1); var grants=original.ReadOwner();
+        grants.SessionEpoch=transition=="reset" ? 2L : 1L;
+        var provider=h.Provider;
+        if(transition=="scene") {
+            using var registration=Doc(0); var replacement=JsonNode.Parse(registration.ToJson())!;
+            replacement["provider"]!["spaceEpoch"]=2;
+            using var document=GuaSpatialDocument.FromJson(GuaSpatialDocumentType.Registration,replacement.ToJsonString());
+            provider=h.Spatial.Register(document);
+        }
+        h.Runtime.BindSpatial(h.Spatial,provider,grants);
+        using var fresh=new GuaWebSocketContext(url); var info=fresh.GetSpatialInfo();
+        Assert.That(info.Provider.SpaceEpoch,Is.EqualTo(transition=="scene" ? 2UL : 1UL));
+        Assert.That(fresh.GetVersion().Capabilities,Does.Contain("spatial_read_r1"));
+        Assert.That(fresh.GetDiagnosticsJson(),Does.Not.Contain(PrivateMarker).And.Not.Contain("0.314159265358979"));
+        if(transition!="revocation") {
+            using var client=h.Runtime.CreateSpatialClient(); using var stale=Doc(2);
+            // Runtime treats a request outside the bound session/space as
+            // unauthorized, before publishing provider-context details.
+            Assert.That(Assert.Throws<GuaSpatialException>(()=>client.Enqueue(stale.ReadBatch()))!.Code,Is.EqualTo(GuaSpatialErrorCode.NotAuthorized));
+        }
+    }
+    [TestCase("typescript","revocation")] [TestCase("typescript","reset")] [TestCase("typescript","scene")]
+    [TestCase("mcp","revocation")] [TestCase("mcp","reset")] [TestCase("mcp","scene")]
+    public async Task TypeScriptAndBuiltMcpRedactRetainedPrivateGeometry(string route,string transition)
+    {
+        using var h=new Host(); using var batch=Doc(2);
+        // Positive control establishes identifiable geometry really reaches a
+        // completed native result before invalidation. Empty fixtures cannot pass.
+        using(var authorized=h.Runtime.CreateSpatialClient()) {
+            authorized.Enqueue(batch.ReadBatch()); CompletePrivateBatch(h); using var result=authorized.Poll(1)!;
+            AssertPrivatePositiveControl(JsonNode.Parse(result.ToJson())!);
+        }
+        var listener=new TcpListener(IPAddress.Loopback,0); listener.Start(); var port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
+        Assert.That(h.Runtime.StartInspectorBridge(port),Is.True); var url=$"ws://127.0.0.1:{port}";
+        var root=new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while(root is not null && !File.Exists(Path.Combine(root.FullName,"AGENTS.md"))) root=root.Parent;
+        var start=new System.Diagnostics.ProcessStartInfo("bun") {WorkingDirectory=root!.FullName,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false};
+        foreach(var argument in new[]{"scripts/verify-spatial-redaction.ts",url,route,transition}) start.ArgumentList.Add(argument);
+        using var driver=System.Diagnostics.Process.Start(start)!; var errors=driver.StandardError.ReadToEndAsync();
+        try {
+            Assert.That(await driver.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)),Is.EqualTo("poll"));
+            CompletePrivateBatch(h); InvalidatePrivateBatch(h,transition,url);
+            driver.StandardInput.WriteLine("fire"); driver.StandardInput.Flush();
+            var output=await driver.StandardOutput.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            await driver.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.That(driver.ExitCode,Is.EqualTo(0),await errors);
+            Assert.That(output,Does.Contain("\"submissions\":1").And.Not.Contain(PrivateMarker).And.Not.Contain("0.314159265358979"));
+            var evidence=Path.Combine(root.FullName,"artifacts","spatial-redaction"); Directory.CreateDirectory(evidence);
+            File.WriteAllText(Path.Combine(evidence,$"{route}-{transition}.json"),output);
+            VerifyFreshBindingAfterInvalidation(h,transition,url);
+        } finally {if(!driver.HasExited) driver.Kill(entireProcessTree:true);}
+    }
+    [TestCase("revocation")] [TestCase("reset")] [TestCase("scene")]
+    public async Task PrivateGeometryInvalidationSurvivesTransportTraceReaderReport(string transition)
+    {
+        using var h=new Host(); using var batch=Doc(2);
+        using(var authorized=h.Runtime.CreateSpatialClient()) {
+            authorized.Enqueue(batch.ReadBatch()); CompletePrivateBatch(h); using var positive=authorized.Poll(1)!;
+            AssertPrivatePositiveControl(JsonNode.Parse(positive.ToJson())!);
+        }
+        var listener=new TcpListener(IPAddress.Loopback,0); listener.Start(); var port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
+        Assert.That(h.Runtime.StartInspectorBridge(port),Is.True); var url=$"ws://127.0.0.1:{port}";
+        var root=new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while(root is not null && !File.Exists(Path.Combine(root.FullName,"AGENTS.md"))) root=root.Parent;
+        var start=new System.Diagnostics.ProcessStartInfo("bun") {WorkingDirectory=root!.FullName,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false};
+        foreach(var argument in new[]{"scripts/verify-spatial-redaction.ts",url,"trace",transition}) start.ArgumentList.Add(argument);
+        using var driver=System.Diagnostics.Process.Start(start)!; var errors=driver.StandardError.ReadToEndAsync();
+        try {
+            var proxyUrl=await driver.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            using var remote=new GuaWebSocketContext(proxyUrl!);
+            var directory=Path.Combine(root.FullName,"artifacts","spatial-redaction",$"trace-{transition}-{Guid.NewGuid():N}");
+            using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=directory,SavePolicy=GuaTraceSavePolicy.Always});
+            var request=Task.Run(()=>remote.QuerySpatialBatch(batch.ReadBatch(),TimeSpan.FromSeconds(5),trace:trace));
+            Assert.That(await driver.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)),Is.EqualTo("poll"));
+            CompletePrivateBatch(h); InvalidatePrivateBatch(h,transition,url);
+            driver.StandardInput.WriteLine("fire"); driver.StandardInput.Flush();
+            if(transition=="scene") {
+                var result=await request; Assert.That(result.BatchId,Is.EqualTo(1)); Assert.That(result.Items.Length,Is.EqualTo(2));
+                Assert.That(result.Items.Select(i=>i.RequestId),Is.EqualTo(new ulong[]{1,2}));
+                Assert.That(result.Items.All(i=>i.State=="failed" && i.Reason=="provider_unregistered" && i.Result is null),Is.True);
+            } else {
+                var error=Assert.CatchAsync(async()=>await request); Assert.That(error!.Message,Does.Contain("not_authorized"));
+            }
+            await trace.CompleteAsync(GuaTraceOutcome.Failed);
+            var saved=GuaTraceReader.Read(trace.ArtifactPath); Assert.That(saved.Manifest.PrimaryOutcome,Is.EqualTo("failed"));
+            if(transition=="scene") Assert.That(saved.Blobs.Count,Is.EqualTo(1));
+            else { Assert.That(saved.Blobs,Is.Empty); Assert.That(saved.Events.Any(e=>e.Type=="spatial.unconfirmed"),Is.True); }
+            var report=GuaTraceReport.WriteHtml(trace.ArtifactPath,Path.Combine(directory,"redaction.html")); Assert.That(report.Succeeded,Is.True,report.Error);
+            foreach(var file in Directory.GetFiles(directory,"*",SearchOption.AllDirectories)) {
+                var text=File.ReadAllText(file); Assert.That(text,Does.Not.Contain(PrivateMarker).And.Not.Contain("0.314159265358979"),file);
+            }
+            driver.StandardInput.WriteLine("finish"); driver.StandardInput.Flush();
+            var output=await driver.StandardOutput.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            await driver.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); Assert.That(driver.ExitCode,Is.EqualTo(0),await errors);
+            File.WriteAllText(Path.Combine(directory,"wire-evidence.json"),output);
+            VerifyFreshBindingAfterInvalidation(h,transition,url);
+        } finally {if(!driver.HasExited) driver.Kill(entireProcessTree:true);}
+    }
     [TestCase("typescript","cancel")] [TestCase("typescript","timeout")]
     [TestCase("typescript","disconnect")] [TestCase("typescript","correlation")]
     [TestCase("mcp","cancel")] [TestCase("mcp","timeout")]
