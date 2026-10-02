@@ -38,6 +38,7 @@ public static class GuaTimedSegmentReplay
         var outcome = GuaSegmentOutcome.Succeeded;
         string? failure = null;
         bool cleanupSucceeded = false, neutral = false;
+        var pollCursor = 0;
         double Elapsed() => realtime.Milliseconds - origin;
         double ScheduleElapsed()
         {
@@ -53,18 +54,18 @@ public static class GuaTimedSegmentReplay
             { outcome = GuaSegmentOutcome.Failed; failure = health is "lifecycle-source-changed" or
                 "lifecycle-evidence-gap" or "lease-expired-before-release" or "lifecycle-or-session-unconfirmed"
                 ? health : "host-health-failed"; }
-            var complete = true;
-            for (var i = 0; i < results.Length; i++)
+            // A bounded round-robin sweep keeps large pending sets from monopolizing dispatch.
+            var polls = 0;
+            for (var visited = 0; visited < results.Length && polls < 16; visited++)
             {
+                var i = pollCursor;
+                pollCursor = (pollCursor + 1) % results.Length;
                 var result = results[i];
-                if (result.RequestId is not { } id)
-                {
-                    if (result.SentMilliseconds is not null) complete = false; // accepted request/reply unknown
-                    continue;
-                }
+                if (result.RequestId is not { } id) continue;
                 if (result.ResultReceivedMilliseconds is not null) continue;
+                polls++;
                 var receipt = host.Poll(id);
-                if (receipt is null) { complete = false; continue; }
+                if (receipt is null) continue;
                 results[i] = result with { ResultReceivedMilliseconds = Elapsed(), Succeeded = receipt.Succeeded,
                     ErrorCode = receipt.ErrorCode, HostAppliedMilliseconds = receipt.HostAppliedMilliseconds is { } stamp &&
                         !double.IsNaN(stamp) && !double.IsInfinity(stamp) && stamp >= 0 ? stamp : null };
@@ -77,7 +78,7 @@ public static class GuaTimedSegmentReplay
                     applied - result.ScheduledMilliseconds > segment.MaxLatenessMilliseconds))
                 { outcome = GuaSegmentOutcome.Late; failure = "application-time-violation"; }
             }
-            return complete;
+            return results.All(result => result.SentMilliseconds is null || result.ResultReceivedMilliseconds is not null);
         }
         if (host is IGuaTimedSegmentValueHost valueHost)
             valueHost.Begin(segment, segment.Inputs.Select((input, i) => input.Sensitive ? secrets[i] : input.Value).ToArray());
@@ -124,7 +125,8 @@ public static class GuaTimedSegmentReplay
                 if (!boundaryChecked) throw new InvalidOperationException("Host omitted the send boundary guard.");
                 if (ScheduleElapsed() - input.OffsetMilliseconds > segment.MaxLatenessMilliseconds)
                 { outcome = GuaSegmentOutcome.Late; failure = "send-exceeded-max-lateness"; break; }
-                PollAll();
+                if (i + 1 == results.Length || segment.Inputs[i + 1].OffsetMilliseconds != input.OffsetMilliseconds)
+                    PollAll(); // Do not poll between sends in the same-offset batch.
             }
             while (outcome == GuaSegmentOutcome.Succeeded)
             {
@@ -132,7 +134,12 @@ public static class GuaTimedSegmentReplay
                 if (Elapsed() >= segment.ExecutionTimeoutMilliseconds)
                 { outcome = GuaSegmentOutcome.TimedOut; failure = "completion-or-boundary-timeout"; break; }
                 var completed = PollAll();
-                if (completed && ScheduleElapsed() >= segment.DurationMilliseconds) break;
+                if (outcome != GuaSegmentOutcome.Succeeded) break;
+                var boundaryReached = completed && ScheduleElapsed() >= segment.DurationMilliseconds;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (Elapsed() >= segment.ExecutionTimeoutMilliseconds)
+                { outcome = GuaSegmentOutcome.TimedOut; failure = "completion-or-boundary-timeout"; break; }
+                if (boundaryReached) break;
                 await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), cancellationToken).ConfigureAwait(false);
             }
         }
@@ -149,12 +156,22 @@ public static class GuaTimedSegmentReplay
             // Safety deadlines and cleanup do not use simulation time or caller cancellation.
             try
             {
-                var cleanupId = host.ReleaseAll();
-                var cleanupOrigin = realtime.Milliseconds;
-                while (realtime.Milliseconds - cleanupOrigin < segment.CleanupTimeoutMilliseconds)
+                ulong cleanupId;
+                double cleanupOrigin;
+                try { cleanupOrigin = realtime.Milliseconds; }
+                finally { cleanupId = host.ReleaseAll(); } // Still attempt safety cleanup if the clock throws.
+                bool WithinCleanupBudget()
+                {
+                    var elapsed = realtime.Milliseconds - cleanupOrigin;
+                    return !double.IsNaN(elapsed) && !double.IsInfinity(elapsed) && elapsed >= 0 &&
+                        elapsed < segment.CleanupTimeoutMilliseconds;
+                }
+                while (WithinCleanupBudget())
                 {
                     var completed = PollAll();
+                    if (!WithinCleanupBudget()) break;
                     var cleanup = cleanupSucceeded ? null : host.Poll(cleanupId);
+                    if (!WithinCleanupBudget()) break;
                     if (cleanup is not null)
                     {
                         cleanupSucceeded = cleanup.Succeeded;
@@ -166,14 +183,15 @@ public static class GuaTimedSegmentReplay
                         // an adapter that completed cleanup before a delayed ordinary completion.
                         cleanupId = host.ReleaseAll();
                         cleanupSucceeded = false;
-                        while (realtime.Milliseconds - cleanupOrigin < segment.CleanupTimeoutMilliseconds)
+                        while (WithinCleanupBudget())
                         {
                             var final = host.Poll(cleanupId);
+                            if (!WithinCleanupBudget()) break;
                             if (final is not null)
                             {
                                 cleanupSucceeded = final.Succeeded;
                                 PollAll(); // Includes lifecycle/epoch health through the final host completion.
-                                neutral = cleanupSucceeded && host.IsNeutral;
+                                neutral = cleanupSucceeded && host.IsNeutral && WithinCleanupBudget();
                                 break;
                             }
                             await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), CancellationToken.None).ConfigureAwait(false);

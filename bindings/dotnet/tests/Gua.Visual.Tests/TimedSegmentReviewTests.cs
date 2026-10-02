@@ -10,6 +10,88 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase("missing")]
+    [TestCase("late")]
+    [TestCase("reordered")]
+    public void Review_TraceTimingConfirmationRequiresCompleteOrderedInBudgetApplicationEvidence(string invalid)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gua-timing-evidence", Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
+            var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
+            double? first = invalid == "missing" ? null : invalid == "late" ? 50 : 20;
+            var result = new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded,
+                [new(0, 0, 0, 1, 1, first, true, 0), new(1, 0, 0, 2, 1, 10, true, 0)], true, true, null)
+            { ApplicationTimingConfirmed = true, MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 };
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, result), Is.False);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestCase(GuaSegmentOutcome.Succeeded, true)]
+    [TestCase(GuaSegmentOutcome.Failed, false)]
+    [TestCase(GuaSegmentOutcome.Cancelled, false)]
+    [TestCase(GuaSegmentOutcome.TimedOut, false)]
+    [TestCase(GuaSegmentOutcome.Late, false)]
+    public void Review_TraceTimingConfirmationRequiresSuccessfulOutcome(GuaSegmentOutcome outcome, bool accepted)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gua-timing-invariant", Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
+            var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
+            var result = new GuaTimedSegmentResult(outcome, [new(0, 0, 0, 1, 1, 0, true, 0)], true, true, null)
+            { ApplicationTimingConfirmed = true, MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 };
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, result), Is.EqualTo(accepted));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Review_CompletionPollCannotOverrunExecutionDeadlineOrCancellation(bool cancelled)
+    {
+        using var cancel = new CancellationTokenSource();
+        var clock = new FakeRealtime();
+        var host = new FakeHost(clock) { ResultDelay = 2 };
+        host.OnPoll = (_, cleanup) => { if (!cleanup && clock.Milliseconds >= 2) { if (cancelled) cancel.Cancel(); else clock.Milliseconds += 20; } };
+        var plan = new GuaTimedSegment(1, 0, 1, 10, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]);
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, cancellationToken: cancel.Token, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(cancelled ? GuaSegmentOutcome.Cancelled : GuaSegmentOutcome.TimedOut));
+        Assert.That(result.Inputs[0].Succeeded, Is.True);
+        Assert.That(result.NeutralConfirmed, Is.True);
+    }
+
+    [Test]
+    public async Task Review_SameOffsetThousandInputBatchDoesNotRescanPendingResultsDuringDispatch()
+    {
+        var clock = new FakeRealtime();
+        var host = new FakeHost(clock) { ResultDelay = 50 };
+        var pollsBeforeFinalSend = 0;
+        host.OnPoll = (_, cleanup) => { if (!cleanup) { clock.Milliseconds += 0.01; if (host.Sent.Count < 1000) pollsBeforeFinalSend++; } };
+        var plan = new GuaTimedSegment(1, 0, 20, 1000, 100,
+            Enumerable.Range(0, 1000).Select(_ => new GuaTimedInput(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")).ToArray());
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Succeeded));
+        Assert.That(host.Sent.Count, Is.EqualTo(1000));
+        Assert.That(pollsBeforeFinalSend, Is.Zero);
+        Assert.That(result.Inputs.All(input => input.SentMilliseconds == 0), Is.True);
+    }
+
+    [Test]
+    public async Task Review_ReleaseDispatchUsesTheReservedCleanupBudget()
+    {
+        var clock = new FakeRealtime();
+        var host = new FakeHost(clock) { OnRelease = () => clock.Milliseconds += 110 };
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]);
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Failed));
+        Assert.That(result.FailureCode, Is.EqualTo("cleanup-unconfirmed"));
+        Assert.That(result.NeutralConfirmed, Is.False);
+        Assert.That(host.CleanupCount, Is.EqualTo(1));
+    }
+
     [Test]
     public void Review_NativePreflightHasNoOwnerQueueCorrelationOrTraceEffects()
     {

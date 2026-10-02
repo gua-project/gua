@@ -392,6 +392,8 @@ public sealed partial class TimedSegmentTests
         public string? SimulationScope { get; set; }
         public double SimulationMilliseconds => 0;
         public Func<string?>? Health { get; set; }
+        public Action<ulong, bool>? OnPoll { get; set; }
+        public Action? OnRelease { get; set; }
         public string? ExecutionFailureCode => Health?.Invoke();
         public double ResultDelay { get; set; }
         public bool CleanupFails { get; set; }
@@ -409,11 +411,13 @@ public sealed partial class TimedSegmentTests
         }
         public GuaTimedCompletion? Poll(ulong requestId)
         {
-            if (!pending.TryGetValue(requestId, out var request) || request.Due > clock.Milliseconds) return null;
+            if (!pending.TryGetValue(requestId, out var request)) return null;
+            OnPoll?.Invoke(requestId, request.Cleanup);
+            if (request.Due > clock.Milliseconds) return null;
             pending.Remove(requestId);
             return new(!request.Cleanup || !CleanupFails, HostAppliedMilliseconds: request.Cleanup ? null : Applied?.Invoke(requestId));
         }
-        public ulong ReleaseAll() { CleanupCount++; pending[++next] = (clock.Milliseconds, true); return next; }
+        public ulong ReleaseAll() { OnRelease?.Invoke(); CleanupCount++; pending[++next] = (clock.Milliseconds, true); return next; }
         public bool IsNeutral => !CleanupFails;
         public void End() { Ended = true; if (ClearScopeOnEnd) SimulationScope = null; }
         public bool ClearScopeOnEnd { get; set; }

@@ -53,6 +53,8 @@ queue、request ID、result、Trace event を作らない。scheduler は option
 含む区間の完全な preflight は `ReplayAsync` または解決値付き overload を使用する。
 
 同 offset は配列順に送信する。host はこの順に consume/apply する契約が必要である。
+同 offset の送信間には結果 polling を挟まず、待機時は有限件数の round-robin polling を使う。
+結果 polling と境界時計の読取り後にも execution deadline / cancellation を照合する。
 send 時刻は client の呼出し境界、resultReceived は client の poll 成功時刻であり、
 hostApplied は独立した証拠がない限り null。completion を適用時刻に読み替えない。
 現在の Unity / Godot input pump は FIFO consume と同期 apply 後 completion。
@@ -73,7 +75,8 @@ release offset は変更しない。
 
 送信境界で lateness を再確認し、超過時は残りを一括送信せず止める。失敗・cancel・
 timeout も送信済み / 未送信・未確認 completion を保持して owner cleanup を試みる。
-cleanup は caller cancellation と独立した実時間期限。全送信済み completion の確認、
+cleanup は caller cancellation と独立した実時間期限。その予算は最初の release-all
+dispatch 前から計測し、poll / neutral 確認にも適用する。全送信済み completion の確認、
 最後の owner-scoped release-all の host completion、owner state の空を全て確認した時
 だけ neutral confirmed とする。未完了要求が残る場合は neutral 未確認。owner dispose
 による後続 cleanup を要求しても、適用確認と称さない。他 owner を解除しない。
@@ -98,7 +101,8 @@ lease の早期失効、journal の取りこぼし、epoch 変更は正常再現
 Trace 添付の request ID は十進文字列で、未取得の時刻 / ID は null を明示する。
 添付前に schema を検証する。cancel / timeout は後から取得した timing evidence で
 上書きせず、適用時間は未確認として記録する。simulation scope は host teardown 前に保存する。
-`ApplicationTimingConfirmed` は Succeeded の場合だけ true を許可する。host の任意の
+`ApplicationTimingConfirmed` は Succeeded と cleanup / neutral 確認、および全入力の
+取得済み・順序通り・lateness 内の適用時間を必要とし、Trace 添付でも検証する。host の任意の
 health text は証拠へコピーせず、既知の lifecycle code 以外を `host-health-failed` に置換する。
 添付 schema も failure code を既知の固定 code に制限する。
 添付 schema は `timed-segment-result-v1.schema.json`。入力値を持たない独立 envelope で、

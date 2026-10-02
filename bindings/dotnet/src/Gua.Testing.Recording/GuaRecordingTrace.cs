@@ -19,6 +19,15 @@ public static class GuaRecordingTrace
         GuaObservationProfile profile = GuaObservationProfile.Debug) =>
         GuaTraceCapture.JsonAttachment(trace, stepId, "gua.timed-segment-result.v1", () =>
         {
+            if (result.ApplicationTimingConfirmed)
+                for (var i = 0; i < result.Inputs.Count; i++)
+                {
+                    var input = result.Inputs[i];
+                    if (input.HostAppliedMilliseconds is not { } applied || applied < input.ScheduledMilliseconds ||
+                        applied - input.ScheduledMilliseconds > result.MaxLatenessMilliseconds ||
+                        i > 0 && applied < result.Inputs[i - 1].HostAppliedMilliseconds)
+                        throw new InvalidDataException("Invalid application timing confirmation.");
+                }
             var json = JsonSerializer.Serialize(new { schemaVersion = 1, result = new
             {
                 result.Outcome, result.CleanupSucceeded, result.NeutralConfirmed, result.FailureCode,
