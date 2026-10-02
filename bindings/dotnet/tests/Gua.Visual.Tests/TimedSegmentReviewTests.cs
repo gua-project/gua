@@ -10,6 +10,154 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [Test]
+    public void Review_NativePreflightHasNoOwnerQueueCorrelationOrTraceEffects()
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Keyboard, () => { });
+        using var tree = JsonDocument.Parse(runtime.GetUiTreeJson());
+        var epoch = tree.RootElement.GetProperty("sessionEpoch").GetUInt64();
+        var before = runtime.GetDiagnosticsJson();
+        runtime.ValidateGameInput(GuaObservationProfile.Debug, epoch, 0, GuaGameInputKind.Keyboard,
+            GuaGameInputOperation.Press, "Space", null, null, 0, 0, 0, false, false);
+        Assert.That(runtime.GetDiagnosticsJson(), Is.EqualTo(before));
+        Assert.That(runtime.TryConsumeGameInput(out _), Is.False);
+        using var owner = runtime.CreateGameInputSession();
+        Assert.That(owner.OwnerId, Is.EqualTo(1));
+        var id = owner.SendGuarded(epoch, 0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press,
+            "Space", null, null, 0, 0, 0, false, false, () => { });
+        Assert.That(id, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Review_TraceRejectsUnregisteredFailureText()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gua-invalid-timed", Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
+            var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
+            var invalid = new GuaTimedSegmentResult(GuaSegmentOutcome.Failed, [], false, false, "secret-marker");
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, invalid), Is.False);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Test]
+    public void Review_GuardedInputCannotTruncateItsNativeValueBuffer()
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Text, () => { });
+        using var owner = runtime.CreateGameInputSession();
+        using var tree = JsonDocument.Parse(runtime.GetUiTreeJson());
+        var epoch = tree.RootElement.GetProperty("sessionEpoch").GetUInt64();
+        Assert.Throws<InvalidOperationException>(() => owner.SendGuarded(epoch, 0, GuaGameInputKind.TextInput,
+            GuaGameInputOperation.Set, "", new string('x', 600), null, 0, 0, 0, false, false, () => { }));
+        Assert.That(runtime.TryConsumeGameInput(out _), Is.False);
+    }
+    [TestCase(GuaGameInputValueType.Button, "true")]
+    [TestCase(GuaGameInputValueType.Axis1D, "0.2")]
+    [TestCase(GuaGameInputValueType.Vector2, "{\"x\":0.2,\"y\":0.5}")]
+    public void Review_ValidTypedSemanticValuesStillDispatch(GuaGameInputValueType type, string value)
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Semantic, () => { });
+        runtime.PublishGameInputActions("test", [new GuaGameInputActionDescriptor("value", "value", type,
+            Minimum: type == GuaGameInputValueType.Button ? null : -1, Maximum: type == GuaGameInputValueType.Button ? null : 1, Holdable: true)
+            { ValueSchemaJson = type == GuaGameInputValueType.Axis1D ? "{\"type\":\"number\",\"minimum\":-1,\"maximum\":0.25}" : null }]);
+        var plan = new GuaTimedSegment(1, 1, 20, 100, 100,
+            [new(0, GuaGameInputKind.Semantic, GuaGameInputOperation.Set, "value", JsonSerializer.Deserialize<JsonElement>(value), 5000, SemanticValueType: type),
+             new(1, GuaGameInputKind.Semantic, GuaGameInputOperation.Release, "value")]);
+        GuaTimedSegmentFile.Validate(plan);
+        var host = new GuaRuntimeSegmentHost(runtime, true);
+        host.Begin(plan);
+        try
+        {
+            foreach (var input in plan.Inputs)
+            {
+                host.Send(input, null, () => { });
+                Assert.That(runtime.TryConsumeGameInput(out var request), Is.True);
+                runtime.CompleteGameInput(request, true);
+            }
+            Assert.That(host.IsNeutral, Is.True);
+        }
+        finally { host.End(); }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Review_ResolvedSemanticSecretSchemaIsCheckedBeforeAnyDispatch(bool valid)
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Semantic | GuaGameInputCapabilities.Keyboard, () => { });
+        runtime.PublishGameInputActions("test", [new GuaGameInputActionDescriptor("chat", "chat", GuaGameInputValueType.Text)
+            { ValueSchemaJson = "{\"type\":\"string\",\"minLength\":1,\"maxLength\":2}" }]);
+        var clock = new FakeRealtime();
+        clock.OnDelay = () => { while (runtime.TryConsumeGameInput(out var request)) runtime.CompleteGameInput(request, true); };
+        var host = new GuaRuntimeSegmentHost(runtime, true);
+        var plan = new GuaTimedSegment(1, 10, 20, 100, 100,
+            [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space"),
+             new(10, GuaGameInputKind.Semantic, GuaGameInputOperation.Set, "chat", Sensitive: true, SecretKey: "chat", SemanticValueType: GuaGameInputValueType.Text)]);
+        if (valid)
+        {
+            var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, _ => JsonSerializer.SerializeToElement("ok"), realtime: clock);
+            Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Succeeded));
+            Assert.That(result.NeutralConfirmed, Is.True);
+        }
+        else
+        {
+            var error = Assert.ThrowsAsync<InvalidDataException>(() => GuaTimedSegmentReplay.ReplayAsync(host, plan,
+                _ => JsonSerializer.SerializeToElement("secret-marker"), realtime: clock));
+            Assert.That(error!.Message, Does.Not.Contain("secret-marker"));
+            Assert.That(host.OwnerId, Is.Null);
+            Assert.That(clock.Milliseconds, Is.Zero);
+            Assert.That(runtime.TryConsumeGameInput(out _), Is.False);
+        }
+    }
+    [TestCase(GuaGameInputValueType.Button, null, false)]
+    [TestCase(GuaGameInputValueType.Axis1D, null, false)]
+    [TestCase(GuaGameInputValueType.Axis1D, "2", false)]
+    [TestCase(GuaGameInputValueType.Vector2, "{\"x\":0}", false)]
+    [TestCase(GuaGameInputValueType.Axis1D, "0.5", true)]
+    public void Review_SemanticPayloadRangeAndSchemaAreCheckedBeforeOwner(GuaGameInputValueType type, string? value, bool metadata)
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Semantic, () => { });
+        runtime.PublishGameInputActions("test", [new GuaGameInputActionDescriptor("value", "value", type,
+            Minimum: type is GuaGameInputValueType.Axis1D or GuaGameInputValueType.Vector2 ? -1 : null,
+            Maximum: type is GuaGameInputValueType.Axis1D or GuaGameInputValueType.Vector2 ? 1 : null, Holdable: true)
+            { ValueSchemaJson = metadata ? "{\"type\":\"number\",\"minimum\":-1,\"maximum\":0.25}" : null }]);
+        var plan = new GuaTimedSegment(1, 1, 20, 100, 100,
+            [new(0, GuaGameInputKind.Semantic, GuaGameInputOperation.Set, "value", value is null ? null : JsonSerializer.Deserialize<JsonElement>(value), 5000, SemanticValueType: type),
+             new(1, GuaGameInputKind.Semantic, GuaGameInputOperation.Release, "value")]);
+        var host = new GuaRuntimeSegmentHost(runtime, true);
+        Assert.Throws<InvalidDataException>(() => host.Begin(plan));
+        Assert.That(host.OwnerId, Is.Null);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task Review_TerminalOutcomesCannotConfirmOtherwiseValidApplicationTimes(bool cancelled)
+    {
+        using var cancel = new CancellationTokenSource();
+        var clock = new FakeRealtime { OnDelay = () => { if (cancelled) cancel.Cancel(); } };
+        var host = new FakeHost(clock) { ApplicationTimes = true, ResultDelay = cancelled ? 5 : 150, Applied = _ => 0 };
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")], RequireApplicationTimes: true);
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, cancellationToken: cancel.Token, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(cancelled ? GuaSegmentOutcome.Cancelled : GuaSegmentOutcome.TimedOut));
+        Assert.That(result.ApplicationTimingConfirmed, Is.False);
+    }
+
+    [Test]
+    public async Task Review_ArbitraryHostHealthTextCannotEnterTimingEvidence()
+    {
+        var clock = new FakeRealtime();
+        var host = new FakeHost(clock) { Health = () => "secret-marker-host-error" };
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, Plan(), realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Failed));
+        Assert.That(result.FailureCode, Is.EqualTo("host-health-failed"));
+        Assert.That(JsonSerializer.Serialize(result), Does.Not.Contain("secret-marker"));
+    }
     [TestCase(GuaGameInputKind.TextInput, "", null)]
     [TestCase(GuaGameInputKind.TextInput, "", "123")]
     [TestCase(GuaGameInputKind.Gamepad, "left_stick_x", null)]

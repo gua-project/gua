@@ -714,6 +714,10 @@ int gua_consume_game_input_request(gua_context_t* ctx, gua_game_input_request_v1
  * and consumption. Cleanup is sent through the existing owner-scoped path. */
 int gua_enqueue_game_input_guarded_v2(gua_context_t* ctx, const gua_game_input_request_descriptor_v2_t* descriptor,
     int observation_profile, uint64_t expected_session_epoch, uint64_t expected_action_revision, uint64_t* out_request_id);
+/* Pure preflight through the same validator; no owner, request ID, queue, result or Trace side effects.
+ * Guarded payloads must fit the request's 512-byte value_json buffer including the terminator. */
+int gua_validate_game_input_guarded_v2(gua_context_t* ctx, const gua_game_input_request_descriptor_v2_t* descriptor,
+    int observation_profile, uint64_t expected_session_epoch, uint64_t expected_action_revision);
 int gua_complete_game_input_request(gua_context_t* ctx, uint64_t request_id, int succeeded, int error_code);
 /* Advance safety leases with unscaled host time, never GuaClock time. */
 int gua_tick_game_input_leases(gua_context_t* ctx, double elapsed_ms);

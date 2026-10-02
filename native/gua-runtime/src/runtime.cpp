@@ -1179,7 +1179,7 @@ extern "C" int gua_runtime_enqueue_game_input_v2(gua_runtime_t* runtime,
 
 static int enqueue_runtime_game_input(gua_runtime_t* runtime,
     const gua_game_input_request_descriptor_v2_t* descriptor, int observation_profile, uint64_t* out_request_id,
-    bool guarded, uint64_t epoch, uint64_t revision)
+    bool guarded, uint64_t epoch, uint64_t revision, bool validate_only = false)
 {
     if (!valid_runtime(runtime) || descriptor == nullptr ||
         (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER))
@@ -1192,9 +1192,10 @@ static int enqueue_runtime_game_input(gua_runtime_t* runtime,
     if (required == UINT32_MAX || (required != 0 && (available & required) == 0))
         return GUA_GAME_INPUT_ERROR_UNSUPPORTED;
     uint64_t request_id = 0;
-    const int result = guarded ? gua_enqueue_game_input_guarded_v2(runtime->context, descriptor, observation_profile, epoch, revision, &request_id) :
+    const int result = validate_only ? gua_validate_game_input_guarded_v2(runtime->context, descriptor, observation_profile, epoch, revision) :
+        guarded ? gua_enqueue_game_input_guarded_v2(runtime->context, descriptor, observation_profile, epoch, revision, &request_id) :
         gua_enqueue_game_input_for_profile_v2(runtime->context, descriptor, observation_profile, &request_id);
-    if (result == GUA_GAME_INPUT_OK) {
+    if (result == GUA_GAME_INPUT_OK && !validate_only) {
         runtime->game_input_request_profiles[request_id] = { observation_profile, descriptor->owner_id, false, guarded };
         if (out_request_id != nullptr) *out_request_id = request_id;
     }
@@ -1208,6 +1209,10 @@ extern "C" int gua_runtime_enqueue_game_input_for_profile_v2(gua_runtime_t* runt
 extern "C" int gua_runtime_enqueue_game_input_guarded_v2(gua_runtime_t* runtime,
     const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t epoch, uint64_t revision, uint64_t* out_request_id)
 { return enqueue_runtime_game_input(runtime, descriptor, profile, out_request_id, true, epoch, revision); }
+
+extern "C" int gua_runtime_validate_game_input_guarded_v2(gua_runtime_t* runtime,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t epoch, uint64_t revision)
+{ return enqueue_runtime_game_input(runtime, descriptor, profile, nullptr, true, epoch, revision, true); }
 
 extern "C" int gua_runtime_consume_game_input_request(gua_runtime_t* runtime, gua_game_input_request_v1_t* out_request)
 {

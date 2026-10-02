@@ -35,7 +35,8 @@ realtime の game-input FIFO のみ対応する。UI と game-input は独立 qu
 能力証拠にならない。simulation、strict application time、same-tick atomic application
 を要求した未対応経路は実行前に拒否し、暗黙の realtime 降格をしない。
 
-local host は新しい `gua_runtime_enqueue_game_input_guarded_v2` を必須とする。
+local host は新しい `gua_runtime_enqueue_game_input_guarded_v2` と
+`gua_runtime_validate_game_input_guarded_v2` を必須とする。
 承認時の sessionEpoch / profile ごとの Action Map revision を native context lock 内で
 enqueue と consume の両方に照合し、変化した要求は失敗 completion として返し適用しない。
 旧 enqueue API の互換挙動は変更しない。cleanup は従来の owner-scoped path で送信し、
@@ -43,6 +44,13 @@ enqueue と consume の両方に照合し、変化した要求は失敗 completi
 runtime の Player ceiling を host preflight と guarded consume で照合する。固定 raw input は
 target だけでなく text string / gamepad axis [-1,1] の payload を Load / Validate で検証し、
 秘密 text の解決値も owner 作成前に検証する。
+
+semantic Set の型、descriptor の範囲、bounded ValueSchema、および既存 native payload
+上限も、同じ native validator で全操作を開始前に検査する。純粋な validate API は owner、
+queue、request ID、result、Trace event を作らない。scheduler は optional
+`IGuaTimedSegmentValueHost` に秘密を含む解決済み値を渡し、local host は検証中だけ使用する。
+旧 host interface は変更しない。生の `Begin(segment)` は秘密値を取得できないため、秘密を
+含む区間の完全な preflight は `ReplayAsync` または解決値付き overload を使用する。
 
 同 offset は配列順に送信する。host はこの順に consume/apply する契約が必要である。
 send 時刻は client の呼出し境界、resultReceived は client の poll 成功時刻であり、
@@ -90,5 +98,8 @@ lease の早期失効、journal の取りこぼし、epoch 変更は正常再現
 Trace 添付の request ID は十進文字列で、未取得の時刻 / ID は null を明示する。
 添付前に schema を検証する。cancel / timeout は後から取得した timing evidence で
 上書きせず、適用時間は未確認として記録する。simulation scope は host teardown 前に保存する。
+`ApplicationTimingConfirmed` は Succeeded の場合だけ true を許可する。host の任意の
+health text は証拠へコピーせず、既知の lifecycle code 以外を `host-health-failed` に置換する。
+添付 schema も failure code を既知の固定 code に制限する。
 添付 schema は `timed-segment-result-v1.schema.json`。入力値を持たない独立 envelope で、
 旧 Recording ファイルや Trace の自動再生入力としては読まない。

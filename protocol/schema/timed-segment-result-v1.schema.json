@@ -26,7 +26,7 @@
       "properties": {
         "outcome": { "enum": [0, 1, 2, 3, 4], "description": "Succeeded, failed, cancelled, timed-out, late" },
         "cleanupSucceeded": { "type": "boolean" }, "neutralConfirmed": { "type": "boolean" },
-        "failureCode": { "type": ["string", "null"] }, "clock": { "enum": [0, 1] },
+        "failureCode": { "enum": [null, "lifecycle-source-changed", "lifecycle-evidence-gap", "lease-expired-before-release", "lifecycle-or-session-unconfirmed", "host-health-failed", "host-rejected-or-failed", "application-time-unconfirmed", "application-time-violation", "execution-timeout", "completion-or-boundary-timeout", "max-lateness-exceeded", "send-exceeded-max-lateness", "caller-cancelled", "host-or-clock-exception", "cleanup-unconfirmed", "application-order-or-tick-violation"] }, "clock": { "enum": [0, 1] },
         "simulationScope": { "type": ["string", "null"] },
         "maxLatenessMilliseconds": { "type": "integer", "minimum": 0, "maximum": 60000 },
         "executionTimeoutMilliseconds": { "type": "integer", "minimum": 1, "maximum": 60000 },

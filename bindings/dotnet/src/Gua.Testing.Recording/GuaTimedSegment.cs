@@ -139,6 +139,18 @@ public static class GuaTimedSegmentFile
             (value is not { ValueKind: JsonValueKind.Number } axis || !axis.TryGetDouble(out var number) ||
              !Finite(number) || number < -1 || number > 1))
             throw new InvalidDataException("Gamepad axis Set requires a finite number in [-1,1].");
+        if (input.Kind != GuaGameInputKind.Semantic || input.Operation != GuaGameInputOperation.Set) return;
+        bool Number(JsonElement? item) => item is { ValueKind: JsonValueKind.Number } element &&
+            element.TryGetDouble(out var number) && Finite(number);
+        var valid = input.SemanticValueType switch
+        {
+            GuaGameInputValueType.Button => value?.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            GuaGameInputValueType.Axis1D => Number(value),
+            GuaGameInputValueType.Vector2 => value is { ValueKind: JsonValueKind.Object } vector &&
+                vector.TryGetProperty("x", out var x) && vector.TryGetProperty("y", out var y) && Number(x) && Number(y),
+            _ => true,
+        };
+        if (!valid) throw new InvalidDataException("Semantic Set payload does not match its value type.");
     }
     private static void ValidateRawTarget(GuaTimedInput input)
     {
@@ -200,6 +212,14 @@ public interface IGuaTimedSegmentHost
     void End();
 }
 public sealed record GuaTimedCompletion(bool Succeeded, int ErrorCode = 0, double? HostAppliedMilliseconds = null);
+
+/// <summary>Optional dynamic-schema preflight extension. Values include resolved secrets and must
+/// only be used for validation/dispatch, never retained in evidence or error text. Reject malformed
+/// payloads before creating an owner. The original host interface remains usable.</summary>
+public interface IGuaTimedSegmentValueHost : IGuaTimedSegmentHost
+{
+    void Begin(GuaTimedSegment segment, IReadOnlyList<JsonElement?> resolvedValues);
+}
 
 /// <summary>Injectable real-time clock for deterministic tests. Simulation never replaces this deadline clock.</summary>
 public interface IGuaSegmentRealtime

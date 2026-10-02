@@ -7,7 +7,7 @@ namespace Gua.Testing.Recording;
 
 /// <summary>Local runtime game-input path. The adapter must explicitly attest synchronous FIFO
 /// application (as in the built-in Unity/Godot input pumps). The runtime alone is not that proof.</summary>
-public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
+public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentValueHost
 {
     private readonly GuaRuntime runtime;
     private readonly GuaObservationProfile profile;
@@ -31,11 +31,15 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
     public double SimulationMilliseconds => throw new NotSupportedException("This host supports realtime only.");
     public ulong? OwnerId => session?.OwnerId;
 
-    public void Begin(GuaTimedSegment segment)
+    public void Begin(GuaTimedSegment segment) => BeginCore(segment, null);
+    public void Begin(GuaTimedSegment segment, IReadOnlyList<JsonElement?> resolvedValues) => BeginCore(segment, resolvedValues);
+    private void BeginCore(GuaTimedSegment segment, IReadOnlyList<JsonElement?>? resolvedValues)
     {
         lock (confirmedActions)
         {
             if (session is not null) throw new InvalidOperationException("This host already has an active segment.");
+            if (resolvedValues is not null && resolvedValues.Count != segment.Inputs.Count)
+                throw new ArgumentException("Resolved value count does not match the segment.");
             if (profile is not (GuaObservationProfile.Debug or GuaObservationProfile.Player) ||
                 runtime.ObservationProfile == GuaObservationProfile.Player && profile != GuaObservationProfile.Player)
                 throw new NotSupportedException("Segment profile exceeds the runtime observation ceiling.");
@@ -49,8 +53,10 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
             epoch = startTree.RootElement.GetProperty("sessionEpoch").GetInt64();
             actionRevision = segment.Inputs.Any(input => input.Kind == GuaGameInputKind.Semantic && input.Operation != GuaGameInputOperation.Release)
                 ? runtime.FindGameInputActionsV2(new(Limit: 1), profile).Revision : 0;
-            foreach (var input in segment.Inputs)
+            for (var i = 0; i < segment.Inputs.Count; i++)
             {
+                var input = segment.Inputs[i];
+                var confirmed = false;
                 var required = Required(input.Kind);
                 if (required != GuaGameInputCapabilities.None && (capabilities & required) != required) throw new NotSupportedException("Input capability is not initialized/authorized.");
                 if (input.Kind == GuaGameInputKind.Semantic && input.Operation != GuaGameInputOperation.Release)
@@ -67,7 +73,19 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
                         throw new InvalidOperationException("Segment Press requires a button action.");
                     if (action.RequiresConfirmation && (confirm is null || !confirm(action)))
                         throw new InvalidOperationException("Fresh confirmation was declined or unavailable.");
+                    confirmed = action.RequiresConfirmation;
                     confirmedActions[input.Target] = JsonSerializer.Serialize(action);
+                }
+                if (!input.Sensitive || resolvedValues is not null)
+                {
+                    try
+                    {
+                        runtime.ValidateGameInput(profile, checked((ulong)epoch), actionRevision, input.Kind, input.Operation,
+                            input.Target, resolvedValues is null ? input.Value : resolvedValues[i],
+                            input.LeaseMilliseconds == 0 ? null : TimeSpan.FromMilliseconds(input.LeaseMilliseconds),
+                            input.X, input.Y, input.DeviceIndex, input.Sensitive, confirmed);
+                    }
+                    catch { throw new InvalidDataException("Input payload violates the current native action contract."); }
                 }
             }
             using var tree = JsonDocument.Parse(runtime.GetUiTreeJson());

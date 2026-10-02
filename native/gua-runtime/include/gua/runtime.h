@@ -145,6 +145,8 @@ int gua_runtime_enqueue_game_input_for_profile_v2(gua_runtime_t* runtime, const 
 int gua_runtime_consume_game_input_request(gua_runtime_t* runtime, gua_game_input_request_v1_t* out_request);
 int gua_runtime_enqueue_game_input_guarded_v2(gua_runtime_t* runtime, const gua_game_input_request_descriptor_v2_t* descriptor,
     int observation_profile, uint64_t expected_session_epoch, uint64_t expected_action_revision, uint64_t* out_request_id);
+int gua_runtime_validate_game_input_guarded_v2(gua_runtime_t* runtime, const gua_game_input_request_descriptor_v2_t* descriptor,
+    int observation_profile, uint64_t expected_session_epoch, uint64_t expected_action_revision);
 int gua_runtime_complete_game_input_request(gua_runtime_t* runtime, uint64_t request_id, int succeeded, int error_code);
 int gua_runtime_tick_game_input_leases(gua_runtime_t* runtime, double elapsed_ms);
 int gua_runtime_copy_game_input_actions_json(gua_runtime_t* runtime, char* out_json, int out_json_size);

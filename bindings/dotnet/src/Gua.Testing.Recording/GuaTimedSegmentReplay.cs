@@ -50,7 +50,9 @@ public static class GuaTimedSegmentReplay
         bool PollAll()
         {
             if (host.ExecutionFailureCode is { } health && outcome == GuaSegmentOutcome.Succeeded)
-            { outcome = GuaSegmentOutcome.Failed; failure = health; }
+            { outcome = GuaSegmentOutcome.Failed; failure = health is "lifecycle-source-changed" or
+                "lifecycle-evidence-gap" or "lease-expired-before-release" or "lifecycle-or-session-unconfirmed"
+                ? health : "host-health-failed"; }
             var complete = true;
             for (var i = 0; i < results.Length; i++)
             {
@@ -77,7 +79,9 @@ public static class GuaTimedSegmentReplay
             }
             return complete;
         }
-        host.Begin(segment);
+        if (host is IGuaTimedSegmentValueHost valueHost)
+            valueHost.Begin(segment, segment.Inputs.Select((input, i) => input.Sensitive ? secrets[i] : input.Value).ToArray());
+        else host.Begin(segment);
         try
         {
             origin = realtime.Milliseconds;
@@ -185,7 +189,7 @@ public static class GuaTimedSegmentReplay
         if ((!neutral || !cleanupSucceeded) && outcome == GuaSegmentOutcome.Succeeded)
         { outcome = GuaSegmentOutcome.Failed; failure = "cleanup-unconfirmed"; }
         var applied = results.Select(result => result.HostAppliedMilliseconds).ToArray();
-        var applicationConfirmed = applied.All(time => time is not null) && results.All(result =>
+        var applicationConfirmed = outcome == GuaSegmentOutcome.Succeeded && applied.All(time => time is not null) && results.All(result =>
             result.HostAppliedMilliseconds >= result.ScheduledMilliseconds &&
             result.HostAppliedMilliseconds - result.ScheduledMilliseconds <= segment.MaxLatenessMilliseconds);
         if (applicationConfirmed)

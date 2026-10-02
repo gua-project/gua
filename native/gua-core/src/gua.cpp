@@ -3795,17 +3795,17 @@ extern "C" int gua_enqueue_game_input_v2(gua_context_t* ctx,
 
 static int enqueue_game_input(gua_context_t* ctx,
     const gua_game_input_request_descriptor_v2_t* descriptor, int observation_profile, uint64_t* out_request_id,
-    bool guarded, uint64_t expected_session_epoch, uint64_t expected_action_revision)
+    bool guarded, uint64_t expected_session_epoch, uint64_t expected_action_revision, bool validate_only = false)
 {
     if (ctx == nullptr || descriptor == nullptr || descriptor->struct_size < sizeof(*descriptor) ||
         !one_of(observation_profile, { GUA_OBSERVATION_PROFILE_DEBUG, GUA_OBSERVATION_PROFILE_PLAYER }) ||
-        descriptor->owner_id == 0 || descriptor->kind < GUA_GAME_INPUT_SEMANTIC || descriptor->kind > GUA_GAME_INPUT_CLEANUP ||
+        (!validate_only && descriptor->owner_id == 0) || descriptor->kind < GUA_GAME_INPUT_SEMANTIC || descriptor->kind > GUA_GAME_INPUT_CLEANUP ||
         descriptor->operation < GUA_GAME_INPUT_PRESS || descriptor->operation > GUA_GAME_INPUT_RELEASE_ALL ||
         descriptor->lease_ms > 60000 || !std::isfinite(descriptor->x) || !std::isfinite(descriptor->y) ||
         (descriptor->kind != GUA_GAME_INPUT_GAMEPAD && descriptor->device_index != 0))
         return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
     const std::lock_guard lock(ctx->mutex);
-    if (!ctx->game_input_owners.contains(descriptor->owner_id)) return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
+    if (!validate_only && !ctx->game_input_owners.contains(descriptor->owner_id)) return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
     const auto revision = observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_game_input_revision : ctx->game_input_revision;
     if (guarded && (expected_session_epoch != ctx->session_epoch ||
         (descriptor->kind == GUA_GAME_INPUT_SEMANTIC && descriptor->operation != GUA_GAME_INPUT_RELEASE && expected_action_revision != revision)))
@@ -3861,6 +3861,7 @@ static int enqueue_game_input(gua_context_t* ctx,
     } else if (descriptor->kind == GUA_GAME_INPUT_CLEANUP) {
         if (descriptor->operation != GUA_GAME_INPUT_RELEASE_ALL) return GUA_GAME_INPUT_ERROR_INVALID_VALUE;
     }
+    if (validate_only) return GUA_GAME_INPUT_OK;
     const unsigned int lease = descriptor->lease_ms == 0 ? 5000U : descriptor->lease_ms;
     const auto request_id = ctx->next_game_input_request_id++;
     GameInputRequest request { request_id, descriptor->owner_id, descriptor->kind,
@@ -3883,6 +3884,10 @@ extern "C" int gua_enqueue_game_input_for_profile_v2(gua_context_t* ctx,
 extern "C" int gua_enqueue_game_input_guarded_v2(gua_context_t* ctx,
     const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t epoch, uint64_t revision, uint64_t* out_request_id)
 { return enqueue_game_input(ctx, descriptor, profile, out_request_id, true, epoch, revision); }
+
+extern "C" int gua_validate_game_input_guarded_v2(gua_context_t* ctx,
+    const gua_game_input_request_descriptor_v2_t* descriptor, int profile, uint64_t epoch, uint64_t revision)
+{ return enqueue_game_input(ctx, descriptor, profile, nullptr, true, epoch, revision, true); }
 
 extern "C" int gua_consume_game_input_request(gua_context_t* ctx, gua_game_input_request_v1_t* out_request)
 {

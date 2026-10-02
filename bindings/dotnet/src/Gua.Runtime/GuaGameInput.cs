@@ -125,11 +125,20 @@ public sealed partial class GuaRuntime
             {
                 var probe = new Native.GameInputRequestDescriptorV2 { StructSize = (uint)Marshal.SizeOf<Native.GameInputRequestDescriptorV2>() };
                 Native.gua_runtime_enqueue_game_input_guarded_v2(_handle, in probe, (int)GuaObservationProfile.Debug, 0, 0, out _);
+                Native.gua_runtime_validate_game_input_guarded_v2(_handle, in probe, (int)GuaObservationProfile.Debug, 0, 0);
                 return true; // Invalid owner/kind cannot enqueue; only tests entry-point availability.
             }
             catch (EntryPointNotFoundException) { return false; }
         }
     }
+
+    /// <summary>Check the exact native input contract without creating an owner, queue entry,
+    /// request ID, result or Trace event. Values are used only during this call.</summary>
+    public void ValidateGameInput(GuaObservationProfile profile, ulong expectedEpoch, ulong expectedRevision,
+        GuaGameInputKind kind, GuaGameInputOperation operation, string target, object? value, TimeSpan? lease,
+        double x, double y, int deviceIndex, bool sensitive, bool confirmed) =>
+        EnqueueGameInput(0, profile, kind, operation, target, value, lease, x, y, deviceIndex, sensitive,
+            confirmed, null, expectedEpoch, expectedRevision, true);
 
     public void EnableGameInput(GuaGameInputCapabilities capabilities, Action shutdown,
         GuaGameInputCapabilities playerCapabilities = GuaGameInputCapabilities.None)
@@ -245,7 +254,7 @@ public sealed partial class GuaRuntime
     internal ulong EnqueueGameInput(ulong ownerId, GuaObservationProfile observationProfile,
         GuaGameInputKind kind, GuaGameInputOperation operation,
         string target, object? value, TimeSpan? lease, double x, double y, int deviceIndex, bool sensitive, bool confirmed,
-        Action? beforeEnqueue = null, ulong? expectedEpoch = null, ulong expectedRevision = 0)
+        Action? beforeEnqueue = null, ulong? expectedEpoch = null, ulong expectedRevision = 0, bool validateOnly = false)
     {
         ThrowIfDisposed();
         var leaseMs = lease is null ? 5000 : checked((uint)lease.Value.TotalMilliseconds);
@@ -265,8 +274,9 @@ public sealed partial class GuaRuntime
                 Confirmed = confirmed ? 1 : 0,
             };
             beforeEnqueue?.Invoke();
-            ulong requestId;
-            var result = expectedEpoch is { } epoch ? Native.gua_runtime_enqueue_game_input_guarded_v2(
+            ulong requestId = 0;
+            var result = validateOnly ? Native.gua_runtime_validate_game_input_guarded_v2(_handle, in request,
+                (int)observationProfile, expectedEpoch!.Value, expectedRevision) : expectedEpoch is { } epoch ? Native.gua_runtime_enqueue_game_input_guarded_v2(
                 _handle, in request, (int)observationProfile, epoch, expectedRevision, out requestId) :
                 Native.gua_runtime_enqueue_game_input_for_profile_v2(_handle, in request, (int)observationProfile, out requestId);
             if (result != 1) throw new InvalidOperationException($"Game input request was rejected ({result}).");
