@@ -89,6 +89,9 @@ struct CommandResult {
 };
 
 struct BridgeHandlers {
+    std::function<unsigned long long()> create_spatial_client;
+    std::function<void(unsigned long long)> release_spatial_client;
+    std::function<CommandResult(unsigned long long, int, std::string_view, unsigned long long)> spatial_command;
     std::function<unsigned long long()> create_observe_client;
     std::function<void(unsigned long long)> release_observe_client;
     std::function<CommandResult(unsigned long long, int, unsigned long long)> observe_command;

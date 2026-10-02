@@ -4,7 +4,12 @@
 
 [Spatial-r1](spatial-r1.md) defines independent versioned 3D query, result and
 provider DTOs, offline native/.NET validation, and additive capability negotiation.
-Spatial-01 does not execute physics or advertise an initialized spatial provider.
+Offline DTO validation alone does not execute physics or advertise a provider.
+[Spatial host r1](spatial-host-r1.md) supplies host authorization and scheduling;
+[spatial transports](../../docs/spatial-transport-r1.md) expose the same provider
+through typed clients, WebSocket and native MCP. `spatial_read_r1` and provider
+metadata are advertised only after explicit Testing/Debug host binding. Built-in
+Player/PublicAgent browser ports do not provide privileged spatial reads.
 
 ## Explicit Semantic Lint
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "gua/godot/spatial_host.hpp"
 
 #include "gua/runtime.h"
 
@@ -37,6 +38,8 @@ public:
     String get_player_world_object_tree_json() const;
     String query_player_world_objects_json(const Dictionary& selector) const;
     void enable_world_object_tree_adapter();
+    int bind_spatial(const Ref<GuaSpatialHost>& host, uint64_t provider, const String& grants);
+    int disable_spatial();
     uint64_t create_observe_owner(int source, const String& runtime_id);
     int destroy_observe_owner(uint64_t owner);
     uint64_t register_observe(uint64_t owner, const String& name, bool allow_player, bool sensitive);

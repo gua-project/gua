@@ -27,6 +27,9 @@ typedef struct gua_spatial_host_options_v1_t {
 int gua_spatial_host_create(const gua_spatial_host_options_v1_t* options,
     gua_value_text_t clock_id, gua_spatial_host_t** out, gua_spatial_error_t* error);
 void gua_spatial_host_destroy(gua_spatial_host_t* host);
+/* Retain the shared scheduler for a runtime transport binding. Destroy releases
+ * one reference; callers still synchronize mutation/destruction of their own handles. */
+void gua_spatial_host_retain(gua_spatial_host_t* host);
 int gua_spatial_host_register(gua_spatial_host_t*, const gua_spatial_document_t* registration,
     uint64_t* provider, gua_spatial_error_t*);
 int gua_spatial_host_unregister(gua_spatial_host_t*, uint64_t provider, gua_spatial_error_t*);

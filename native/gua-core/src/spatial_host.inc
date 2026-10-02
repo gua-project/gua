@@ -128,6 +128,7 @@ struct host_batch {
 };
 }
 struct gua_spatial_host_t {
+    std::atomic_uint references{1};
     std::mutex mutex; gua_spatial_host_options_v1_t limits; std::string clock;
     std::chrono::steady_clock::time_point origin=std::chrono::steady_clock::now();
     uint64_t token=0,order=0;
@@ -220,7 +221,8 @@ int gua_spatial_host_create(const gua_spatial_host_options_v1_t* o,gua_value_tex
         auto h=std::make_unique<gua_spatial_host_t>(); h->limits=*o; h->clock.assign(clock.data,clock.size); *out=h.release();
     });
 }
-void gua_spatial_host_destroy(gua_spatial_host_t* h) { delete h; }
+void gua_spatial_host_retain(gua_spatial_host_t* h) { if(h) ++h->references; }
+void gua_spatial_host_destroy(gua_spatial_host_t* h) { if(h && --h->references==0) delete h; }
 int gua_spatial_host_register(gua_spatial_host_t* h,const gua_spatial_document_t* d,uint64_t* out,gua_spatial_error_t* e) {
     if(out) *out=0;
     return boundary(e,[&] {

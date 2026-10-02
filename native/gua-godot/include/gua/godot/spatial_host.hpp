@@ -7,6 +7,7 @@
 namespace godot {
 // Trusted in-process host API. Deliberately absent from GuaContext/bridge/MCP.
 class GuaSpatialHost : public RefCounted {
+    friend class GuaContext;
     GDCLASS(GuaSpatialHost, RefCounted)
     gua_spatial_host_t* host_ = nullptr;
     static Dictionary reply(int status, uint64_t handle = 0);

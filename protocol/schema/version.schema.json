@@ -5,6 +5,7 @@
   "type": "object",
   "required": ["protocolSchemaVersion", "coreVersion", "runtimeVersion", "godotPluginVersion", "abiVersion", "buildId", "capabilities"],
   "properties": {
+    "spatial": { "$ref": "spatial-host-r1.schema.json#/$defs/advertisement" },
     "protocolSchemaVersion": { "type": "string", "minLength": 1 },
     "coreVersion": { "type": "string", "minLength": 1 },
     "runtimeVersion": { "type": "string", "minLength": 1 },

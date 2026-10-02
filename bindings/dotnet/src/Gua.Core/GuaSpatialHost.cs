@@ -31,6 +31,7 @@ internal sealed class SpatialHostHandle : SafeHandleZeroOrMinusOneIsInvalid
 public sealed class GuaSpatialHost : IDisposable
 {
     private readonly SpatialHostHandle _handle;
+    internal SpatialHostHandle Handle => _handle;
     public GuaSpatialHost(GuaSpatialHostOptions options, string clockId)
     {
         options.StructSize = (uint)Marshal.SizeOf<GuaSpatialHostOptions>();

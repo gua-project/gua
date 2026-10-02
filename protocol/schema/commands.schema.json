@@ -3,6 +3,10 @@
   "$id": "https://gua.dev/schema/commands.schema.json",
   "title": "Gua Command",
   "oneOf": [
+    { "$ref": "#/$defs/get_spatial_info" },
+    { "$ref": "#/$defs/query_spatial_batch" },
+    { "$ref": "#/$defs/poll_spatial_batch" },
+    { "$ref": "#/$defs/cancel_spatial_batch" },
     { "$ref": "#/$defs/semanticLint" },
     { "$ref": "#/$defs/getUiTree" },
     { "$ref": "#/$defs/getWorldObjectTree" },
@@ -27,6 +31,10 @@
     { "$ref": "#/$defs/simpleCommand" }
   ],
   "$defs": {
+    "get_spatial_info": {"type":"object","required":["type"],"additionalProperties":false,"properties":{"type":{"const":"get_spatial_info"}}},
+    "query_spatial_batch": {"type":"object","required":["type","batch"],"additionalProperties":false,"properties":{"type":{"const":"query_spatial_batch"},"batch":{"$ref":"spatial-host-r1.schema.json#/$defs/batch"}}},
+    "poll_spatial_batch": {"type":"object","required":["type","batchId"],"additionalProperties":false,"properties":{"type":{"const":"poll_spatial_batch"},"batchId":{"type":"integer","minimum":1,"maximum":9007199254740991}}},
+    "cancel_spatial_batch": {"type":"object","required":["type","batchId"],"additionalProperties":false,"properties":{"type":{"const":"cancel_spatial_batch"},"batchId":{"type":"integer","minimum":1,"maximum":9007199254740991}}},
     "semanticLint": {
       "type": "object", "required": ["type"], "additionalProperties": false,
       "properties": { "type": { "const": "semantic_lint" }, "includeWorld": { "type": "boolean" } }

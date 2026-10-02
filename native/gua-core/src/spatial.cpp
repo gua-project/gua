@@ -11,6 +11,7 @@
 #include <mutex>
 #include <deque>
 #include <optional>
+#include <atomic>
 
 using gua_value_detail::json;
 struct gua_spatial_document_t { int type; json value; std::string wire; };

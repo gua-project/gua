@@ -471,6 +471,17 @@ String GuaContext::get_version_json() const
     return String::utf8(json);
 }
 
+int GuaContext::bind_spatial(const Ref<GuaSpatialHost>& host, uint64_t provider, const String& grants) {
+    if(host.is_null()) return GUA_SPATIAL_INVALID;
+    auto text=grants.utf8(); gua_spatial_error_t error{}; gua_spatial_document_t* doc=nullptr;
+    gua_spatial_parse_options_v1_t options{sizeof(options),GUA_SPATIAL_OWNER};
+    int status=gua_spatial_from_json(&options,{text.get_data(),static_cast<uint32_t>(text.length())},&doc,&error);
+    if(status) return status;
+    status=gua_runtime_bind_spatial(runtime_,host->host_,provider,doc);
+    gua_spatial_destroy(doc); return status;
+}
+int GuaContext::disable_spatial() { return gua_runtime_bind_spatial(runtime_,nullptr,0,nullptr); }
+
 int GuaContext::get_observation_profile() const
 {
     return gua_runtime_get_observation_profile(runtime_);
@@ -1072,6 +1083,8 @@ void GuaContext::_bind_methods()
     ClassDB::bind_method(D_METHOD("get_ui_tree_json"), &GuaContext::get_ui_tree_json);
     ClassDB::bind_method(D_METHOD("get_player_ui_tree_json"), &GuaContext::get_player_ui_tree_json);
     ClassDB::bind_method(D_METHOD("get_version_json"), &GuaContext::get_version_json);
+    ClassDB::bind_method(D_METHOD("bind_spatial", "host", "provider", "grants"), &GuaContext::bind_spatial);
+    ClassDB::bind_method(D_METHOD("disable_spatial"), &GuaContext::disable_spatial);
     ClassDB::bind_method(D_METHOD("get_observation_profile"), &GuaContext::get_observation_profile);
     ClassDB::bind_method(D_METHOD("set_screenshot", "data_uri", "width", "height"), &GuaContext::set_screenshot);
     ClassDB::bind_method(D_METHOD("get_screenshot_json"), &GuaContext::get_screenshot_json);

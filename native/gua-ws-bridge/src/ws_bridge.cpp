@@ -85,7 +85,19 @@ struct ClientConnection {
     std::shared_ptr<std::mutex> send_mutex;
     unsigned long long game_input_owner_id = 0;
     unsigned long long observe_client_id = 0;
+    unsigned long long spatial_client_id = 0;
 };
+
+std::string spatial_wire(const gua_value_detail::json& j) {
+    using gua_value_detail::json;
+    if(j.type==json::string) return gua_value_detail::quote(j.text);
+    if(j.type==json::number || j.type==json::boolean) return j.text;
+    if(j.type==json::null) return "null";
+    std::string out=j.type==json::array ? "[" : "{"; bool first=true;
+    if(j.type==json::array) for(const auto& item:j.items) { if(!first) out+=','; first=false; out+=spatial_wire(item); }
+    else for(const auto& [key,item]:j.fields) { if(!first) out+=','; first=false; out+=gua_value_detail::quote(key)+":"+spatial_wire(item); }
+    return out+(j.type==json::array ? "]" : "}");
+}
 
 std::string escape_json(std::string_view value)
 {
@@ -1242,8 +1254,13 @@ private:
             std::make_shared<std::mutex>(),
             handlers_.create_game_input_owner ? handlers_.create_game_input_owner() : 0,
             handlers_.create_observe_client ? handlers_.create_observe_client() : 0,
+            handlers_.create_spatial_client ? handlers_.create_spatial_client() : 0,
         };
         const auto release_owner = [&]() noexcept {
+            if(connection.spatial_client_id && handlers_.release_spatial_client) {
+                try { handlers_.release_spatial_client(connection.spatial_client_id); } catch(...) {}
+                connection.spatial_client_id=0;
+            }
             if (connection.observe_client_id && handlers_.release_observe_client) {
                 try { handlers_.release_observe_client(connection.observe_client_id); } catch (...) {}
                 connection.observe_client_id = 0;
@@ -1270,7 +1287,7 @@ private:
                     break;
                 }
 
-                const std::string response = handle_command(*message, connection.game_input_owner_id, connection.observe_client_id);
+                const std::string response = handle_command(*message, connection.game_input_owner_id, connection.observe_client_id, connection.spatial_client_id);
                 send_text_frame(connection, response);
             }
         } catch (...) {
@@ -1296,10 +1313,34 @@ private:
         ::send_text_frame(client.socket, text);
     }
 
-    [[nodiscard]] std::string handle_command(std::string_view message, unsigned long long game_input_owner_id, unsigned long long observe_client_id)
+    [[nodiscard]] std::string handle_command(std::string_view message, unsigned long long game_input_owner_id, unsigned long long observe_client_id, unsigned long long spatial_client_id)
     {
         const Command command = parse_command(message);
         try {
+            if(command.type=="get_spatial_info" || command.type=="query_spatial_batch" || command.type=="poll_spatial_batch" || command.type=="cancel_spatial_batch") {
+                int operation=command.type=="get_spatial_info" ? 1 : command.type=="query_spatial_batch" ? 2 : command.type=="poll_spatial_batch" ? 3 : 4;
+                int response_id=0; uint64_t batch_id=0; std::string batch;
+                try {
+                    using namespace gua_value_detail;
+                    if(message.size()>1048576) return error_response(0,"invalid_request");
+                    auto request=parser(message).parse();
+                    if(request.type!=json::object || request.at("id").type!=json::number) return error_response(0,"invalid_request");
+                    auto id=integer(request.at("id").text,"$.id");
+                    if(id<=0 || id>std::numeric_limits<int>::max()) return error_response(0,"invalid_request");
+                    response_id=static_cast<int>(id);
+                    if(request.fields.size()!=static_cast<size_t>(operation==1 ? 2 : 3)) return error_response(response_id,"invalid_request");
+                    if(operation==2) batch=spatial_wire(request.at("batch"));
+                    if(operation>=3) {
+                        if(request.at("batchId").type!=json::number) return error_response(response_id,"invalid_request");
+                        auto number=integer(request.at("batchId").text,"$.batchId");
+                        if(number<=0 || number>9007199254740991LL) return error_response(response_id,"invalid_request");
+                        batch_id=static_cast<uint64_t>(number);
+                    }
+                } catch(...) { return error_response(response_id,"invalid_request"); }
+                if(!handlers_.spatial_command || !spatial_client_id) return error_response(response_id,"unsupported");
+                auto result=handlers_.spatial_command(spatial_client_id,operation,batch,batch_id);
+                return result.ok ? ok_response(response_id,result.json) : error_response(response_id,result.error);
+            }
             if(command.type=="get_observe_snapshot" || command.type=="subscribe_observations" ||
                 command.type=="poll_observations" || command.type=="unsubscribe_observations") {
                 int operation=command.type=="get_observe_snapshot" ? 1 : command.type=="subscribe_observations" ? 2 : command.type=="poll_observations" ? 3 : 4;

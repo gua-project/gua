@@ -13,8 +13,13 @@ public:
 };
 class SpatialDocument {
     gua_spatial_document_t* value_ = nullptr;
+    explicit SpatialDocument(gua_spatial_document_t* value):value_(value) {}
     static void check(int status, const gua_spatial_error_t& error) { if(status) throw SpatialError(error); }
 public:
+    static SpatialDocument adopt(gua_spatial_document_t* value) {
+        if(!value) throw std::invalid_argument("Null spatial document");
+        return SpatialDocument(value);
+    }
     SpatialDocument(int type, const std::string& json) {
         if(json.size()>UINT32_MAX) throw std::length_error("Spatial document too large");
         gua_spatial_parse_options_v1_t options{sizeof(options),type}; gua_spatial_error_t error{};
