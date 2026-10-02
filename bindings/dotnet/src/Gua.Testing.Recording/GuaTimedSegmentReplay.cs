@@ -26,6 +26,8 @@ public static class GuaTimedSegmentReplay
         catch { throw new InvalidOperationException("Segment secret resolution failed."); }
         if (segment.Inputs.Where((input, i) => input.Sensitive && secrets[i] is null).Any())
             throw new InvalidOperationException("A segment secret could not be resolved.");
+        for (var i = 0; i < segment.Inputs.Count; i++)
+            if (segment.Inputs[i].Sensitive) GuaTimedSegmentFile.ValidatePayload(segment.Inputs[i], secrets[i]);
         cancellationToken.ThrowIfCancellationRequested();
         realtime ??= new StopwatchRealtime();
         var results = segment.Inputs.Select((input, index) => new GuaTimedInputResult(

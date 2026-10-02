@@ -110,6 +110,7 @@ public static class GuaTimedSegmentFile
                 !Enum.IsDefined(typeof(GuaGameInputValueType), type)))
                 throw new InvalidDataException("Invalid semantic value type declaration.");
             ValidateRawTarget(input);
+            if (!input.Sensitive) ValidatePayload(input, input.Value);
             var key = (input.Kind, input.Target, input.DeviceIndex);
             if (input.Kind == GuaGameInputKind.Cleanup) held.Clear();
             else if (input.Kind == GuaGameInputKind.TextInput || input.Kind == GuaGameInputKind.Semantic &&
@@ -128,6 +129,17 @@ public static class GuaTimedSegmentFile
         if (held.Count != 0) throw new InvalidDataException("Every hold must have an explicit release inside the segment.");
     }
     private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+    internal static void ValidatePayload(GuaTimedInput input, JsonElement? value)
+    {
+        if ((input.Kind == GuaGameInputKind.TextInput || input.Kind == GuaGameInputKind.Semantic &&
+            input.SemanticValueType == GuaGameInputValueType.Text) && input.Operation == GuaGameInputOperation.Set &&
+            value?.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException("Text Set requires a JSON string value.");
+        if (input.Kind == GuaGameInputKind.Gamepad && input.Operation == GuaGameInputOperation.Set &&
+            (value is not { ValueKind: JsonValueKind.Number } axis || !axis.TryGetDouble(out var number) ||
+             !Finite(number) || number < -1 || number > 1))
+            throw new InvalidDataException("Gamepad axis Set requires a finite number in [-1,1].");
+    }
     private static void ValidateRawTarget(GuaTimedInput input)
     {
         bool Is(params string[] targets) => targets.Contains(input.Target);

@@ -40,6 +40,7 @@ struct gua_runtime_t {
         int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG;
         uint64_t owner_id = 0;
         bool consumed = false;
+        bool guarded = false;
     };
 
     gua_context_t* context = nullptr;
@@ -1194,7 +1195,7 @@ static int enqueue_runtime_game_input(gua_runtime_t* runtime,
     const int result = guarded ? gua_enqueue_game_input_guarded_v2(runtime->context, descriptor, observation_profile, epoch, revision, &request_id) :
         gua_enqueue_game_input_for_profile_v2(runtime->context, descriptor, observation_profile, &request_id);
     if (result == GUA_GAME_INPUT_OK) {
-        runtime->game_input_request_profiles[request_id] = { observation_profile, descriptor->owner_id, false };
+        runtime->game_input_request_profiles[request_id] = { observation_profile, descriptor->owner_id, false, guarded };
         if (out_request_id != nullptr) *out_request_id = request_id;
     }
     return result;
@@ -1220,7 +1221,9 @@ extern "C" int gua_runtime_consume_game_input_request(gua_runtime_t* runtime, gu
         if (profile != runtime->game_input_request_profiles.end()) profile->second.consumed = true;
         const uint32_t required = required_game_input_capability(out_request->kind);
         const uint32_t available = effective_game_input_capabilities(runtime, observation_profile);
-        if (internal_cleanup || required == 0 || (required != UINT32_MAX && (available & required) != 0)) return 1;
+        const bool profile_denied = profile != runtime->game_input_request_profiles.end() && profile->second.guarded &&
+            runtime->observation_profile == GUA_OBSERVATION_PROFILE_PLAYER && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER;
+        if (internal_cleanup || required == 0 || (!profile_denied && required != UINT32_MAX && (available & required) != 0)) return 1;
         (void)gua_complete_game_input_request(runtime->context, out_request->request_id, 0, GUA_GAME_INPUT_ERROR_UNSUPPORTED);
         runtime->game_input_request_profiles.erase(out_request->request_id);
     }

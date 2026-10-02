@@ -36,6 +36,9 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentHost
         lock (confirmedActions)
         {
             if (session is not null) throw new InvalidOperationException("This host already has an active segment.");
+            if (profile is not (GuaObservationProfile.Debug or GuaObservationProfile.Player) ||
+                runtime.ObservationProfile == GuaObservationProfile.Player && profile != GuaObservationProfile.Player)
+                throw new NotSupportedException("Segment profile exceeds the runtime observation ceiling.");
             confirmedActions.Clear();
             var capabilities = runtime.GetGameInputCapabilities(profile);
             foreach (var input in segment.Inputs)

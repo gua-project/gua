@@ -40,6 +40,9 @@ local host は新しい `gua_runtime_enqueue_game_input_guarded_v2` を必須と
 enqueue と consume の両方に照合し、変化した要求は失敗 completion として返し適用しない。
 旧 enqueue API の互換挙動は変更しない。cleanup は従来の owner-scoped path で送信し、
 世代変更時にも自 owner の解除を試みる。対応 entry point が無ければ owner 作成前に拒否する。
+runtime の Player ceiling を host preflight と guarded consume で照合する。固定 raw input は
+target だけでなく text string / gamepad axis [-1,1] の payload を Load / Validate で検証し、
+秘密 text の解決値も owner 作成前に検証する。
 
 同 offset は配列順に送信する。host はこの順に consume/apply する契約が必要である。
 send 時刻は client の呼出し境界、resultReceived は client の poll 成功時刻であり、

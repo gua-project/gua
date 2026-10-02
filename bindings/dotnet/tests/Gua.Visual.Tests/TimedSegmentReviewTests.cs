@@ -10,6 +10,59 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase(GuaGameInputKind.TextInput, "", null)]
+    [TestCase(GuaGameInputKind.TextInput, "", "123")]
+    [TestCase(GuaGameInputKind.Gamepad, "left_stick_x", null)]
+    [TestCase(GuaGameInputKind.Gamepad, "left_stick_x", "\"0.5\"")]
+    [TestCase(GuaGameInputKind.Gamepad, "left_stick_x", "1.5")]
+    public void Review_InvalidRawPayloadsAreRejectedBeforeStart(GuaGameInputKind kind, string target, string? json)
+    {
+        var input = new GuaTimedInput(0, kind, GuaGameInputOperation.Set, target,
+            json is null ? null : JsonSerializer.Deserialize<JsonElement>(json), 5000);
+        var inputs = kind == GuaGameInputKind.Gamepad ? new[] { input,
+            new GuaTimedInput(1, kind, GuaGameInputOperation.Reset, "") } : new[] { input };
+        Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Validate(new(1, 1, 20, 100, 100, inputs)));
+    }
+
+    [Test]
+    public void Review_PlayerRuntimeRejectsDebugSegmentBeforeOwnerCreation()
+    {
+        using var runtime = new GuaRuntime();
+        runtime.SetObservationProfile(GuaObservationProfile.Player);
+        runtime.EnableGameInput(GuaGameInputCapabilities.Keyboard | GuaGameInputCapabilities.Pointer, () => { });
+        var host = new GuaRuntimeSegmentHost(runtime, true);
+        Assert.ThrowsAsync<NotSupportedException>(() => GuaTimedSegmentReplay.ReplayAsync(host, Plan()));
+        Assert.That(host.OwnerId, Is.Null);
+    }
+
+    [Test]
+    public void Review_GuardedInputRejectsProfileCeilingChangeAtConsume()
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Keyboard, () => { });
+        var host = new GuaRuntimeSegmentHost(runtime, true);
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]);
+        host.Begin(plan);
+        try
+        {
+            var id = host.Send(plan.Inputs[0], null, () => { });
+            runtime.SetObservationProfile(GuaObservationProfile.Player);
+            Assert.That(runtime.TryConsumeGameInput(out _), Is.False);
+            Assert.That(host.Poll(id)?.Succeeded, Is.False);
+        }
+        finally { host.End(); }
+    }
+
+    [Test]
+    public void Review_ResolvedRawTextPayloadIsValidatedBeforeOwnerCreation()
+    {
+        var host = new FakeHost(new FakeRealtime());
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100,
+            [new(0, GuaGameInputKind.TextInput, GuaGameInputOperation.Set, "", Sensitive: true, SecretKey: "text")]);
+        Assert.ThrowsAsync<InvalidDataException>(() => GuaTimedSegmentReplay.ReplayAsync(host, plan,
+            _ => JsonSerializer.SerializeToElement(123)));
+        Assert.That(host.Began, Is.False);
+    }
     [Test]
     public void Review_ImportUsesEffectiveLegacyWheelAndLeaseDefaults()
     {

@@ -49,7 +49,9 @@
         {"if": {"properties": {"kind": {"const": 3}, "operation": {"enum": [7]}}, "required": ["kind", "operation"]}, "then": {"properties": {"target": {"enum": ["delta:"]}}}},
         {"if": {"properties": {"kind": {"const": 3}, "operation": {"enum": [8]}}, "required": ["kind", "operation"]}, "then": {"properties": {"target": {"enum": ["pixels", "lines"]}}}},
         {"if": {"properties": {"kind": {"const": 4}, "operation": {"enum": [4, 5]}}, "required": ["kind", "operation"]}, "then": {"properties": {"target": {"enum": ["south", "east", "west", "north", "left_shoulder", "right_shoulder", "left_trigger", "right_trigger", "back", "start", "left_stick", "right_stick", "dpad_up", "dpad_down", "dpad_left", "dpad_right"]}}}},
-        {"if": {"properties": {"kind": {"const": 4}, "operation": {"enum": [2]}}, "required": ["kind", "operation"]}, "then": {"properties": {"target": {"enum": ["left_stick_x", "left_stick_y", "right_stick_x", "right_stick_y"]}}}}
+        {"if": {"properties": {"kind": {"const": 4}, "operation": {"enum": [2]}}, "required": ["kind", "operation"]}, "then": {"required": ["value"], "properties": {"target": {"enum": ["left_stick_x", "left_stick_y", "right_stick_x", "right_stick_y"]}, "value": {"type": "number", "minimum": -1, "maximum": 1}}}},
+        {"if": {"properties": {"kind": {"const": 5}}, "required": ["kind"], "not": {"properties": {"sensitive": {"const": true}}, "required": ["sensitive"]}}, "then": {"required": ["value"], "properties": {"value": {"type": "string"}}}},
+        {"if": {"properties": {"kind": {"const": 1}, "operation": {"const": 2}, "semanticValueType": {"const": 4}}, "required": ["kind", "operation", "semanticValueType"], "not": {"properties": {"sensitive": {"const": true}}, "required": ["sensitive"]}}, "then": {"required": ["value"], "properties": {"value": {"type": "string"}}}}
       ]
     }
   }
