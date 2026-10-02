@@ -720,6 +720,8 @@ get_ui_tree
 get_world_object_tree
 find_world_objects
 wait_for_world_object
+get_spatial_info
+query_spatial_batch
 click_node
 focus_node
 set_value
@@ -762,6 +764,11 @@ compare_screenshot
 get_visual_artifacts
 run_test
 ```
+
+The spatial tools require an explicitly bound Testing/Debug provider. See the
+[English/Japanese spatial guide](docs/spatial-transport-r1.md) for host opt-in,
+bounded reads, Trace/report evidence and the measured support table. Built-in
+browser privilege is Unsupported; these reads do not become Recording actions.
 
 Recording, baseline, and visual failure files default to `.gua`. Set
 `GUA_ARTIFACT_DIR` to choose a different root. Names supplied to MCP tools cannot

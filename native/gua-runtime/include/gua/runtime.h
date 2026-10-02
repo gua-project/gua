@@ -2,6 +2,7 @@
 
 #include "gua/gua.h"
 #include "gua/observe.h"
+#include "gua/spatial_host.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -11,6 +12,18 @@ typedef struct gua_runtime_t gua_runtime_t;
 /* Host-only borrowed context for existing Observe C/C++ bindings. Never destroy
  * it. Synchronize host calls/getters with runtime destruction, as for all APIs. */
 gua_context_t* gua_runtime_borrow_context(gua_runtime_t* runtime);
+/* Trusted host opt-in. Retains host, copies grants, and closes old connection
+ * owners. NULL host disables. Only enabled Testing/Debug at the current runtime
+ * epoch is accepted; a Player runtime cannot elevate. Configure before bridge
+ * startup; reconnect after replacing grants. No client supplies these grants. */
+int gua_runtime_bind_spatial(gua_runtime_t*, gua_spatial_host_t*, uint64_t provider,
+    const gua_spatial_document_t* grants);
+uint64_t gua_runtime_create_spatial_client(gua_runtime_t*);
+void gua_runtime_release_spatial_client(gua_runtime_t*, uint64_t client);
+enum { GUA_SPATIAL_INFO=1, GUA_SPATIAL_ENQUEUE=2, GUA_SPATIAL_POLL=3, GUA_SPATIAL_CANCEL=4 };
+int gua_runtime_spatial_command(gua_runtime_t*, uint64_t client, int command,
+    const gua_spatial_document_t* batch, uint64_t batch_id,
+    gua_spatial_document_t** result);
 enum { GUA_OBSERVE_SNAPSHOT = 1, GUA_OBSERVE_SUBSCRIBE = 2,
     GUA_OBSERVE_POLL = 3, GUA_OBSERVE_UNSUBSCRIBE = 4 };
 /* A transport client owns its profile and subscriptions (limit 64). Requests

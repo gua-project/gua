@@ -1,4 +1,5 @@
 import path from "node:path";
+import { spatialTools, spatialBatchArguments, type GuaSpatialAdvertisement, type GuaSpatialBatch, type GuaSpatialBatchResult } from "gua-world-tools";
 import { ObserveWireRejectionError, decodeObserveWireResponse, observeTools, observeSubscriptionId, parseObserveTransport } from "gua-value";
 
 import {
@@ -136,6 +137,7 @@ const defaultBridgeUrl = "ws://127.0.0.1:8765";
 const clockPauseResponseTimeoutMs = 11_000;
 
 export const guaMcpTools = [
+  "get_spatial_info", "query_spatial_batch",
   "get_observe_snapshot", "subscribe_observations", "poll_observations", "unsubscribe_observations",
   "get_ui_tree",
   "get_world_object_tree",
@@ -189,6 +191,7 @@ export const guaMcpTools = [
 export type GuaMcpTool = (typeof guaMcpTools)[number];
 
 export const guaMcpToolDefinitions: readonly McpTool[] = [
+  ...spatialTools,
   ...observeTools,
   ...guaWebMcpToolDefinitions.map(toMcpToolDefinition),
   ...worldObservationTools,
@@ -514,6 +517,10 @@ async function executeTool(
   signal?: AbortSignal,
 ): Promise<unknown> {
   switch (name) {
+    case "get_spatial_info":
+      if (Object.keys(args).length) throw new Error("invalid_request");
+      return bridge.spatialInfo(signal);
+    case "query_spatial_batch": return bridge.spatialBatch(spatialBatchArguments(args), signal);
     case "get_observe_snapshot": case "subscribe_observations": case "poll_observations": case "unsubscribe_observations": {
       const needsId = name === "poll_observations" || name === "unsubscribe_observations";
       if (Object.keys(args).some(key => !needsId || key !== "subscriptionId")) throw new Error("Invalid Observe arguments.");
@@ -1010,6 +1017,29 @@ function compactResult<T extends Record<string, unknown>>(value: T): T {
 }
 
 export class GuaBridgeClient {
+  async spatialInfo(signal?: AbortSignal): Promise<GuaSpatialAdvertisement> {
+    return this.request({ type: "get_spatial_info" }, this.requestTimeoutMs, signal);
+  }
+  async spatialBatch(batch: GuaSpatialBatch, signal?: AbortSignal): Promise<GuaSpatialBatchResult> {
+    const socket = await this.connectForRequest("get_spatial_info", this.requestTimeoutMs, signal);
+    const started = Date.now();
+    try {
+      await this.request({ type: "query_spatial_batch", batch }, this.requestTimeoutMs, signal, socket);
+      while (Date.now() - started < this.requestTimeoutMs) {
+        const result = await this.request<GuaSpatialBatchResult | null>({ type: "poll_spatial_batch", batchId: batch.batchId },
+          Math.max(1, this.requestTimeoutMs - (Date.now() - started)), signal, socket);
+        if (result !== null) {
+          if (result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" || result.batchId !== batch.batchId ||
+            result.items.length !== batch.queries.length || result.items.some((item, index) => item.requestId !== batch.queries[index]!.requestId || item.queryId !== batch.queries[index]!.queryId))
+            throw new Error("Spatial correlation mismatch.");
+          return result;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+        throwIfAborted(signal);
+      }
+      throw new Error("Spatial batch completion timed out.");
+    } catch (error) { socket.close(); throw error; }
+  }
   async observeCommand(type: "get_observe_snapshot" | "subscribe_observations" | "poll_observations" | "unsubscribe_observations", subscriptionId?: number, signal?: AbortSignal): Promise<unknown> {
     const needsId = type === "poll_observations" || type === "unsubscribe_observations";
     const owner = needsId ? this.observeSubscriptions.get(observeSubscriptionId(subscriptionId)) : undefined;
@@ -1424,6 +1454,9 @@ export class GuaBridgeClient {
 }
 
 type BridgeCommandInput =
+  | { type: "get_spatial_info" }
+  | { type: "query_spatial_batch"; batch: GuaSpatialBatch }
+  | { type: "poll_spatial_batch" | "cancel_spatial_batch"; batchId: number }
   | { type: "get_version" | "get_observe_snapshot" | "subscribe_observations" }
   | { type: "poll_observations" | "unsubscribe_observations"; subscriptionId: number }
   | { type: "get_ui_tree" }

@@ -31,6 +31,8 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="../../../../protocol/schema/spatial-r1.schema.json;../../../../protocol/schema/spatial-host-r1.schema.json" Pack="true" PackagePath="trace/" />
+    <EmbeddedResource Include="../../../../protocol/schema/spatial-host-r1.schema.json" LogicalName="Gua.Trace.spatial-host-r1.schema.json" />
     <EmbeddedResource Include="../../../../artifacts/trace-viewer/viewer.js" LogicalName="Gua.Trace.Viewer.js"
                       Condition="Exists('../../../../artifacts/trace-viewer/viewer.js')" />
     <None Include="../../../../protocol/schema/trace.schema.json" Pack="true" PackagePath="trace/" />

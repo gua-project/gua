@@ -1,4 +1,5 @@
 export type WorldPrimitive = string | number | boolean | null;
+export * from "./spatial.js";
 export interface GuaWorldObject {
   id: string; parentId?: string; kind: string; label?: string; description?: string;
   space: "world2d" | "world3d"; position: { x?: number; y?: number; z?: number };

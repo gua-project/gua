@@ -11,7 +11,7 @@ if (!result.success) throw new Error(result.logs.join("\n"));
 const script = (await result.outputs[0]!.text()).replace(/<\/script/gi, "<\\/script");
 if (/<\/script/i.test(script)) throw new Error("Viewer bundle contains an unsafe HTML script terminator");
 await writeFile(resolve(output, "viewer.js"), script);
-for (const name of ["trace", "trace-lifecycle", "trace-screenshot", "observe-transport-v1", "observe-v1", "enum-catalog-v1", "value-v1"])
+for (const name of ["trace", "trace-lifecycle", "trace-screenshot", "observe-transport-v1", "observe-v1", "enum-catalog-v1", "value-v1", "spatial-host-r1", "spatial-r1"])
   await copyFile(resolve(root, `protocol/schema/${name}.schema.json`), resolve(output, `${name}.schema.json`));
 await copyFile(resolve(root, "protocol/schema/trace-observe-semantics.mjs"), resolve(output, "trace-observe-semantics.mjs"));
 const scriptHash = createHash("sha256").update(script).digest("base64");

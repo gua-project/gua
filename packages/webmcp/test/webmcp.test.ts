@@ -7,6 +7,7 @@ import {
   GuaWebError,
   registerGuaWebMcp,
   guaWebMcpToolDefinitions,
+  guaSpatialBrowserSupport,
   type GuaBrowserBridge,
   type GuaGameInputActionSearchResult,
   type GuaWorldObject,
@@ -62,6 +63,13 @@ function worldQuery(matches: GuaWorldObject[] = []) {
 }
 
 describe("registerGuaWebMcp", () => {
+  test("spatial privilege paths are explicitly unsupported and never registered for public agents", async () => {
+    const page = modelDocument();
+    await registerGuaWebMcp(bridgeWithTree(tree()), { document: page.document as unknown as Document });
+    expect(guaSpatialBrowserSupport.status).toBe("Unsupported");
+    expect(page.tools.has("get_spatial_info")).toBe(false);
+    expect(page.tools.has("query_spatial_batch")).toBe(false);
+  });
   test("does not expose profile selection and accepts projected field omission", async () => {
     expect(guaWebMcpToolDefinitions.every((tool) => {
       const properties = (tool.inputSchema.properties ?? {}) as Record<string, unknown>;

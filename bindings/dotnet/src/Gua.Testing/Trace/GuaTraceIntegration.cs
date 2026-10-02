@@ -179,7 +179,7 @@ public static partial class GuaTraceCapture
         var options = new EvaluationOptions();
         options.SchemaRegistry.Register(UiSchema.Value);
         JsonSchema? diagnostics = null;
-        foreach (var name in new[] { "version", "logs", "screenshot", "trace-lifecycle", "diagnostics" })
+        foreach (var name in new[] { "spatial-host-r1", "version", "logs", "screenshot", "trace-lifecycle", "diagnostics" })
         {
             var schema = LoadSchema(name); options.SchemaRegistry.Register(schema); diagnostics = schema;
         }

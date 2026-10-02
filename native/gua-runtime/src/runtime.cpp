@@ -1,5 +1,7 @@
 #include "gua/runtime.h"
 #include "gua/semantic_lint.h"
+#include "../../gua-core/src/value_json.hpp"
+#include <optional>
 
 #if GUA_RUNTIME_WITH_WS
 #include "gua/ws_bridge.hpp"
@@ -23,6 +25,10 @@
 #include <utility>
 
 struct gua_runtime_t {
+    gua_spatial_host_t* spatial_host = nullptr;
+    gua_spatial_document_t* spatial_grants = nullptr;
+    uint64_t spatial_provider = 0, spatial_epoch = 0, next_spatial_client = 1;
+    std::unordered_map<uint64_t,uint64_t> spatial_clients;
     struct ObserveClient { int profile; std::unordered_set<uint64_t> subscriptions; };
     uint64_t next_observe_client = 1;
     std::unordered_map<uint64_t, ObserveClient> observe_clients;
@@ -66,6 +72,7 @@ struct gua_runtime_t {
 };
 
 std::string escape_json(std::string_view value);
+#include "runtime_spatial.inc"
 
 namespace {
 
@@ -171,8 +178,14 @@ std::string core_version_json()
     return json;
 }
 
-std::string decorate_version_json(gua_runtime_t* runtime, std::string json)
+std::string decorate_version_json(gua_runtime_t* runtime, std::string json,std::optional<uint64_t> spatial_client=std::nullopt)
 {
+    const auto spatial=spatial_advertisement_unlocked(runtime,spatial_client);
+    if (!spatial.empty()) {
+        const auto at=json.find("\"capabilities\":[");
+        if(at!=std::string::npos) json.insert(at+16,"\"spatial_read_r1\",");
+        json.insert(json.size()-1,",\"spatial\":"+spatial);
+    }
     filter_runtime_capabilities(json, runtime->virtual_clock_enabled,
         effective_game_input_capabilities(runtime, runtime->observation_profile));
     if (!runtime->world_object_tree_enabled) remove_capability(json, "world_object_tree_v1");
@@ -340,7 +353,7 @@ const char* screenshot_unavailable_name(int result)
     return "unsupported";
 }
 
-std::string copy_diagnostics_json(gua_runtime_t* runtime)
+std::string copy_diagnostics_json(gua_runtime_t* runtime, std::optional<uint64_t> spatial_client = std::nullopt)
 {
     const std::lock_guard lock(runtime->context_mutex);
     const int size = gua_copy_diagnostics_json_for_profile(runtime->context, runtime->observation_profile, nullptr, 0);
@@ -348,7 +361,7 @@ std::string copy_diagnostics_json(gua_runtime_t* runtime)
     gua_copy_diagnostics_json_for_profile(runtime->context, runtime->observation_profile, json.data(), size);
     json.resize(static_cast<std::size_t>(size - 1));
     const std::string unfiltered_version = core_version_json();
-    const std::string decorated_version = decorate_version_json(runtime, unfiltered_version);
+    const std::string decorated_version = decorate_version_json(runtime, unfiltered_version, spatial_client);
     const std::string marker = ",\"version\":" + unfiltered_version + ",\"uiTree\":";
     const auto marker_position = json.rfind(marker);
     if (marker_position != std::string::npos) {
@@ -485,6 +498,7 @@ std::string reset_report_json(gua_runtime_t* runtime, unsigned long long expecte
         report.first_pending_node_id[0] = '\0'; report.first_event_node_id[0] = '\0';
     }
     if (result == GUA_RESET_SUCCEEDED) {
+        spatial_close_clients_unlocked(runtime);
         invalidate_screenshot_requests(runtime);
         if ((options.flags & GUA_RESET_REQUESTS) != 0) {
             std::erase_if(runtime->game_input_request_profiles,
@@ -534,6 +548,7 @@ extern "C" void gua_runtime_destroy(gua_runtime_t* runtime)
     gua_runtime_stop_inspector_bridge(runtime);
     {
         const std::lock_guard lock(runtime->context_mutex);
+        spatial_clear_unlocked(runtime);
         gua_destroy_context(runtime->context);
         runtime->context = nullptr;
     }
@@ -1294,6 +1309,7 @@ extern "C" int gua_runtime_set_observation_profile(gua_runtime_t* runtime, int p
     if ((inspector_bridge_running_unlocked(runtime) && runtime->observation_profile != profile) ||
         (runtime->observation_profile == GUA_OBSERVATION_PROFILE_PLAYER && profile == GUA_OBSERVATION_PROFILE_DEBUG)) return 0;
     runtime->observation_profile = profile;
+    if(profile==GUA_OBSERVATION_PROFILE_PLAYER) spatial_close_clients_unlocked(runtime);
     return 1;
 }
 
@@ -1566,6 +1582,7 @@ extern "C" int gua_runtime_reset_context(gua_runtime_t* runtime, const gua_reset
     }
     const uint32_t output_size = out_report == nullptr ? 0 : out_report->struct_size;
     const int result = gua_reset_context(runtime->context, options, out_report);
+    if (result == GUA_RESET_SUCCEEDED) spatial_close_clients_unlocked(runtime);
     if (player && out_report != nullptr && result != GUA_RESET_ERROR_INVALID_ARGUMENT) {
         out_report->pending_request_count = summary.pending_count; out_report->in_flight_request_count = summary.in_flight_count;
         out_report->unconsumed_event_count = summary.event_count;
@@ -1606,6 +1623,22 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
     runtime->bridge_stopping.store(false);
 
     gua::ws::BridgeHandlers handlers {
+        .create_spatial_client = [runtime] { return gua_runtime_create_spatial_client(runtime); },
+        .release_spatial_client = [runtime](unsigned long long client) { gua_runtime_release_spatial_client(runtime,client); },
+        .spatial_command = [runtime](unsigned long long client,int operation,std::string_view wire,unsigned long long batch_id) -> gua::ws::CommandResult {
+            gua_spatial_error_t error{}; gua_spatial_document_t* batch=nullptr; gua_spatial_document_t* raw=nullptr;
+            if(operation==GUA_SPATIAL_ENQUEUE) {
+                gua_spatial_parse_options_v1_t options{sizeof(options),GUA_SPATIAL_BATCH};
+                if(wire.size()>1048576 || gua_spatial_from_json(&options,{wire.data(),static_cast<uint32_t>(wire.size())},&batch,&error))
+                    return {false,"","invalid_request"};
+            }
+            std::unique_ptr<gua_spatial_document_t,decltype(&gua_spatial_destroy)> input(batch,gua_spatial_destroy);
+            int status=gua_runtime_spatial_command(runtime,client,operation,batch,batch_id,&raw);
+            std::unique_ptr<gua_spatial_document_t,decltype(&gua_spatial_destroy)> result(raw,gua_spatial_destroy);
+            if(status==GUA_SPATIAL_NOT_READY) return {true,"null",""};
+            if(status) return {false,"",spatial_safe_error(status)};
+            return {true,raw ? spatial_document_json(raw) : "null",""};
+        },
         .create_observe_client = [runtime] { return gua_runtime_create_observe_client(runtime,runtime->observation_profile); },
         .release_observe_client = [runtime](unsigned long long client) { gua_runtime_release_observe_client(runtime,client); },
         .observe_command = [runtime](unsigned long long client,int operation,unsigned long long subscription) -> gua::ws::CommandResult {
@@ -1683,6 +1716,9 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
         .get_diagnostics_json = [runtime] {
             return copy_diagnostics_json(runtime);
         },
+        .get_connection_diagnostics_json = [runtime](unsigned long long client) {
+            return copy_diagnostics_json(runtime,client);
+        },
         .semantic_lint = [runtime](bool include_world) {
             const std::lock_guard lock(runtime->context_mutex);
             const gua_semantic_lint_options_v1_t options {sizeof(options), runtime->observation_profile, include_world ? 1 : 0};
@@ -1697,6 +1733,10 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
         },
         .get_version_json = [runtime] {
             return copy_version_json(runtime);
+        },
+        .get_connection_version_json = [runtime](unsigned long long client) {
+            const std::lock_guard lock(runtime->context_mutex);
+            return decorate_version_json(runtime,core_version_json(),client);
         },
         .clock_supported = [runtime] {
             const std::lock_guard lock(runtime->context_mutex);

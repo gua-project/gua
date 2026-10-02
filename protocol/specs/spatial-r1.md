@@ -147,10 +147,11 @@ Status codes 1..7 map to Invalid/Version/Geometry/Context/Unsupported/Semantics/
 Internal. Validator Unsupported is distinct from an executed unsupported result.
 Nonfinite authoring doubles are rejected by System.Text.Json before native parse.
 
-`spatial_read_r1` is reserved in the existing additive capabilities list.
-Supporting hosts negotiate it plus provider r1 metadata before dedicated typed
-reads. This PR does NOT advertise it; #132/#134 must complete the safe pump,
-authorization/correlation and transport first. Existing clients do not require
+`spatial_read_r1` is the canonical additive runtime capability. Supporting hosts
+negotiate it plus provider r1 metadata before dedicated typed reads. Offline
+validation does not advertise it. The #132/#133 host pump and readers plus the
+[#134 transports](../../docs/spatial-transport-r1.md) advertise it only after
+explicit host authorization and provider binding. Existing clients do not require
 it. Spatial-r1 is explicitly enabled Testing/Debug only, denied for Player/
 Public Agent. Old default profiles, abiVersion/protocolSchemaVersion, World/
 Input schemas, Observe sources/values and Trace remain unchanged.

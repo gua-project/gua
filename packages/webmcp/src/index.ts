@@ -1,4 +1,9 @@
 export * from "./tool-definitions.js";
+/** Built-in engine browser ports are PublicAgent/Player projections. r1 has no
+ * browser privilege grant protocol; registering tool names cannot confer one. */
+export const guaSpatialBrowserSupport = Object.freeze({ status: "Unsupported" as const,
+  reason: "No host-authorized Testing/Debug browser session exists in the built-in ports.",
+  tools: [] as readonly string[] });
 import { observeTools, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value";
 export * from "./ports.js";
 export type {
