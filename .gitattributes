@@ -3,6 +3,8 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+protocol/schema/*.json text eol=lf
+protocol/schema/*.mjs text eol=lf
 
 *.png binary
 *.jpg binary
