@@ -22,6 +22,7 @@ Recording の schemaVersion 1/2 は変更せず、区間は独立した version 
 既存 v1 UI と v2 混在 Recording は逐次 Replay を使う。独立 queue を跨ぐ順序を
 証明できないため timed 変換を拒否する。省略 / 0 の hold lease は既存経路の実効 default
 5000ms として明示化し、勝手に延長しない。wheelUnit 省略は既存 bridge と同じ pixels。
+直接作成 / Load した区間の省略 / 0 lease も実効 5000ms で予算と比較する。
 semantic text Set は stateless であり、`semanticValueType: 4` を宣言し host が現在の
 descriptor と照合する。秘密参照の変換で型を取得できない場合は caller が明示 resolver を
 渡す。axis/vector Set の Holdable=false は拒否理由にしない。
@@ -80,7 +81,8 @@ timeout も送信済み / 未送信・未確認 completion を保持して owner
 cleanup は caller cancellation と独立した実時間期限。その予算は最初の release-all
 dispatch 前から計測し、poll / neutral 確認にも適用する。全送信済み completion の確認、
 最後の owner-scoped release-all の host completion、owner state の空を全て確認した時
-だけ neutral confirmed とする。未完了要求が残る場合は neutral 未確認。owner dispose
+だけ neutral confirmed とする。owner state の空を読んだ後に epoch / health を再照合し、
+異なる session の解除証拠を混ぜない。未完了要求が残る場合は neutral 未確認。owner dispose
 による後続 cleanup を要求しても、適用確認と称さない。他 owner を解除しない。
 
 host の preflight と引数 marshal 後、native enqueue の直前にも caller の send guard を

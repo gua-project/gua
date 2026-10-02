@@ -117,7 +117,8 @@ public static class GuaTimedSegmentFile
                 input.SemanticValueType == GuaGameInputValueType.Text) { }
             else if (input.Operation is GuaGameInputOperation.Set or GuaGameInputOperation.Down)
             {
-                if (input.LeaseMilliseconds > 60000 || input.LeaseMilliseconds <=
+                var effectiveLease = input.LeaseMilliseconds == 0 ? 5000u : input.LeaseMilliseconds;
+                if (effectiveLease <=
                     segment.ExecutionTimeoutMilliseconds + (double)segment.MaxLatenessMilliseconds)
                     throw new InvalidDataException("Hold lease must exceed the reserved real-time budget plus lateness.");
                 held.Add(key);

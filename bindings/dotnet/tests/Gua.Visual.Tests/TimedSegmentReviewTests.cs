@@ -11,6 +11,81 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [Test]
+    public async Task Review_NativeResetBetweenFinalCompletionAndNeutralReadCannotConfirmBoundary()
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Keyboard, () => { });
+        var context = (GuaContext)typeof(GuaRuntime).GetField("_observations", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(runtime)!;
+        var clock = new FakeRealtime();
+        clock.OnDelay = () => { while (runtime.TryConsumeGameInput(out var request)) runtime.CompleteGameInput(request, true); };
+        var inner = new GuaRuntimeSegmentHost(runtime, true);
+        var host = new NeutralBoundaryHost(inner, () => Assert.That(context.Reset().Result, Is.EqualTo(GuaResetResult.Succeeded)));
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]);
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, realtime: clock);
+        Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Failed));
+        Assert.That(result.FailureCode, Is.EqualTo("lifecycle-or-session-unconfirmed"));
+        Assert.That(result.NeutralConfirmed, Is.False);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Review_DirectAndLoadedHoldPlansUseTheEffectiveDefaultLease(bool omitInFile)
+    {
+        var plan = new GuaTimedSegment(1, 10, 20, 100, 100,
+            [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Down, "KeyW"),
+             new(10, GuaGameInputKind.Keyboard, GuaGameInputOperation.Up, "KeyW")]);
+        var root = Path.Combine(Path.GetTempPath(), "gua-default-lease", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var path = Path.Combine(root, "segment.json");
+            GuaTimedSegmentFile.Save(path, plan);
+            if (omitInFile)
+            {
+                var node = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+                node["inputs"]![0]!.AsObject().Remove("leaseMilliseconds");
+                File.WriteAllText(path, node.ToJsonString());
+            }
+            plan = GuaTimedSegmentFile.Load(path);
+            using var runtime = new GuaRuntime();
+            runtime.EnableGameInput(GuaGameInputCapabilities.Keyboard, () => { });
+            var clock = new FakeRealtime();
+            clock.OnDelay = () =>
+            {
+                while (runtime.TryConsumeGameInput(out var request))
+                {
+                    if (request.Operation == GuaGameInputOperation.Down) Assert.That(request.LeaseMs, Is.EqualTo(5000));
+                    runtime.CompleteGameInput(request, true);
+                }
+            };
+            var result = await GuaTimedSegmentReplay.ReplayAsync(new GuaRuntimeSegmentHost(runtime, true), plan, realtime: clock);
+            Assert.That(result.Outcome, Is.EqualTo(GuaSegmentOutcome.Succeeded));
+            Assert.That(result.NeutralConfirmed, Is.True);
+            Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Validate(plan with { ExecutionTimeoutMilliseconds = 5500 }));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestCase(GuaSegmentOutcome.Succeeded)]
+    [TestCase(GuaSegmentOutcome.Cancelled)]
+    [TestCase(GuaSegmentOutcome.TimedOut)]
+    public async Task Review_HealthMustRemainValidAfterTheFinalNeutralRead(GuaSegmentOutcome terminal)
+    {
+        using var cancel = new CancellationTokenSource();
+        var clock = new FakeRealtime();
+        if (terminal == GuaSegmentOutcome.Cancelled) clock.OnDelay = () => cancel.Cancel();
+        var changed = false;
+        var host = new FakeHost(clock) { ResultDelay = terminal == GuaSegmentOutcome.Succeeded ? 0 : terminal == GuaSegmentOutcome.Cancelled ? 5 : 150,
+            OnNeutral = () => changed = true, Health = () => changed ? "lifecycle-or-session-unconfirmed" : null };
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [new(0, GuaGameInputKind.Keyboard, GuaGameInputOperation.Press, "Space")]);
+        var result = await GuaTimedSegmentReplay.ReplayAsync(host, plan, cancellationToken: cancel.Token, realtime: clock);
+        Assert.That(changed, Is.True);
+        Assert.That(result.Outcome, Is.EqualTo(terminal == GuaSegmentOutcome.Succeeded ? GuaSegmentOutcome.Failed : terminal));
+        Assert.That(result.FailureCode, Is.EqualTo(terminal == GuaSegmentOutcome.Succeeded ? "lifecycle-or-session-unconfirmed" :
+            terminal == GuaSegmentOutcome.Cancelled ? "caller-cancelled" : "completion-or-boundary-timeout"));
+        Assert.That(result.NeutralConfirmed, Is.False);
+    }
+
     [TestCase("device")]
     [TestCase("type")]
     [TestCase("coordinate")]
@@ -580,6 +655,23 @@ public sealed partial class TimedSegmentTests
             Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, invalid), Is.False);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    private sealed class NeutralBoundaryHost(GuaRuntimeSegmentHost inner, Action beforeNeutral) : IGuaTimedSegmentValueHost
+    {
+        public bool OrderedApplication => inner.OrderedApplication;
+        public bool ApplicationTimes => inner.ApplicationTimes;
+        public bool SameTickApplication => inner.SameTickApplication;
+        public string? SimulationScope => inner.SimulationScope;
+        public double SimulationMilliseconds => inner.SimulationMilliseconds;
+        public string? ExecutionFailureCode => inner.ExecutionFailureCode;
+        public void Begin(GuaTimedSegment segment) => inner.Begin(segment);
+        public void Begin(GuaTimedSegment segment, IReadOnlyList<JsonElement?> values) => inner.Begin(segment, values);
+        public ulong Send(GuaTimedInput input, JsonElement? secret, Action guard) => inner.Send(input, secret, guard);
+        public GuaTimedCompletion? Poll(ulong id) => inner.Poll(id);
+        public ulong ReleaseAll() => inner.ReleaseAll();
+        public bool IsNeutral { get { beforeNeutral(); return inner.IsNeutral; } }
+        public void End() => inner.End();
     }
 
     private sealed class ThrowingRealtime : IGuaSegmentRealtime

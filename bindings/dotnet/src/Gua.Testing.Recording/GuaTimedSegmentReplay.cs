@@ -40,6 +40,7 @@ public static class GuaTimedSegmentReplay
         bool cleanupSucceeded = false, neutral = false;
         var pollCursor = 0;
         var pollMadeProgress = false;
+        var healthConfirmed = false;
         double Elapsed() => realtime.Milliseconds - origin;
         double ScheduleElapsed()
         {
@@ -52,7 +53,9 @@ public static class GuaTimedSegmentReplay
         bool PollAll()
         {
             pollMadeProgress = false;
-            if (host.ExecutionFailureCode is { } health && outcome == GuaSegmentOutcome.Succeeded)
+            var hostHealth = host.ExecutionFailureCode;
+            healthConfirmed = hostHealth is null;
+            if (hostHealth is { } health && outcome == GuaSegmentOutcome.Succeeded)
             { outcome = GuaSegmentOutcome.Failed; failure = health is "lifecycle-source-changed" or
                 "lifecycle-evidence-gap" or "lease-expired-before-release" or "lifecycle-or-session-unconfirmed"
                 ? health : "host-health-failed"; }
@@ -194,8 +197,9 @@ public static class GuaTimedSegmentReplay
                             if (final is not null)
                             {
                                 cleanupSucceeded = final.Succeeded;
-                                PollAll(); // Includes lifecycle/epoch health through the final host completion.
-                                neutral = cleanupSucceeded && host.IsNeutral && WithinCleanupBudget();
+                                var empty = cleanupSucceeded && host.IsNeutral;
+                                PollAll(); // Recheck lifecycle/epoch after the final neutral-state observation.
+                                neutral = empty && healthConfirmed && WithinCleanupBudget();
                                 break;
                             }
                             await realtime.DelayAsync(TimeSpan.FromMilliseconds(2), CancellationToken.None).ConfigureAwait(false);
