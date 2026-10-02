@@ -42,11 +42,47 @@ bot, or full UI framework.
   skill. Keep bug-hunting subagents read-only and require reproducible evidence;
   fixes are a separate task unless the user explicitly requests them.
 
+## Contract Validation
+
+- Use issue acceptance conditions as the validation baseline, not expectations
+  derived only from the implementation. Resolve ambiguous contracts against the
+  existing specs, compatibility, and responsibilities before validating.
+- In the PR, briefly map each major condition: required behavior -> concrete
+  contract violation -> test location and assertion -> execution evidence and
+  unverified scope. Reuse existing tests; do not add duplicates to raise counts.
+- Select negative cases by change risk: boundaries, missing/duplicate results,
+  correlation mismatch, partial failure, expiry/cancellation, disconnect/reset,
+  authorization loss, or storage failure. Do not require unrelated cases.
+- For a few high-impact contracts, confirm the test detects a violation using
+  the pre-fix implementation, an invalid response, fault injection, or a local
+  deliberate mutation. Verify that the fault fires and the intended assertion
+  fails; an unrelated environment error is not detection evidence. Keep deliberate
+  mutations in a disposable checkout or equivalent and out of submitted changes.
+- Check contract-required counts, correlation IDs, and completion states before
+  checking every array item; an empty array must not pass a required-result check.
+  For failures, assert the required error, processing stage, and side effects,
+  rather than merely that an exception occurred.
+- Keep evidence specific to the implementation and client/transport path tested.
+  Distinguish schema/Fake/unit checks, real transport, real engine, and packaged
+  consumer checks; another implementation's negative tests cannot prove this path.
+- Record the tested commit, environment, command, result, and relevant log or
+  artifact references. Distinguish old-commit success, skips, unrun checks, and
+  success only on rerun from consistent validation of the final commit.
+- State unverified scope and reasons against existing acceptance conditions;
+  disclosure does not waive required conditions. Low-impact documentation changes
+  need content/consistency checks, not invented runtime tests. Do not require full
+  mutation testing, a new test framework, every case on every PR, or revalidation
+  of all past PRs as a prerequisite.
+
 ## Code Review Rules
 
 - Review the cumulative branch diff against its merge base, not only the most
   recent task or commit. A fix can expose a defect in an older part of the same
   pull request.
+- Reviewers and auditors must check the Contract Validation mapping and ask
+  whether an implementation that breaks a major contract could still pass its
+  tests. Verify selected violation-detection evidence and path-specific coverage;
+  apply this within the existing audit gate, not a separate review loop.
 - For cross-boundary changes, trace the affected contract from `protocol/`
   through the C ABI, managed bindings, engine adapters, bridge, MCP, Inspector,
   recording, and tests. Do not assume that matching type names prove matching
