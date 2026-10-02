@@ -241,6 +241,17 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set up Bun for spatial client and MCP integration
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Build spatial MCP driver and Trace viewer
+        run: |
+          bun install --frozen-lockfile
+          bun run --filter gui-mcp build
+          bun run --filter @gua/inspector build:trace
+
       - name: Configure portable native targets
         run: cmake -S . -B build/portable -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF "-DGUA_VERSION=0.0.0-ci" "-DGUA_BUILD_ID=${{ github.sha }}"
 

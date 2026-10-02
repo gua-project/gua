@@ -1075,9 +1075,20 @@ export class GuaBridgeClient {
         const result = await this.request<GuaSpatialBatchResult | null>({ type: "poll_spatial_batch", batchId: batch.batchId },
           Math.max(1, this.requestTimeoutMs - (Date.now() - started)), signal, socket);
         if (result !== null) {
-          if (result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" || result.batchId !== batch.batchId ||
-            result.items.length !== batch.queries.length || result.items.some((item, index) => item.requestId !== batch.queries[index]!.requestId || item.queryId !== batch.queries[index]!.queryId))
+          if (!isRecord(result) || result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" || result.batchId !== batch.batchId ||
+            !Array.isArray(result.items) || result.items.length !== batch.queries.length || result.items.some((item, index) => !isRecord(item) || item.requestId !== batch.queries[index]!.requestId || item.queryId !== batch.queries[index]!.queryId))
             throw new Error("Spatial correlation mismatch.");
+          if (result.items.some((item, index) => {
+            const query = batch.queries[index]!;
+            if (item.state === "failed" || item.state === "notExecuted")
+              return typeof item.reason !== "string" || !item.reason || item.result !== undefined;
+            const geometry = item.result;
+            return item.state !== "completed" || item.reason !== undefined || !isRecord(geometry) ||
+              geometry.schemaVersion !== "spatial-host-r1" || geometry.documentType !== "result" || geometry.status !== "completed" ||
+              geometry.requestId !== query.requestId || geometry.queryId !== query.queryId ||
+              geometry.sessionEpoch !== query.sessionEpoch || geometry.spaceId !== query.spaceId || geometry.spaceEpoch !== query.spaceEpoch ||
+              geometry.kind !== query.kind;
+          })) throw new Error("Invalid spatial terminal result.");
           return result;
         }
         await new Promise(resolve => setTimeout(resolve, 10));
