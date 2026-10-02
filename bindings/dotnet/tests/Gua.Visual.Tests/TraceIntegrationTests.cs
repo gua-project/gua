@@ -26,14 +26,11 @@ public sealed class TraceIntegrationTests
         UpdateBaselines = update, Trace = trace, TraceStepId = step
     };
 
-    [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.OnFailure, GuaTraceOutcome.Passed)]
-    [TestCase(GuaTraceCaptureMode.Streaming, GuaTraceSavePolicy.OnFailure, GuaTraceOutcome.Passed)]
-    [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.Always, GuaTraceOutcome.Passed)]
-    [TestCase(GuaTraceCaptureMode.Streaming, GuaTraceSavePolicy.Always, GuaTraceOutcome.Failed)]
-    [TestCase(GuaTraceCaptureMode.Recent, GuaTraceSavePolicy.OnFailure, GuaTraceOutcome.Failed)]
-    [TestCase(GuaTraceCaptureMode.Streaming, GuaTraceSavePolicy.OnFailure, GuaTraceOutcome.Interrupted)]
+    [Test]
     public async Task ActualLintComparisonRecordingDiagnosticsAndObserveShareTheirStep(
-        GuaTraceCaptureMode mode, GuaTraceSavePolicy policy, GuaTraceOutcome primary)
+        [Values(GuaTraceCaptureMode.Recent, GuaTraceCaptureMode.Streaming)] GuaTraceCaptureMode mode,
+        [Values(GuaTraceSavePolicy.OnFailure, GuaTraceSavePolicy.Always)] GuaTraceSavePolicy policy,
+        [Values(GuaTraceOutcome.Passed, GuaTraceOutcome.Failed, GuaTraceOutcome.Interrupted)] GuaTraceOutcome primary)
     {
         using var context = new GuaContext(); Publish(context, 0);
         var baseline = GuaSemanticSnapshots.CompareSnapshot(context, "integration", Snapshot(update: true));
@@ -108,9 +105,69 @@ public sealed class TraceIntegrationTests
         {
             Directory.CreateDirectory(evidence);
             File.Copy(report.Path!, Path.Combine(evidence, primary.ToString().ToLowerInvariant() + "-" + mode + ".html"), true);
+            var directory = Path.Combine(evidence, primary.ToString().ToLowerInvariant() + "-" + mode);
+            foreach (var file in Directory.GetFiles(trace.ArtifactPath, "*", SearchOption.AllDirectories))
+            {
+                var destination = Path.Combine(directory, Path.GetRelativePath(trace.ArtifactPath, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(file, destination, true);
+            }
             Directory.CreateDirectory(Path.Combine(evidence, "schema"));
             File.WriteAllText(Path.Combine(evidence, "schema", "diagnostics.json"), diagnostics.GetRawText());
         }
+    }
+
+    [Test]
+    public async Task TerminalOutcomeSurvivesCaptureAndFlushFaults(
+        [Values(GuaTraceCaptureMode.Recent, GuaTraceCaptureMode.Streaming)] GuaTraceCaptureMode mode,
+        [Values(GuaTraceOutcome.Passed, GuaTraceOutcome.Failed, GuaTraceOutcome.Interrupted)] GuaTraceOutcome primary,
+        [Values("capture", "flush")] string fault)
+    {
+        using var context = new GuaContext(); Publish(context, 0);
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = _root, CaptureMode = mode,
+            FlushTimeout = TimeSpan.FromMilliseconds(250), Secrets = new[] { "FAULT-SECRET" } });
+        var step = trace.BeginStep(GuaTraceStepKind.Action, "terminal fault");
+        Assert.That(GuaTraceCapture.Lint(trace, step, GuaSemanticLinter.Analyze(context)), Is.True);
+        trace.EndStep(step, primary);
+        Assert.That(trace.SetPrimaryOutcome(primary), Is.True);
+        var original = new ApplicationException("caller failure");
+        Exception? caught = null;
+        try { throw original; } catch (Exception error) { caught = error; }
+        var originalStack = caught!.StackTrace;
+        if (fault == "capture")
+        {
+            bool fired = false;
+            Assert.That(GuaTraceCapture.JsonAttachment(trace, step, "fault.v1", () =>
+                { fired = true; throw new IOException("FAULT-SECRET"); }, GuaObservationProfile.Debug), Is.False);
+            Assert.That(fired, Is.True, "the intended getter fault must execute");
+        }
+        else
+        {
+            // Reuse the storage suite's deterministic flush gate, rather than timing slow IO.
+            var gate = (SemaphoreSlim)typeof(GuaTraceSession).GetField("_flushGate",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(trace)!;
+            await gate.WaitAsync();
+            try { Assert.That(await trace.FlushAsync(), Is.False); }
+            finally { gate.Release(); }
+            Assert.That(trace.Status.Issues, Does.Contain("flush-timeout"));
+        }
+        Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.EqualTo(fault == "capture"));
+        var read = GuaTraceReader.Read(trace.ArtifactPath);
+        Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo(primary.ToString().ToLowerInvariant()));
+        Assert.That(read.Manifest.Finalized, Is.True);
+        Assert.That(read.Issues, Is.Empty);
+        Assert.That(read.Manifest.Quality.Issues, Does.Contain(fault == "capture" ? "attachment-failed" : "flush-timeout"));
+        Assert.That(read.Events.Single(e => e.Type == "step.end").Data.GetProperty("outcome").GetString(),
+            Is.EqualTo(primary.ToString().ToLowerInvariant()));
+        Assert.That(read.Events.Count(e => e.Type == "attachment"), Is.EqualTo(1));
+        if (fault == "capture")
+        {
+            var failure = read.Events.Single(e => e.Type == "capture.failure");
+            Assert.That(failure.StepId, Is.EqualTo(step));
+        }
+        Assert.That(caught, Is.SameAs(original)); Assert.That(caught.StackTrace, Is.EqualTo(originalStack));
+        Assert.That(string.Join("", Directory.GetFiles(trace.ArtifactPath, "*", SearchOption.AllDirectories)
+            .Select(File.ReadAllText)), Does.Not.Contain("FAULT-SECRET"));
     }
 
     [Test]

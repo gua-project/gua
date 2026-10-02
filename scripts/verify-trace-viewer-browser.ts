@@ -21,10 +21,24 @@ const external: string[] = [], exceptions: string[] = [];
 observed.addEventListener("message", e => {
   const m = JSON.parse(String(e.data));
   if (m.method === "Network.requestWillBeSent" && /^(https?:|file:)/.test(m.params.request.url) && !m.params.request.url.startsWith(inspectorUrl) && !m.params.request.url.startsWith(localPrefix)) external.push(m.params.request.url);
-  if (m.method === "Runtime.exceptionThrown") exceptions.push(m.params.exceptionDetails.text);
+  if (m.method === "Runtime.exceptionThrown") exceptions.push(m.params.exceptionDetails.text + " " + (m.params.exceptionDetails.exception?.description ?? ""));
   if (m.method === "Page.javascriptDialogOpening") exceptions.push("unexpected dialog");
 });
-for (const [i, method] of ["Network.enable", "Runtime.enable", "Page.enable"].entries()) observed.send(JSON.stringify({ id: i + 1, method }));
+async function enableMonitoring(method: string, id: number) {
+  await new Promise<void>((done, fail) => {
+    const timer = setTimeout(() => { observed.removeEventListener("message", reply); fail(new Error("Monitor activation timed out: " + method)); }, 10000);
+    function reply(e: MessageEvent) {
+      const m = JSON.parse(String(e.data));
+      if (m.id !== id) return;
+      clearTimeout(timer); observed.removeEventListener("message", reply);
+      if (m.error) fail(new Error("Monitor activation failed: " + method + " " + m.error.message));
+      else done();
+    }
+    observed.addEventListener("message", reply);
+    observed.send(JSON.stringify({ id, method }));
+  });
+}
+for (const [i, method] of ["Network.enable", "Runtime.enable", "Page.enable"].entries()) await enableMonitoring(method, i + 1);
 async function evaluate(expression: string) {
   const r = await client.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }) as { result?: { value?: any }; exceptionDetails?: unknown };
   if (r.exceptionDetails) throw new Error("Browser evaluation failed: " + JSON.stringify(r.exceptionDetails));
@@ -56,6 +70,16 @@ async function screenshot(name: string) {
 }
 const evidence: Record<string, unknown>[] = [];
 try {
+  // A zero count proves safety only after the monitor detects these actual startup faults.
+  const probeUrl = `http://127.0.0.1:${port}/monitor-self-test`;
+  const probeHtml = `<script>new Image().src=${JSON.stringify(probeUrl)};throw new Error('MONITOR-FIXTURE-FAILURE');</script>`;
+  await client.send("Page.navigate", { url: "data:text/html," + encodeURIComponent(probeHtml) });
+  const probeDeadline = performance.now() + 10000;
+  while (performance.now() < probeDeadline && !(external.includes(probeUrl) && exceptions.some(e => e.includes("MONITOR-FIXTURE-FAILURE")))) await Bun.sleep(50);
+  require(external.includes(probeUrl), "Monitor did not observe the deliberate startup request");
+  require(exceptions.some(e => e.includes("MONITOR-FIXTURE-FAILURE")), "Monitor did not observe the deliberate startup exception");
+  const monitorProbe = { startupRequestObserved: true, startupExceptionObserved: true };
+  external.length = 0; exceptions.length = 0;
   await client.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
   for (const fixture of fixtures) {
     await navigate(pathToFileURL(fixture.report).href);
@@ -138,6 +162,6 @@ try {
   }
   require(external.length === 0, "Unexpected external read: " + external.join(","));
   require(exceptions.length === 0, "Browser errors: " + exceptions.join(","));
-  await writeFile(resolve(fixturesRoot, "browser-evidence.json"), JSON.stringify({ browser: await client.send("Browser.getVersion"), evidence, externalRequests: external, exceptions }, null, 2));
+  await writeFile(resolve(fixturesRoot, "browser-evidence.json"), JSON.stringify({ browser: await client.send("Browser.getVersion"), monitorProbe, evidence, externalRequests: external, exceptions }, null, 2));
   console.log(`Trace browser acceptance passed (${evidence.length} surfaces/cases). Evidence: ${fixturesRoot}`);
 } finally { client.close(); observed.close(); }

@@ -213,8 +213,15 @@ public sealed class TraceTests
         var request = new GuaTraceRequest("a", "1", "18446744073709551615");
         var step = trace.BeginStep(GuaTraceStepKind.Action, "press", request);
         Assert.That(trace.BeginStep(GuaTraceStepKind.Action, "native", request), Is.EqualTo(step));
-        Assert.That(trace.BeginStep(GuaTraceStepKind.Action, "other", request with { SourceId = "b" }), Is.Not.EqualTo(step));
-        Assert.That(trace.BeginStep(GuaTraceStepKind.Action, "reset", request with { SessionEpoch = "2" }), Is.Not.EqualTo(step));
+        var otherRequest = request with { SourceId = "b" };
+        var resetRequest = request with { SessionEpoch = "2" };
+        var other = trace.BeginStep(GuaTraceStepKind.Action, "other", otherRequest);
+        var reset = trace.BeginStep(GuaTraceStepKind.Action, "reset", resetRequest);
+        Assert.That(new[] { step, other, reset }.Distinct().Count(), Is.EqualTo(3));
+        Assert.That(trace.RecordRequest(otherRequest, "completion", Json("{\"succeeded\":false}")), Is.True);
+        Assert.That(trace.RecordRequest(resetRequest, "completion", Json("{\"succeeded\":true}")), Is.True);
+        trace.EndStep(other, GuaTraceOutcome.Failed);
+        trace.EndStep(reset, GuaTraceOutcome.Passed);
         trace.EndStep(step, GuaTraceOutcome.Unknown);
         trace.SetPrimaryOutcome(GuaTraceOutcome.Failed);
         Assert.That(trace.RecordRequest(request, "late-completion", Json("{\"released\":true}")), Is.True);
@@ -222,6 +229,17 @@ public sealed class TraceTests
         var read = GuaTraceReader.Read(trace.ArtifactPath);
         Assert.That(read.Manifest.PrimaryOutcome, Is.EqualTo("failed"));
         Assert.That(read.Events.Count(e => e.StepId == step && e.Type == "step.end"), Is.EqualTo(1));
+        Assert.That(read.Events.Count(e => e.Type == "step.begin"), Is.EqualTo(3));
+        foreach (var (expectedStep, expectedRequest) in new[] { (step, request), (other, otherRequest), (reset, resetRequest) })
+        {
+            var phase = read.Events.Single(e => e.StepId == expectedStep && e.Type == "request.phase");
+            var key = phase.Data.GetProperty("request");
+            Assert.That(key.GetProperty("sourceId").GetString(), Is.EqualTo(expectedRequest.SourceId));
+            Assert.That(key.GetProperty("sessionEpoch").GetString(), Is.EqualTo(expectedRequest.SessionEpoch));
+            Assert.That(key.GetProperty("requestId").GetString(), Is.EqualTo(expectedRequest.RequestId));
+        }
+        Assert.That(read.Events.Single(e => e.StepId == step && e.Type == "step.end").Data.GetProperty("outcome").GetString(), Is.EqualTo("unknown"));
+        Assert.That(read.Events.Last().StepId, Is.EqualTo(step));
         Assert.That(read.Events.Last().Type, Is.EqualTo("request.phase"));
     }
     [Test]
@@ -264,14 +282,21 @@ public sealed class TraceTests
         Assert.That(read.Manifest.Quality.DroppedEvents, Is.GreaterThan(0));
     }
     [Test]
-    public async Task SavingFailureIsSecondaryAndDoesNotLeakFilesystemErrors()
+    public async Task SavingFailureIsSecondaryAndDoesNotLeakFilesystemErrors(
+        [Values(GuaTraceCaptureMode.Recent, GuaTraceCaptureMode.Streaming)] GuaTraceCaptureMode mode,
+        [Values(GuaTraceOutcome.Passed, GuaTraceOutcome.Failed, GuaTraceOutcome.Interrupted)] GuaTraceOutcome primary)
     {
         Directory.CreateDirectory(_root);
         var blocker = Path.Combine(_root, "file"); File.WriteAllText(blocker, "secret-marker");
-        await using var trace = new GuaTraceSession(new() { OutputDirectory = blocker, SavePolicy = GuaTraceSavePolicy.Always });
+        await using var trace = new GuaTraceSession(new() { OutputDirectory = blocker, CaptureMode = mode, SavePolicy = GuaTraceSavePolicy.Always });
         trace.Mark("failed write");
-        Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Failed), Is.False);
+        Assert.That(trace.SetPrimaryOutcome(primary), Is.True);
+        Assert.That(await trace.CompleteAsync(GuaTraceOutcome.Passed), Is.False);
         Assert.That(trace.Status.Issues, Does.Contain("write-failed"));
+        Assert.That(trace.SetPrimaryOutcome(GuaTraceOutcome.Failed), Is.False);
+        Assert.That(File.Exists(blocker), Is.True, "the real file/directory collision must remain present");
+        Assert.That(File.Exists(Path.Combine(trace.ArtifactPath, "manifest.json")), Is.False);
+        Assert.Throws<DirectoryNotFoundException>(() => GuaTraceReader.Read(trace.ArtifactPath));
         Assert.That(string.Join("", trace.Status.Issues), Does.Not.Contain(blocker));
     }
     [Test]
