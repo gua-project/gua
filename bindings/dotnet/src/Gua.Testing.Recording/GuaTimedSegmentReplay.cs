@@ -12,6 +12,7 @@ public static class GuaTimedSegmentReplay
     {
         if (host is null) throw new ArgumentNullException(nameof(host));
         if (segment is null) throw new ArgumentNullException(nameof(segment));
+        cancellationToken.ThrowIfCancellationRequested();
         segment = segment with { Inputs = segment.Inputs?.Select(input => input is null ? null! : input with { Value = input.Value?.Clone() }).ToArray()! };
         GuaTimedSegmentFile.Validate(segment);
         var simulationScope = segment.Clock == GuaSegmentClock.Simulation ? host.SimulationScope : null;

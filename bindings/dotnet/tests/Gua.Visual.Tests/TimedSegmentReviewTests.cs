@@ -11,6 +11,97 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase(GuaGameInputKind.Gamepad, false)]
+    [TestCase(GuaGameInputKind.TextInput, false)]
+    [TestCase(GuaGameInputKind.Cleanup, false)]
+    [TestCase(GuaGameInputKind.Gamepad, true)]
+    [TestCase(GuaGameInputKind.TextInput, true)]
+    [TestCase(GuaGameInputKind.Cleanup, true)]
+    public void Review_TargetlessOperationsRequireAnEmptyTarget(GuaGameInputKind kind, bool valid)
+    {
+        var input = new GuaTimedInput(0, kind, kind == GuaGameInputKind.Gamepad ? GuaGameInputOperation.Reset :
+            kind == GuaGameInputKind.TextInput ? GuaGameInputOperation.Set : GuaGameInputOperation.ReleaseAll,
+            valid ? "" : "ignored-private-data", kind == GuaGameInputKind.TextInput ? JsonSerializer.SerializeToElement("text") : null);
+        AssertTimedFileAndSchema(new(1, 0, 20, 100, 100, [input]), valid);
+    }
+
+    [TestCase(null, false)]
+    [TestCase("", false)]
+    [TestCase(" ", false)]
+    [TestCase("controlled-subsystem", true)]
+    public void Review_SimulationEvidenceRequiresScope(string? scope, bool accepted) =>
+        AssertResultAttachment(new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded,
+            [new(0, 0, 0, 1, 1, null, true, 0)], true, true, null)
+            { Clock = GuaSegmentClock.Simulation, SimulationScope = scope, MaxLatenessMilliseconds = 20,
+              ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, accepted);
+
+    [TestCase(GuaSegmentOutcome.Cancelled, "host-rejected-or-failed", false)]
+    [TestCase(GuaSegmentOutcome.Cancelled, "caller-cancelled", true)]
+    [TestCase(GuaSegmentOutcome.TimedOut, null, false)]
+    [TestCase(GuaSegmentOutcome.TimedOut, "execution-timeout", true)]
+    [TestCase(GuaSegmentOutcome.TimedOut, "completion-or-boundary-timeout", true)]
+    [TestCase(GuaSegmentOutcome.Late, "caller-cancelled", false)]
+    [TestCase(GuaSegmentOutcome.Late, "max-lateness-exceeded", true)]
+    [TestCase(GuaSegmentOutcome.Late, "send-exceeded-max-lateness", true)]
+    [TestCase(GuaSegmentOutcome.Late, "application-time-violation", true)]
+    [TestCase(GuaSegmentOutcome.Failed, null, false)]
+    [TestCase(GuaSegmentOutcome.Failed, "caller-cancelled", false)]
+    [TestCase(GuaSegmentOutcome.Failed, "host-health-failed", true)]
+    public void Review_OutcomeMustMatchFailureCode(GuaSegmentOutcome outcome, string? code, bool accepted) =>
+        AssertResultAttachment(new GuaTimedSegmentResult(outcome, [new(0, 0, 0, 1, 1, null, false, 1)], false, false, code)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, accepted);
+
+    private static void AssertResultAttachment(GuaTimedSegmentResult result, bool accepted)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gua-result-contract", Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var trace = new GuaTraceSession(new() { OutputDirectory = root, SavePolicy = GuaTraceSavePolicy.Always });
+            var step = trace.BeginStep(GuaTraceStepKind.Action, "segment");
+            Assert.That(GuaRecordingTrace.AttachTimedResult(trace, step, result), Is.EqualTo(accepted));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Review_PreCancelledReplayAvoidsCapabilitiesAndSecrets(bool unavailable)
+    {
+        using var cancel = new CancellationTokenSource(); cancel.Cancel();
+        var host = new FakeHost(new()) { OrderedApplication = !unavailable };
+        var resolved = false;
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100,
+            [new(0, GuaGameInputKind.TextInput, GuaGameInputOperation.Set, "", Sensitive: true, SecretKey: "vault")]);
+        Assert.ThrowsAsync<OperationCanceledException>(async () => await GuaTimedSegmentReplay.ReplayAsync(host, plan,
+            _ => { resolved = true; throw new InvalidOperationException(); }, cancel.Token));
+        Assert.That(resolved, Is.False); Assert.That(host.Began, Is.False);
+    }
+
+    [TestCase("{\"x\":0,\"x\":100,\"y\":0}", false)]
+    [TestCase("{\"x\":0,\"\\u0078\":100,\"y\":0}", false)]
+    [TestCase("{\"extra\":{\"x\":0},\"x\":100,\"y\":0}", false)]
+    [TestCase("{\"extra\":1,\"x\":0.5,\"y\":0}", true)]
+    public void Review_VectorParsingCannotBypassNativeRange(string json, bool valid)
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Semantic, () => { });
+        runtime.PublishGameInputActions("test", [new("vector", "vector", GuaGameInputValueType.Vector2, -1, 1)]);
+        var value = JsonSerializer.Deserialize<JsonElement>(json);
+        var map = runtime.FindGameInputActionsV2(new(Limit: 1));
+        using var owner = runtime.CreateGameInputSession();
+        if (valid) Assert.DoesNotThrow(() => owner.SendGuarded(map.SessionEpoch, map.Revision, GuaGameInputKind.Semantic,
+            GuaGameInputOperation.Set, "vector", value, TimeSpan.FromSeconds(5), 0, 0, 0, false, false, () => { }));
+        else Assert.Throws<InvalidOperationException>(() => owner.SendGuarded(map.SessionEpoch, map.Revision, GuaGameInputKind.Semantic,
+            GuaGameInputOperation.Set, "vector", value, TimeSpan.FromSeconds(5), 0, 0, 0, false, false, () => { }));
+        if (json.Contains("100") && !json.Contains("extra"))
+        {
+            var plan = new GuaTimedSegment(1, 1, 20, 100, 100,
+                [new(0, GuaGameInputKind.Semantic, GuaGameInputOperation.Set, "vector", value, 5000, SemanticValueType: GuaGameInputValueType.Vector2),
+                 new(1, GuaGameInputKind.Semantic, GuaGameInputOperation.Release, "vector")]);
+            Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Validate(plan));
+        }
+    }
+
     [TestCase("Bad ID", false)]
     [TestCase("Upper", false)]
     [TestCase("é", false)]

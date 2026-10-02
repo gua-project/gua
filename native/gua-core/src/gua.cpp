@@ -1557,15 +1557,17 @@ bool valid_json_string_array(std::string_view value)
     return false;
 }
 
-bool json_object_number(std::string_view json, std::string_view name, double& result)
+bool json_vector_numbers(std::string_view json, double& x, double& y)
 {
-    const std::regex pattern("\\\"" + std::string(name) + "\\\"\\s*:\\s*([-+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][-+]?[0-9]+)?)");
-    std::cmatch match;
-    const std::string copy(json);
-    if (!std::regex_search(copy.c_str(), match, pattern)) return false;
-    char* end = nullptr;
-    result = std::strtod(match[1].first, &end);
-    return end == match[1].second && std::isfinite(result);
+    try {
+        // Decode top-level keys once; the shared bounded parser rejects duplicate
+        // keys, including escaped aliases. Never select a nested regex match.
+        const auto value = gua_value_detail::parser(json).parse();
+        if (value.type != gua_value_detail::json::object) return false;
+        x = gua_input_detail::numeric(value.at("x"));
+        y = gua_input_detail::numeric(value.at("y"));
+        return true;
+    } catch (const gua_value_detail::failure&) { return false; }
 }
 
 bool valid_keyboard_code(std::string_view code)
@@ -1627,7 +1629,7 @@ int validate_semantic_game_input(const std::vector<GameInputAction>& actions, in
     }
     if (action->value_type == GUA_GAME_INPUT_VECTOR2 && operation == GUA_GAME_INPUT_SET) {
         double x = 0.0, y = 0.0;
-        if (value.empty() || value.front() != '{' || !json_object_number(value, "x", x) || !json_object_number(value, "y", y) ||
+        if (!json_vector_numbers(value, x, y) ||
             (action->has_range && (x < action->minimum || x > action->maximum || y < action->minimum || y > action->maximum)))
             return GUA_GAME_INPUT_ERROR_INVALID_VALUE;
     }

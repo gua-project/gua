@@ -49,6 +49,9 @@ target だけでなく text string / gamepad axis [-1,1] の payload を Load / 
 semantic target は native と同じ小文字 ASCII の Action ID grammar と127 byte上限を
 file / schema で検査する。固定 TextInput と宣言済み semantic Text Set は40 Unicode
 code pointまでとし、値契約のない操作は null / 省略以外の payload を保存・実行しない。
+target を持たない text input / gamepad reset / owner cleanup は空 target だけ許可する。
+Vector2 は重複する decoded property 名を拒否し、native の範囲検査は top-level x/y を
+共有 bounded JSON parser で読む。nested key や escaped alias を別の座標として扱わない。
 
 semantic Set の型、descriptor の範囲、bounded ValueSchema、および既存 native payload
 上限も、同じ native validator で全操作を開始前に検査する。純粋な validate API は owner、
@@ -70,6 +73,7 @@ hostApplied は独立した証拠がない限り null。completion を適用時�
 
 maxLateness、区間の real-time execution timeout、cleanup timeout は有限・明示必須。
 caller は区間の全操作数と execution + cleanup の実時間予算を先に予約する。
+開始前に cancel 済みなら host 能力の読取りや秘密 resolver を呼ぶ前に終了する。
 同じ host は区間を同時実行しない。再生ごとに新 owner を作り、途中から再開・自動再送
 しない。再実行は新 owner で先頭から caller が明示的に要求する。
 
@@ -118,5 +122,6 @@ health text は証拠へコピーせず、既知の lifecycle code 以外を `ho
 Succeeded の添付は適用時刻取得の有無にかかわらず、全 ordinary completion の成功、
 cleanup / neutral 確認、null failure code を必要とする。宣言済み semantic Set の
 Button / Axis1D / Vector2 / Text の値型は protocol schema と file validator で一致させる。
+simulation の証拠は非空 scope を必要とし、終端 outcome と failure code の組合せも検証する。
 添付 schema は `timed-segment-result-v1.schema.json`。入力値を持たない独立 envelope で、
 旧 Recording ファイルや Trace の自動再生入力としては読まない。

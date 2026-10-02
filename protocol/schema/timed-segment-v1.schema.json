@@ -37,6 +37,7 @@
         "semanticValueType": {"enum": [null, 1, 2, 3, 4], "description": "Declared semantic type, checked by host; text Set is stateless"}
       },
       "allOf": [
+        {"if": {"anyOf": [{"properties": {"kind": {"const": 4}, "operation": {"const": 9}}, "required": ["kind", "operation"]}, {"properties": {"kind": {"enum": [5, 6]}}, "required": ["kind"]}]}, "then": {"properties": {"target": {"const": ""}}}},
         {"if": {"anyOf": [{"properties": {"kind": {"const": 1}, "operation": {"const": 2}}, "required": ["kind", "operation"]}, {"properties": {"kind": {"const": 4}, "operation": {"const": 2}}, "required": ["kind", "operation"]}, {"properties": {"kind": {"const": 5}}, "required": ["kind"]}]}, "else": {"properties": {"value": {"type": "null"}}}},
         {"if": {"properties": {"kind": {"const": 4}}, "required": ["kind"]}, "else": {"properties": {"deviceIndex": {"const": 0}}}},
         {"if": {"properties": {"kind": {"const": 1}}, "required": ["kind"]}, "else": {"properties": {"semanticValueType": {"type": "null"}}}},

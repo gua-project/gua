@@ -161,6 +161,7 @@ public static class GuaTimedSegmentFile
             GuaGameInputValueType.Button => value?.ValueKind is JsonValueKind.True or JsonValueKind.False,
             GuaGameInputValueType.Axis1D => Number(value),
             GuaGameInputValueType.Vector2 => value is { ValueKind: JsonValueKind.Object } vector &&
+                vector.EnumerateObject().Select(property => property.Name).Distinct().Count() == vector.EnumerateObject().Count() &&
                 vector.TryGetProperty("x", out var x) && vector.TryGetProperty("y", out var y) && Number(x) && Number(y),
             _ => true,
         };
@@ -187,8 +188,9 @@ public static class GuaTimedSegmentFile
             {
                 GuaGameInputOperation.Down or GuaGameInputOperation.Up => Is("south", "east", "west", "north", "left_shoulder", "right_shoulder", "left_trigger", "right_trigger", "back", "start", "left_stick", "right_stick", "dpad_up", "dpad_down", "dpad_left", "dpad_right"),
                 GuaGameInputOperation.Set => Is("left_stick_x", "left_stick_y", "right_stick_x", "right_stick_y"),
-                GuaGameInputOperation.Reset => true, _ => false,
+                GuaGameInputOperation.Reset => input.Target.Length == 0, _ => false,
             },
+            GuaGameInputKind.TextInput or GuaGameInputKind.Cleanup => input.Target.Length == 0,
             _ => true,
         };
         if (!valid) throw new InvalidDataException("Unsupported fixed raw-input target.");
