@@ -1,5 +1,5 @@
 import path from "node:path";
-import { spatialTools, spatialBatchArguments, type GuaSpatialAdvertisement, type GuaSpatialBatch, type GuaSpatialBatchResult } from "gua-world-tools";
+import { spatialTools, spatialBatchArguments, isSpatialFailureReason, type GuaSpatialAdvertisement, type GuaSpatialBatch, type GuaSpatialBatchResult } from "gua-world-tools";
 import { ObserveWireRejectionError, decodeObserveWireResponse, observeTools, observeSubscriptionId, parseObserveTransport } from "gua-value";
 
 import {
@@ -1081,7 +1081,7 @@ export class GuaBridgeClient {
           if (result.items.some((item, index) => {
             const query = batch.queries[index]!;
             if (item.state === "failed" || item.state === "notExecuted")
-              return typeof item.reason !== "string" || !item.reason || item.result !== undefined;
+              return !isSpatialFailureReason(item.reason) || item.result !== undefined;
             const geometry = item.result;
             return item.state !== "completed" || item.reason !== undefined || !isRecord(geometry) ||
               geometry.schemaVersion !== "spatial-host-r1" || geometry.documentType !== "result" || geometry.status !== "completed" ||

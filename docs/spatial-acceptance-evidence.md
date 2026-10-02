@@ -63,7 +63,11 @@ dotnet test bindings/dotnet/tests/Gua.Selector.Tests/Gua.Selector.Tests.csproj -
 ```
 
 Initial local results: all workspace type checks passed; 60 MCP tests passed
-(26 spatial cases); 34 native-hosted spatial transport tests passed. Local
+(26 spatial cases); 34 native-hosted spatial transport tests passed. GitHub
+review then identified acceptance of arbitrary nonempty failure reasons. The
+client now uses the protocol-generated safe reason enum; two additional actual
+TypeScript/MCP reply cases require rejection without forwarding backend text.
+These focused unsafe-reason tests and the acceptance-helper test pass. Local
 logs are `artifacts/typescript-check.log`, `artifacts/spatial-mcp-tests.log`,
 `artifacts/spatial-native-tests.log`, `artifacts/pre-fix-detection.log`.
 The portable native CI lane now builds the MCP CLI and shared Trace viewer

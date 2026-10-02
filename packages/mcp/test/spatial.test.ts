@@ -102,6 +102,8 @@ const violations: [string, (r: any) => void, string][] = [
   ["inner ID", r => { r.items[0].result.requestId++; }, "Invalid spatial terminal result"],
   ["nonterminal", r => { r.items[1].state = "queued"; }, "Invalid spatial terminal result"],
   ["missing failure reason", r => { delete r.items[1].reason; }, "Invalid spatial terminal result"],
+  ["unsafe notExecuted reason", r => { r.items[1].reason = "backend error: private-wall"; }, "Invalid spatial terminal result"],
+  ["unsafe failed reason", r => { r.items[1].state = "failed"; r.items[1].reason = "backend error: private-wall"; }, "Invalid spatial terminal result"],
   ["failed geometry", r => { r.items[1].result = r.items[0].result; }, "Invalid spatial terminal result"],
 ];
 for (const [name, mutate, error] of violations) test(`invalid ${name} is rejected on TypeScript and MCP paths`, async () => {
