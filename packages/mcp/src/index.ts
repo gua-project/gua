@@ -108,6 +108,29 @@ type ToolResult = {
 };
 
 interface GuaActionReceipt { requestId: number }
+type ActionFailureStage = "before_send" | "awaiting_receipt" | "awaiting_completion" | "awaiting_observation";
+
+export class GuaActionOutcomeError extends Error {
+  constructor(
+    readonly stage: ActionFailureStage,
+    readonly requestSent: boolean,
+    readonly requestId?: number,
+    readonly bridgeCommandId?: number,
+  ) {
+    super(requestSent
+      ? "Gua action was sent, but completion could not be confirmed. Do not retry automatically."
+      : "Gua action was not sent to the bridge.");
+  }
+
+  diagnostics(): Record<string, unknown> {
+    return compactResult({ error: this.message,
+      outcome: this.requestSent ? "completion_unconfirmed" : "not_sent",
+      stage: this.stage, requestSent: this.requestSent,
+      requestId: this.requestId, bridgeCommandId: this.bridgeCommandId });
+  }
+}
+
+class BridgeRejectionError extends Error {}
 interface GuaActionEvent {
   requestId: number;
   action: number;
@@ -505,6 +528,7 @@ async function callTool(params: unknown, bridge: GuaBridgeClient, automation: Gu
     const result = await executeTool(name, isRecord(params.arguments) ? params.arguments : {}, bridge, automation, signal);
     return textResult(result);
   } catch (error) {
+    if (error instanceof GuaActionOutcomeError) return textResult(error.diagnostics(), true);
     return textResult({ error: (error as Error).message }, true);
   }
 }
@@ -798,14 +822,36 @@ async function performAndRecord(
   timeoutMs = 10000,
   signal?: AbortSignal,
 ): Promise<{ ok: true; requestId?: number; completion?: GuaActionEvent }> {
-  const before = await bridge.getUiTree();
+  let before: GuaUiTree;
+  try { before = await bridge.getUiTree(); }
+  catch (error) {
+    if (error instanceof RpcFailure) throw error;
+    throw new GuaActionOutcomeError("before_send", false);
+  }
   throwIfAborted(signal);
-  const receipt = await bridge.performAction(input);
-  const completion = receipt === null ? undefined : await bridge.waitForAction(receipt.requestId, timeoutMs);
+  let sent: { socket: WebSocket; id: number } | undefined;
+  let receipt: GuaActionReceipt | null;
+  try {
+    receipt = await bridge.performAction(input, (socket, id) => { sent = { socket, id }; });
+  } catch (error) {
+    if (error instanceof BridgeRejectionError || error instanceof RpcFailure) throw error;
+    throw new GuaActionOutcomeError(sent ? "awaiting_receipt" : "before_send", sent !== undefined, undefined, sent?.id);
+  }
+  if (receipt !== null && (!isRecord(receipt) || !Number.isSafeInteger(receipt.requestId) || receipt.requestId <= 0)) {
+    throw new GuaActionOutcomeError("awaiting_receipt", true, undefined, sent?.id);
+  }
+  let completion: GuaActionEvent | undefined;
+  let after: GuaUiTree | undefined;
+  try {
+    completion = receipt === null ? undefined : await bridge.waitForAction(receipt.requestId, timeoutMs, sent?.socket);
+    if (completion === undefined) after = await bridge.getUiTree(sent?.socket);
+  } catch (error) {
+    if (error instanceof RpcFailure) throw error;
+    throw new GuaActionOutcomeError(receipt === null ? "awaiting_observation" : "awaiting_completion", true, receipt?.requestId, sent?.id);
+  }
   if (completion?.succeeded === false) {
     throw new Error(`Gua action ${input.action} failed with error ${completion.error}.`);
   }
-  const after = completion === undefined ? await bridge.getUiTree() : undefined;
   automation?.recordAction({
     action: input.action,
     requestId: receipt?.requestId,
@@ -1075,8 +1121,8 @@ export class GuaBridgeClient {
   ) {
   }
 
-  async getUiTree(): Promise<GuaUiTree> {
-    return this.request<GuaUiTree>({ type: "get_ui_tree" });
+  async getUiTree(ownerSocket?: WebSocket): Promise<GuaUiTree> {
+    return this.request<GuaUiTree>({ type: "get_ui_tree" }, this.requestTimeoutMs, undefined, ownerSocket);
   }
 
   async getWorldObjectTree(): Promise<GuaWorldObjectTree> {
@@ -1195,7 +1241,7 @@ export class GuaBridgeClient {
     throw new Error("Timed out waiting for Gua clock run_for host completion.");
   }
 
-  async performAction(input: SemanticActionInput): Promise<GuaActionReceipt | null> {
+  async performAction(input: SemanticActionInput, onSent?: (socket: WebSocket, id: number) => void): Promise<GuaActionReceipt | null> {
     const type = actionCommandType(input.action);
     return this.request<GuaActionReceipt | null>(compactResult({
       type,
@@ -1208,15 +1254,22 @@ export class GuaBridgeClient {
       deltaY: input.deltaY,
       scrollUnit: input.scrollUnit,
       sensitive: input.sensitive,
-    }) as BridgeCommandInput);
+    }) as BridgeCommandInput, this.requestTimeoutMs, undefined, undefined, onSent);
   }
 
-  async waitForAction(requestId: number, timeoutMs: number): Promise<GuaActionEvent> {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt <= timeoutMs) {
-      const event = await this.request<GuaActionEvent | null>({ type: "poll_events", requestId });
-      if (event !== null) return event;
-      await sleep(25);
+  async waitForAction(requestId: number, timeoutMs: number, ownerSocket = this.socket): Promise<GuaActionEvent> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (ownerSocket === null) throw new Error("Gua action connection is inactive.");
+      const event = await this.request<GuaActionEvent | null>({ type: "poll_events", requestId },
+        Math.min(this.requestTimeoutMs, deadline - Date.now()), undefined, ownerSocket);
+      if (event !== null) {
+        if (!isRecord(event) || event.requestId !== requestId || typeof event.succeeded !== "boolean") {
+          throw new Error("Invalid correlated Gua action completion.");
+        }
+        return event;
+      }
+      await sleep(Math.min(25, Math.max(0, deadline - Date.now())));
     }
     throw new Error(`Timed out waiting for Gua action request ${requestId}.`);
   }
@@ -1250,11 +1303,11 @@ export class GuaBridgeClient {
   }
 
   private async request<T>(command: BridgeCommandInput, timeoutMs = this.requestTimeoutMs,
-    signal?: AbortSignal, ownerSocket?: WebSocket): Promise<T> {
+    signal?: AbortSignal, ownerSocket?: WebSocket, onSent?: (socket: WebSocket, id: number) => void): Promise<T> {
     throwIfAborted(signal);
     const deadline = Date.now() + timeoutMs;
     const socket = ownerSocket ?? await this.connectForRequest(command.type, timeoutMs, signal);
-    if (ownerSocket && (socket !== this.socket || socket.readyState !== WebSocket.OPEN)) throw new Error("Observe subscription belongs to an inactive connection.");
+    if (ownerSocket && (socket !== this.socket || socket.readyState !== WebSocket.OPEN)) throw new Error("Gua request belongs to an inactive connection.");
     throwIfAborted(signal);
     const remainingTimeoutMs = deadline - Date.now();
     if (remainingTimeoutMs <= 0) {
@@ -1295,7 +1348,16 @@ export class GuaBridgeClient {
       });
 
       signal?.addEventListener("abort", aborted, { once: true });
-      socket.send(JSON.stringify(payload));
+      try {
+        if (socket.readyState !== WebSocket.OPEN) throw new Error("Gua bridge connection is inactive.");
+        socket.send(JSON.stringify(payload));
+        onSent?.(socket, id);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        this.pending.delete(id);
+        signal?.removeEventListener("abort", aborted);
+        reject(error);
+      }
     });
   }
 
@@ -1440,7 +1502,7 @@ export class GuaBridgeClient {
     } else if (response.ok) {
       pending.resolve(response.result);
     } else {
-      pending.reject(new Error(response.error));
+      pending.reject(new BridgeRejectionError(response.error));
     }
   }
 

@@ -33,6 +33,28 @@ AI clients can inspect the tree and invoke all protocol v1 semantic actions:
 When the bridge returns a `requestId`, action tools poll the correlated host
 completion event. Enqueue acceptance alone is not reported as completion.
 
+Semantic action tool failures retain `isError: true`. Transport failures also
+include `outcome`, `stage`, and `requestSent` in the JSON text content:
+
+- `not_sent` / `before_send`: the action was not submitted to the WebSocket,
+  including failure to connect during the UI preflight.
+- `completion_unconfirmed` / `awaiting_receipt`: the action was submitted, but
+  its acceptance response was not obtained. `bridgeCommandId` identifies the
+  submitted bridge command; a host `requestId` is not invented.
+- `completion_unconfirmed` / `awaiting_completion`: acceptance supplied a
+  `requestId`, but the correlated completion could not be obtained. Both IDs
+  are retained when available.
+- `completion_unconfirmed` / `awaiting_observation`: a legacy bridge returned
+  a null receipt, but the subsequent UI observation could not be obtained.
+
+Submission means the WebSocket send returned; it does not prove host receipt or
+execution. Completion polling and legacy post-action observation stay on that
+connection and stop on disconnect. A normal close, game log, or process exit
+code (including zero) does not confirm the operation. Do not automatically
+retry an unconfirmed action, particularly an exit action. Successful correlated
+completion, explicit bridge rejection, and the legacy null-receipt success
+format remain compatible.
+
 World tools are read-only and use the observation profile fixed by the host. Set
 `GUA_OBSERVATION_PROFILE=player` on the native host for player-facing MCP use;
 tool arguments cannot elevate it to debug. `find_world_objects` accepts ID,
