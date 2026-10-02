@@ -21,6 +21,11 @@ public sealed record GuaReplayResult(IReadOnlyList<GuaReplayStepResult> Steps);
 
 public static class GuaReplayer
 {
+    public static Task<GuaTimedSegmentResult> ReplayTimedSegmentAsync(IGuaTimedSegmentHost host,
+        GuaTimedSegment segment, Func<string, System.Text.Json.JsonElement?>? secretResolver = null,
+        CancellationToken cancellationToken = default) =>
+        GuaTimedSegmentReplay.ReplayAsync(host, segment, secretResolver, cancellationToken);
+
     public static async Task<GuaReplayResult> ReplayAsync(IGuaContext context, GuaRecording recording,
         GuaReplayOptions? options = null, CancellationToken cancellationToken = default)
     {

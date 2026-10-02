@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/timed-segment-v1.schema.json",
+  "title": "Timed Segment v1 (additive Recording extension)",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "durationMilliseconds", "maxLatenessMilliseconds", "executionTimeoutMilliseconds", "cleanupTimeoutMilliseconds", "inputs"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "durationMilliseconds": { "type": "integer", "minimum": 0, "maximum": 60000 },
+    "maxLatenessMilliseconds": { "type": "integer", "minimum": 0, "maximum": 60000 },
+    "executionTimeoutMilliseconds": { "type": "integer", "minimum": 1, "maximum": 60000 },
+    "cleanupTimeoutMilliseconds": { "type": "integer", "minimum": 1, "maximum": 60000 },
+    "clock": { "enum": [0, 1], "description": "0 realtime (default), 1 simulation with explicit host scope" },
+    "requireApplicationTimes": { "type": "boolean" },
+    "requireSameTickApplication": { "type": "boolean" },
+    "timingProvenance": { "enum": ["planned", "legacy-unknown"] },
+    "inputs": { "type": "array", "minItems": 1, "maxItems": 1000, "items": { "$ref": "#/$defs/input" } }
+  },
+  "$defs": {
+    "input": {
+      "type": "object", "additionalProperties": false,
+      "required": ["offsetMilliseconds", "kind", "operation", "target"],
+      "properties": {
+        "offsetMilliseconds": { "type": "integer", "minimum": 0, "maximum": 60000 },
+        "kind": { "enum": [1, 2, 3, 4, 5, 6], "description": "Semantic, keyboard, pointer, gamepad, text, cleanup (C ABI enum)" },
+        "operation": { "enum": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "description": "Press, set, release, down, up, absolute, delta, wheel, reset, release-all (C ABI enum)" },
+        "target": { "type": "string" }, "value": {},
+        "leaseMilliseconds": { "type": "integer", "minimum": 0, "maximum": 60000 },
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "deviceIndex": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "sensitive": { "type": "boolean" }, "secretKey": { "type": ["string", "null"], "minLength": 1 }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": 1 } }, "required": ["kind"] }, "then": { "properties": { "operation": { "enum": [1, 2, 3] }, "target": { "minLength": 1 } } } },
+        { "if": { "properties": { "kind": { "const": 2 } }, "required": ["kind"] }, "then": { "properties": { "operation": { "enum": [1, 4, 5] }, "target": { "minLength": 1 } } } },
+        { "if": { "properties": { "kind": { "const": 3 } }, "required": ["kind"] }, "then": { "properties": { "operation": { "enum": [4, 5, 6, 7, 8] }, "target": { "minLength": 1 } } } },
+        { "if": { "properties": { "kind": { "const": 4 } }, "required": ["kind"] }, "then": { "properties": { "operation": { "enum": [2, 4, 5, 9] } } } },
+        { "if": { "properties": { "kind": { "const": 5 } }, "required": ["kind"] }, "then": { "properties": { "operation": { "const": 2 } } } },
+        { "if": { "properties": { "kind": { "const": 6 } }, "required": ["kind"] }, "then": { "properties": { "operation": { "const": 10 } } } },
+        { "if": { "properties": { "sensitive": { "const": true } }, "required": ["sensitive"] },
+          "then": { "required": ["secretKey"], "properties": { "secretKey": { "type": "string", "minLength": 1 }, "value": { "type": "null" }, "kind": { "enum": [1, 5] }, "operation": { "const": 2 } } },
+          "else": { "properties": { "secretKey": { "type": "null" } } } }
+      ]
+    }
+  }
+}

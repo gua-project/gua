@@ -86,9 +86,15 @@ public sealed class GuaGameInputSession : IDisposable
         bool sensitive = false) => Send(kind, operation, target, value, lease, x, y, deviceIndex, sensitive, false);
     public ulong Send(GuaGameInputKind kind, GuaGameInputOperation operation, string target,
         object? value, TimeSpan? lease, double x, double y, int deviceIndex, bool sensitive, bool confirmed)
+        => Send(kind, operation, target, value, lease, x, y, deviceIndex, sensitive, confirmed, null);
+    /// <summary>Run a client deadline/cancellation guard after marshalling and immediately before
+    /// native enqueue. Throwing from the guard prevents dispatch.</summary>
+    public ulong Send(GuaGameInputKind kind, GuaGameInputOperation operation, string target,
+        object? value, TimeSpan? lease, double x, double y, int deviceIndex, bool sensitive, bool confirmed,
+        Action? beforeEnqueue)
     {
         var owner = runtime ?? throw new ObjectDisposedException(nameof(GuaGameInputSession));
-        return owner.EnqueueGameInput(OwnerId, ObservationProfile, kind, operation, target, value, lease, x, y, deviceIndex, sensitive, confirmed);
+        return owner.EnqueueGameInput(OwnerId, ObservationProfile, kind, operation, target, value, lease, x, y, deviceIndex, sensitive, confirmed, beforeEnqueue);
     }
     public string GetStateJson() => (runtime ?? throw new ObjectDisposedException(nameof(GuaGameInputSession))).GetGameInputStateJson(OwnerId);
     public GuaGameInputResult PollResult(ulong requestId) =>
@@ -215,7 +221,8 @@ public sealed partial class GuaRuntime
 
     internal ulong EnqueueGameInput(ulong ownerId, GuaObservationProfile observationProfile,
         GuaGameInputKind kind, GuaGameInputOperation operation,
-        string target, object? value, TimeSpan? lease, double x, double y, int deviceIndex, bool sensitive, bool confirmed)
+        string target, object? value, TimeSpan? lease, double x, double y, int deviceIndex, bool sensitive, bool confirmed,
+        Action? beforeEnqueue = null)
     {
         ThrowIfDisposed();
         var leaseMs = lease is null ? 5000 : checked((uint)lease.Value.TotalMilliseconds);
@@ -234,6 +241,7 @@ public sealed partial class GuaRuntime
                 X = x, Y = y, LeaseMs = leaseMs, DeviceIndex = deviceIndex, Sensitive = sensitive ? 1 : 0,
                 Confirmed = confirmed ? 1 : 0,
             };
+            beforeEnqueue?.Invoke();
             var result = Native.gua_runtime_enqueue_game_input_for_profile_v2(_handle, in request,
                 (int)observationProfile, out var requestId);
             if (result != 1) throw new InvalidOperationException($"Game input request was rejected ({result}).");

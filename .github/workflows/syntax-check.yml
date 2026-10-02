@@ -416,7 +416,7 @@ jobs:
       - name: Build native runtime for managed clock tests
         run: |
           cmake -S . -B build/dotnet-native -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_GODOT=OFF
-          cmake --build build/dotnet-native --config Release --target gua --parallel
+          cmake --build build/dotnet-native --config Release --target gua gua-runtime --parallel
 
       - name: Restore
         run: |
@@ -471,6 +471,7 @@ jobs:
         run: dotnet test bindings/dotnet/tests/Gua.Visual.Tests/Gua.Visual.Tests.csproj --configuration Release --no-restore
         env:
           GUA_NATIVE_DIR: ${{ github.workspace }}/build/dotnet-native/native/gua-core
+          GUA_RUNTIME_NATIVE_DIR: ${{ github.workspace }}/build/dotnet-native/native/gua-runtime
 
   typescript:
     name: TypeScript / tsc

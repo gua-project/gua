@@ -290,6 +290,12 @@ compatibility API. Screenshots can contain rendered secrets and are not redacted
 
 ## Visual comparison and operation recording v2
 
+The additive [Timed Segment v1](timed-segment-v1.md) extension fixes OPEN-07 and
+defines a finite common-origin send schedule separately from legacy sequential
+Replay. `timed-segment-v1.schema.json` describes its plan. The .NET Recording
+package provides the executor and an owner-scoped local runtime game-input host;
+unproven ordering, simulation and strict host application timing are rejected.
+
 Visual comparison is an opt-in consumer of the existing PNG screenshot payload;
 semantic assertions remain the primary test path. Baselines use an explicit test
 name and variant, are updated only by an API option or `GUA_UPDATE_BASELINES=1`,

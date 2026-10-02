@@ -50,6 +50,12 @@ Neither `gui-mcp` nor WebMCP tool schemas accept an observation-profile override
 
 ## Recording and replay
 
+The existing replay tool is sequential: completion time is added before each
+recorded delay. It does not advertise Timed Segment, strict application time or
+same-tick application. The additive .NET Recording Timed Segment API uses a
+common-origin send schedule and an explicitly ordered, owner-scoped host path;
+see [the timing contract](../../protocol/specs/timed-segment-v1.md).
+
 `start_recording` records subsequent semantic action tools. `stop_recording`
 returns a `recording.schema.json` v1 document, and `save_recording` writes the
 last completed recording under `<artifact-dir>/recordings`.

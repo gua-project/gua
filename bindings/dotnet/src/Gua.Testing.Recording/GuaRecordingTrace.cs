@@ -7,6 +7,23 @@ namespace Gua.Testing.Recording;
 /// <summary>Recording remains a separate format. Trace records non-replayable failures separately.</summary>
 public static class GuaRecordingTrace
 {
+    /// <summary>Attach values-free timing evidence without executing Replay or guessing application times.</summary>
+    public static bool AttachTimedResult(GuaTraceSession trace, string stepId, GuaTimedSegmentResult result,
+        GuaObservationProfile profile = GuaObservationProfile.Debug) =>
+        GuaTraceCapture.JsonAttachment(trace, stepId, "gua.timed-segment-result.v1", () =>
+            JsonSerializer.Serialize(new { schemaVersion = 1, result = new
+            {
+                result.Outcome, result.CleanupSucceeded, result.NeutralConfirmed, result.FailureCode,
+                result.Clock, result.SimulationScope, result.MaxLatenessMilliseconds,
+                result.ExecutionTimeoutMilliseconds, result.CleanupTimeoutMilliseconds, result.ApplicationTimingConfirmed,
+                inputs = result.Inputs.Select(input => new
+                {
+                    input.Index, input.ScheduledMilliseconds, input.SentMilliseconds,
+                    requestId = input.RequestId?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    input.ResultReceivedMilliseconds, input.HostAppliedMilliseconds, input.Succeeded, input.ErrorCode,
+                }),
+            } }, new JsonSerializerOptions(JsonSerializerDefaults.Web)), profile);
+
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
