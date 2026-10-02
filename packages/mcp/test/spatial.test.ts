@@ -57,7 +57,15 @@ async function mcpCall(f: ReturnType<typeof peer>, cancel = false) {
       child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 20 } }) + "\n");
     }
     const rpc = await response;
+    clearTimeout(timer);
     expect(responses.filter(r => r.id === 20)).toHaveLength(1);
+    // Observe production cleanup while MCP is still alive. Killing the child
+    // first would make a missing client close indistinguishable from success.
+    if (rpc.result?.isError) {
+      await Promise.race([f.ownerClosed, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("MCP did not close its failed spatial owner")), 1000);
+      })]);
+    }
     return rpc;
   } finally { clearTimeout(timer); lines.close(); child.kill(); }
 }

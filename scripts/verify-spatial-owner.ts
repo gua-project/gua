@@ -10,6 +10,8 @@ const [url, route, fault] = process.argv.slice(2);
 const batch = fixture.valid.find(v => v.id === "batch")!.json as GuaSpatialBatch;
 const commands: any[] = []; let connections = 0;
 let pollReady!: () => void, fire!: () => void;
+let ownerClosed!: () => void;
+const closed = new Promise<void>(r => { ownerClosed = r; });
 const ready = new Promise<void>(r => { pollReady = r; });
 const fired = new Promise<void>(r => { fire = r; });
 const input = createInterface({ input: process.stdin }); input.once("line", () => fire());
@@ -25,7 +27,7 @@ const proxy = Bun.serve<{ upstream: WebSocket; pending: string[] }>({ hostname: 
       connections++; const upstream = socket.data.upstream;
       upstream.addEventListener("open", () => { for (const command of socket.data.pending) upstream.send(command); socket.data.pending = []; });
       upstream.addEventListener("message", event => { socket.send(String(event.data)); });
-      upstream.addEventListener("close", () => socket.close());
+      upstream.addEventListener("close", () => { ownerClosed(); socket.close(); });
       upstream.addEventListener("error", () => socket.close());
     },
     close(socket) { socket.data.upstream.close(); },
@@ -48,6 +50,14 @@ const proxy = Bun.serve<{ upstream: WebSocket; pending: string[] }>({ hostname: 
 });
 const proxyUrl = `ws://127.0.0.1:${proxy.port}`;
 const expected = fault === "disconnect" ? "connection closed" : fault === "correlation" ? "Spatial correlation mismatch" : fault === "cancel" ? "MCP request was cancelled" : "Timed out waiting for Gua bridge command";
+async function requireOwnerClose() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([closed, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("Production spatial failure did not close native owner")), 1000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 try {
   if (route === "typescript") {
     const client = new GuaBridgeClient(proxyUrl, 2000); const abort = new AbortController();
@@ -55,6 +65,7 @@ try {
       const response = client.spatialBatch(batch, abort.signal).then(() => null, error => error);
       await ready; await fired; if (fault === "cancel") abort.abort();
       expect((await response)?.message).toContain(expected);
+      await requireOwnerClose();
     } finally { client.close(); }
   } else {
     const child = spawn(process.execPath, ["packages/mcp/dist/cli.js", "mcp"], { env: { ...process.env, GUA_BRIDGE_URL: proxyUrl }, stdio: ["pipe", "pipe", "pipe"] });
@@ -70,6 +81,7 @@ try {
       if (fault === "cancel") child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 10 } }) + "\n");
       const rpc = await response;
       expect(rpc.result.isError).toBe(true); expect(JSON.parse(rpc.result.content[0].text).error).toContain(expected);
+      await requireOwnerClose();
     } finally { clearTimeout(timer); lines.close(); child.kill(); }
   }
   expect(commands.filter(c => c.type === "query_spatial_batch")).toHaveLength(1);

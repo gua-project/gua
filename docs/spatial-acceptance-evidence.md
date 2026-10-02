@@ -37,6 +37,18 @@ The modified client rejects both. This demonstrates a consumer validation gap,
 not a claim that the native host or an engine emitted those replies. Deliberate
 invalid fixtures and baseline copies are not shipped product changes.
 
+The initial independent audit found that native-owner assertions ran after
+forced driver teardown, which could mask a missing production close. The driver
+now requires upstream closure before manual client close, MCP kill or proxy
+teardown; MCP peer checks likewise require owner closure while MCP is alive.
+A disposable mutation removing `spatialBatch`'s failure-path `socket.close()`
+now fails the MCP peer check with `MCP did not close its failed spatial owner`,
+and both TypeScript/native and built-MCP/native cancellation cases fail with
+`Production spatial failure did not close native owner`. The selected fault
+was triggered after native dispatch; watchdog/environment failures are not used
+as detection evidence. Logs: `artifacts/no-close-mutation-peer.log` and
+`artifacts/no-close-mutation-native.log`. The submitted close remains intact.
+
 Focused commands (from repository root, dependencies installed and native env
 directories set):
 
