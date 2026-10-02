@@ -67,7 +67,13 @@ Initial local results: all workspace type checks passed; 60 MCP tests passed
 review then identified acceptance of arbitrary nonempty failure reasons. The
 client now uses the protocol-generated safe reason enum; two additional actual
 TypeScript/MCP reply cases require rejection without forwarding backend text.
-These focused unsafe-reason tests and the acceptance-helper test pass. Local
+These focused unsafe-reason tests and the acceptance-helper test pass. A second
+supported GitHub finding concerned unknown diagnostic fields in terminal items.
+The client and route verifier now require the strict four-field terminal item
+and batch envelope shapes; four TS/MCP extra-field regressions reject replies
+with identifiable diagnostic text instead of forwarding them. This validates
+terminal envelopes, not every physics fact or cross-path confidentiality gate.
+Local
 logs are `artifacts/typescript-check.log`, `artifacts/spatial-mcp-tests.log`,
 `artifacts/spatial-native-tests.log`, `artifacts/pre-fix-detection.log`.
 The portable native CI lane now builds the MCP CLI and shared Trace viewer

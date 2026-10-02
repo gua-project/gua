@@ -5,13 +5,13 @@ import type { GuaSpatialBatch, GuaSpatialBatchResult } from "gua-world-tools";
 export function assertSpatialRouteResult(batch: GuaSpatialBatch, value: unknown): asserts value is GuaSpatialBatchResult {
   const result = value as GuaSpatialBatchResult | null;
   if (!result || result.schemaVersion !== "spatial-host-r1" || result.documentType !== "batchResult" ||
-      result.batchId !== batch.batchId || !Array.isArray(result.items) || result.items.length !== batch.queries.length ||
+      result.batchId !== batch.batchId || Object.keys(result).length !== 4 || !Array.isArray(result.items) || result.items.length !== batch.queries.length ||
       batch.queries.length !== 3) throw new Error("Spatial route batch count/correlation mismatch.");
   const expected = ["hit", "detected", "blocked"];
   for (const [index, item] of result.items.entries()) {
     const query = batch.queries[index]!;
     const geometry = item?.result;
-    if (!item || item.requestId !== query.requestId || item.queryId !== query.queryId ||
+    if (!item || Object.keys(item).length !== 4 || item.requestId !== query.requestId || item.queryId !== query.queryId ||
         item.state !== "completed" || item.reason !== undefined || !geometry ||
         geometry.schemaVersion !== "spatial-host-r1" || geometry.documentType !== "result" ||
         geometry.requestId !== query.requestId || geometry.queryId !== query.queryId ||

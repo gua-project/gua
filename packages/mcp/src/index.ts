@@ -1080,6 +1080,9 @@ export class GuaBridgeClient {
             throw new Error("Spatial correlation mismatch.");
           if (result.items.some((item, index) => {
             const query = batch.queries[index]!;
+            // Both protocol terminal variants have exactly four fields. Do
+            // not forward arbitrary backend diagnostics from a faulty peer.
+            if (Object.keys(item).length !== 4) return true;
             if (item.state === "failed" || item.state === "notExecuted")
               return !isSpatialFailureReason(item.reason) || item.result !== undefined;
             const geometry = item.result;
@@ -1088,7 +1091,7 @@ export class GuaBridgeClient {
               geometry.requestId !== query.requestId || geometry.queryId !== query.queryId ||
               geometry.sessionEpoch !== query.sessionEpoch || geometry.spaceId !== query.spaceId || geometry.spaceEpoch !== query.spaceEpoch ||
               geometry.kind !== query.kind;
-          })) throw new Error("Invalid spatial terminal result.");
+          }) || Object.keys(result).length !== 4) throw new Error("Invalid spatial terminal result.");
           return result;
         }
         await new Promise(resolve => setTimeout(resolve, 10));
