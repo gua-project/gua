@@ -46,7 +46,8 @@ if (!GuaDistribution.ValidateJson("game-input-action-search-v2.schema.json", act
     GuaDistribution.ValidateJson("game-input-action-search-v2.schema.json", actionSearch.Replace("\"number\"", "\"invalid\"")))
     throw new Exception("Offline packaged schema reference closure failed.");
 
-const string gameInputRecording = """{"schemaVersion":2,"steps":[{"action":"game_input","operation":"key_down","arguments":{"code":"KeyW"},"relativeMilliseconds":0,"sensitive":false},{"action":"game_input","operation":"pointer_wheel","arguments":{"deltaX":0,"deltaY":20},"relativeMilliseconds":100,"sensitive":false},{"action":"game_input","operation":"key_up","arguments":{"code":"KeyW"},"relativeMilliseconds":300,"sensitive":false}]}""";
+const string gameInputRecording = """{"schemaVersion":2,"steps":[{"action":"game_input","operation":"key_down","arguments":{"code":"KeyW"},"relativeMilliseconds":0,"preRevision":0,"postRevision":1,"sensitive":false},{"action":"game_input","operation":"pointer_wheel","arguments":{"deltaX":0,"deltaY":20},"relativeMilliseconds":100,"preRevision":1,"postRevision":2,"sensitive":false},{"action":"game_input","operation":"key_up","arguments":{"code":"KeyW"},"relativeMilliseconds":300,"preRevision":2,"postRevision":3,"sensitive":false}]}""";
+if (!GuaDistribution.ValidateJson("recording.schema.json", gameInputRecording)) throw new Exception("Recording v2 import fixture violates the packaged schema.");
 var segment = GuaTimedSegmentImport.FromRecording(gameInputRecording, 300, 20, 1000, 100);
 var segmentPath = Path.Combine(output, "timed-segment-roundtrip.json");
 GuaTimedSegmentFile.Save(segmentPath, segment);
