@@ -118,8 +118,12 @@ public sealed class SpatialTransportTests
         using var second=new GuaWebSocketContext($"ws://127.0.0.1:{port}");
         var version=second.GetVersion();
         Assert.That(version.Capabilities,Does.Not.Contain("spatial_read_r1"));
+        using var diagnostics=System.Text.Json.JsonDocument.Parse(second.GetDiagnosticsJson());
+        Assert.That(diagnostics.RootElement.GetProperty("version").GetProperty("capabilities").EnumerateArray().Select(x=>x.GetString()),Does.Not.Contain("spatial_read_r1"));
         Assert.That(Assert.Catch<InvalidOperationException>(()=>second.GetSpatialInfo())!.Message,Is.EqualTo("unsupported"));
         Assert.That(first.GetVersion().Capabilities,Does.Contain("spatial_read_r1"));
+        using var authorizedDiagnostics=System.Text.Json.JsonDocument.Parse(first.GetDiagnosticsJson());
+        Assert.That(authorizedDiagnostics.RootElement.GetProperty("version").GetProperty("capabilities").EnumerateArray().Select(x=>x.GetString()),Does.Contain("spatial_read_r1"));
     }
     sealed class StalledPeer : IDisposable
     {

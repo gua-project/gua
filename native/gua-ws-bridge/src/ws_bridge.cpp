@@ -1406,6 +1406,7 @@ private:
                 return result.ok ? ok_response(command.id, result.json) : error_response(command.id, result.error);
             }
             if (command.type == "get_diagnostics") {
+                if(handlers_.get_connection_diagnostics_json) return ok_response(command.id,handlers_.get_connection_diagnostics_json(spatial_client_id));
                 return handlers_.get_diagnostics_json
                     ? ok_response(command.id, handlers_.get_diagnostics_json())
                     : error_response(command.id, "get_diagnostics is not supported by this bridge");

@@ -353,7 +353,7 @@ const char* screenshot_unavailable_name(int result)
     return "unsupported";
 }
 
-std::string copy_diagnostics_json(gua_runtime_t* runtime)
+std::string copy_diagnostics_json(gua_runtime_t* runtime, std::optional<uint64_t> spatial_client = std::nullopt)
 {
     const std::lock_guard lock(runtime->context_mutex);
     const int size = gua_copy_diagnostics_json_for_profile(runtime->context, runtime->observation_profile, nullptr, 0);
@@ -361,7 +361,7 @@ std::string copy_diagnostics_json(gua_runtime_t* runtime)
     gua_copy_diagnostics_json_for_profile(runtime->context, runtime->observation_profile, json.data(), size);
     json.resize(static_cast<std::size_t>(size - 1));
     const std::string unfiltered_version = core_version_json();
-    const std::string decorated_version = decorate_version_json(runtime, unfiltered_version);
+    const std::string decorated_version = decorate_version_json(runtime, unfiltered_version, spatial_client);
     const std::string marker = ",\"version\":" + unfiltered_version + ",\"uiTree\":";
     const auto marker_position = json.rfind(marker);
     if (marker_position != std::string::npos) {
@@ -1715,6 +1715,9 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
         },
         .get_diagnostics_json = [runtime] {
             return copy_diagnostics_json(runtime);
+        },
+        .get_connection_diagnostics_json = [runtime](unsigned long long client) {
+            return copy_diagnostics_json(runtime,client);
         },
         .semantic_lint = [runtime](bool include_world) {
             const std::lock_guard lock(runtime->context_mutex);

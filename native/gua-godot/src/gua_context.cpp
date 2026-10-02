@@ -466,13 +466,11 @@ String GuaContext::get_player_ui_tree_json() const
 
 String GuaContext::get_version_json() const
 {
-    char json[2048] {};
-    gua_runtime_copy_version_json(runtime_, json, static_cast<int>(sizeof(json)));
-    return String::utf8(json);
+    return copy_runtime_json(runtime_, gua_runtime_copy_version_json);
 }
 
 int GuaContext::bind_spatial(const Ref<GuaSpatialHost>& host, uint64_t provider, const String& grants) {
-    if(host.is_null()) return GUA_SPATIAL_INVALID;
+    if(host.is_null() || !host->host_) return GUA_SPATIAL_INVALID;
     auto text=grants.utf8(); gua_spatial_error_t error{}; gua_spatial_document_t* doc=nullptr;
     gua_spatial_parse_options_v1_t options{sizeof(options),GUA_SPATIAL_OWNER};
     int status=gua_spatial_from_json(&options,{text.get_data(),static_cast<uint32_t>(text.length())},&doc,&error);
