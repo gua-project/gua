@@ -11,6 +11,7 @@ $addon = if ([System.IO.Path]::IsPathRooted($AddonDirectory)) {
     Join-Path $root $AddonDirectory
 }
 $descriptorPath = Join-Path $addon "gua.gdextension"
+& (Join-Path $PSScriptRoot 'verify-godot-addon-sources.ps1') -AddonDirectory $addon
 $descriptor = Get-Content -LiteralPath $descriptorPath -Raw
 
 $expectedLibraries = [ordered]@{

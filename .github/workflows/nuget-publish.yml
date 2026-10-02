@@ -160,31 +160,31 @@ jobs:
           GUA_NATIVE_DIR: ${{ github.workspace }}\artifacts\native\win-x64
 
       - name: Pack Gua.Core
-        run: dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
+        run: dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
 
       - name: Pack Gua.Testing
-        run: dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
 
       - name: Pack Gua.Testing.Godot
-        run: dotnet pack bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack bindings/dotnet/src/Gua.Testing.Godot/Gua.Testing.Godot.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
 
       - name: Pack Unity runtime and testing host
         run: |
-          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
-          dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }}
+          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
 
       - name: Verify native package contents
         shell: pwsh
         run: scripts/verify-dotnet-native-packages.ps1 -PackageDirectory artifacts/packages -Version '${{ steps.version.outputs.version }}'
 
       - name: Pack Gua.Testing.Snapshots
-        run: dotnet pack bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack bindings/dotnet/src/Gua.Testing.Snapshots/Gua.Testing.Snapshots.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
 
       - name: Pack Gua.Testing.Visual
-        run: dotnet pack bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack bindings/dotnet/src/Gua.Testing.Visual/Gua.Testing.Visual.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
 
       - name: Pack Gua.Testing.Recording
-        run: dotnet pack bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }}
+        run: dotnet pack bindings/dotnet/src/Gua.Testing.Recording/Gua.Testing.Recording.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
@@ -235,6 +235,17 @@ jobs:
           GUA_NATIVE_DIR: ""
           GUA_RUNTIME_NATIVE_DIR: ""
 
+      - name: Accept external archive, offline resources and .NET Tool
+        shell: pwsh
+        run: scripts/verify-distribution-consumer.ps1 -PackageDirectory artifacts/packages -Version '${{ needs.pack.outputs.version }}' -SourceCommit '${{ github.sha }}' -Rid '${{ matrix.rid }}' -OutputDirectory artifacts/distribution-evidence
+
+      - name: Upload distribution acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gua-distribution-${{ matrix.rid }}-${{ github.sha }}
+          path: artifacts/distribution-evidence
+          if-no-files-found: error
   publish:
     name: Publish .NET packages
     needs:

@@ -31,6 +31,13 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="../../../../protocol/schema/*.schema.json;../../../../protocol/schema/*.mjs" Pack="true" PackagePath="schemas/" />
+    <EmbeddedResource Include="../../../../protocol/schema/*.schema.json" LogicalName="Gua.Distribution.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../../../protocol/schema/trace-observe-semantics.mjs" LogicalName="Gua.Distribution.trace-observe-semantics.mjs" />
+    <EmbeddedResource Include="../../../../LICENSE" LogicalName="Gua.Distribution.LICENSE" />
+    <EmbeddedResource Include="../../../../artifacts/trace-viewer/version.json" LogicalName="Gua.Distribution.Viewer.version.json" Condition="Exists('../../../../artifacts/trace-viewer/version.json')" />
+    <EmbeddedResource Include="../../../../artifacts/trace-viewer/Viewer.LICENSES.txt" LogicalName="Gua.Distribution.Viewer.LICENSES.txt" Condition="Exists('../../../../artifacts/trace-viewer/Viewer.LICENSES.txt')" />
+    <None Include="../../../../artifacts/trace-viewer/Viewer.LICENSES.txt;../../../../LICENSE" Pack="true" PackagePath="trace/" Condition="Exists('../../../../artifacts/trace-viewer/Viewer.LICENSES.txt')" />
     <None Include="../../../../protocol/schema/spatial-r1.schema.json;../../../../protocol/schema/spatial-host-r1.schema.json" Pack="true" PackagePath="trace/" />
     <EmbeddedResource Include="../../../../protocol/schema/spatial-host-r1.schema.json" LogicalName="Gua.Trace.spatial-host-r1.schema.json" />
     <EmbeddedResource Include="../../../../artifacts/trace-viewer/viewer.js" LogicalName="Gua.Trace.Viewer.js"
@@ -52,5 +59,7 @@
   <Target Name="RequireTraceViewerForPack" BeforeTargets="GenerateNuspec">
     <Error Condition="!Exists('../../../../artifacts/trace-viewer/viewer.js')"
            Text="Build the version-pinned Trace Viewer before packaging: bun run --filter @gua/inspector build:trace" />
+    <Error Condition="!Exists('../../../../artifacts/trace-viewer/index.html') Or !Exists('../../../../artifacts/trace-viewer/version.json') Or !Exists('../../../../artifacts/trace-viewer/Viewer.LICENSES.txt')"
+           Text="The packaged Trace Viewer requires its HTML, provenance metadata and third-party license notices." />
   </Target>
 </Project>

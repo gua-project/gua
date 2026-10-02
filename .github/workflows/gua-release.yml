@@ -104,14 +104,7 @@ jobs:
           Remove-Item -Recurse -Force $assets, $godotRoot -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $assets, $godotTarget, (Join-Path $godotTarget "bin") | Out-Null
 
-          Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension" $godotTarget
-          Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension.uid" $godotTarget
-          Copy-Item "examples/godot-gdscript/addons/gua/gua_auto_adapter.gd" $godotTarget
-          Copy-Item "examples/godot-gdscript/addons/gua/gua_observe_owner.gd" $godotTarget
-          Copy-Item "examples/godot-gdscript/addons/gua/gua_webmcp_bridge.gd" $godotTarget
-          Copy-Item "examples/godot-gdscript/addons/gua/plugin.cfg" $godotTarget
-          Copy-Item "examples/godot-gdscript/addons/gua/plugin.gd" $godotTarget
-          Copy-Item "examples/godot-gdscript/addons/gua/plugin.gd.uid" $godotTarget
+          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $godotTarget
           Copy-Item "examples/godot-gdscript/addons/gua/bin/*.dll" (Join-Path $godotTarget "bin")
 
           Compress-Archive -Path (Join-Path $godotRoot "addons") -DestinationPath (Join-Path $assets "gua-godot-plugin-windows-v$version.zip") -CompressionLevel Optimal
@@ -434,14 +427,7 @@ jobs:
           New-Item -ItemType Directory -Force (Join-Path $root "unity"), (Join-Path $godot "bin") | Out-Null
           Copy-Item "build/web-release/native/gua-runtime/libgua_runtime.a" (Join-Path $root "unity")
           Copy-Item "build/web-release/native/gua-core/libgua-core.a" (Join-Path $root "unity")
-          Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension" $godot
-          Copy-Item "examples/godot-gdscript/addons/gua/gua.gdextension.uid" $godot
-          Copy-Item "examples/godot-gdscript/addons/gua/gua_auto_adapter.gd" $godot
-          Copy-Item "examples/godot-gdscript/addons/gua/gua_observe_owner.gd" $godot
-          Copy-Item "examples/godot-gdscript/addons/gua/gua_webmcp_bridge.gd" $godot
-          Copy-Item "examples/godot-gdscript/addons/gua/plugin.cfg" $godot
-          Copy-Item "examples/godot-gdscript/addons/gua/plugin.gd" $godot
-          Copy-Item "examples/godot-gdscript/addons/gua/plugin.gd.uid" $godot
+          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $godot
           Copy-Item "examples/godot-gdscript/addons/gua/bin/gua_godot.web.debug.wasm32.wasm" (Join-Path $godot "bin")
           Copy-Item "examples/godot-gdscript/addons/gua/bin/gua_godot.web.release.wasm32.wasm" (Join-Path $godot "bin")
           scripts/verify-godot-web-addon.ps1 -AddonDirectory $godot -RequireBinaries
@@ -484,9 +470,7 @@ jobs:
           $root = 'artifacts/godot-addon'
           $addon = Join-Path $root 'addons/gua'
           New-Item -ItemType Directory -Force (Join-Path $addon 'bin') | Out-Null
-          foreach ($file in 'gua.gdextension', 'gua.gdextension.uid', 'gua_auto_adapter.gd', 'gua_observe_owner.gd', 'gua_webmcp_bridge.gd', 'plugin.cfg', 'plugin.gd', 'plugin.gd.uid') {
-            Copy-Item "examples/godot-gdscript/addons/gua/$file" $addon
-          }
+          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $addon
           foreach ($pattern in 'gua_godot.windows.*', 'gua_godot.linux.*', 'gua_godot.macos.*', 'gua_godot.web.*') {
             $files = @(Get-ChildItem artifacts/download -Recurse -File -Filter $pattern)
             foreach ($file in $files) { Copy-Item $file.FullName (Join-Path $addon 'bin') -Force }
