@@ -104,7 +104,7 @@ public sealed class SpatialTransportTests
     {
         using var h=new Host(); using var client=h.Runtime.CreateSpatialClient(); using var batch=Doc(2);
         client.Enqueue(batch.ReadBatch()); h.Pump(); using var result=client.Poll(1)!; using var ad=client.Describe();
-        using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=Path.Combine(Path.GetTempPath(),"gua-spatial-transport",Guid.NewGuid().ToString("N")),
+        using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=Path.Combine(TestContext.CurrentContext.WorkDirectory,"gua-spatial-transport",Guid.NewGuid().ToString("N")),
             SavePolicy=GuaTraceSavePolicy.Always,MaxAttachmentBytes=limit});
         var step=trace.BeginStep(GuaTraceStepKind.Lifecycle,"spatial batch");
         Assert.That(GuaTraceCapture.SpatialBatch(trace,step,result,ad),Is.EqualTo(expectedStored));
@@ -130,7 +130,7 @@ public sealed class SpatialTransportTests
     {
         using var h=new Host(); using var client=h.Runtime.CreateSpatialClient(); using var batch=Doc(2);
         client.Enqueue(batch.ReadBatch()); h.Pump(); using var result=client.Poll(1)!; using var ad=client.Describe();
-        using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=Path.Combine(Path.GetTempPath(),"gua-spatial-transport",Guid.NewGuid().ToString("N")),
+        using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=Path.Combine(TestContext.CurrentContext.WorkDirectory,"gua-spatial-transport",Guid.NewGuid().ToString("N")),
             SavePolicy=GuaTraceSavePolicy.Always,CaptureMode=mode,MaxAttachmentBytes=1048576,
             MaxMemoryBytes=limit=="memory" ? 2048 : 16384,MaxArtifactBytes=limit=="artifact" ? 2048 : 16384,
             MaxQueueItems=limit=="items" ? 1 : 256});
