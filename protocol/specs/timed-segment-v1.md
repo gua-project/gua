@@ -41,6 +41,7 @@ local host は新しい `gua_runtime_enqueue_game_input_guarded_v2` と
 owner-lifetime health の `gua_runtime_get_game_input_owner_health` も必須である。
 承認時の sessionEpoch / profile ごとの Action Map revision を native context lock 内で
 enqueue と consume の両方に照合し、変化した要求は失敗 completion として返し適用しない。
+予定された semantic Release も承認時の map revision に束縛する。
 旧 enqueue API の互換挙動は変更しない。cleanup は従来の owner-scoped path で送信し、
 世代変更時にも自 owner の解除を試みる。対応 entry point が無ければ owner 作成前に拒否する。
 runtime の Player ceiling を host preflight と guarded consume で照合する。固定 raw input は
@@ -123,5 +124,12 @@ Succeeded の添付は適用時刻取得の有無にかかわらず、全 ordina
 cleanup / neutral 確認、null failure code を必要とする。宣言済み semantic Set の
 Button / Axis1D / Vector2 / Text の値型は protocol schema と file validator で一致させる。
 simulation の証拠は非空 scope を必要とし、終端 outcome と failure code の組合せも検証する。
+各 input の index は array の0-based位置と一致し、予定 offset は非減少とする。
+Succeeded の send / receipt は実時間 execution deadline より前でなければならない。
+これらの cross-field比較と request ID 重複は標準 JSON Schema だけで表現できないため、
+消費者は schema 検査に加えて意味検査を行う。参照実装の AttachTimedResult は両方を実行する。
+ID は native uint64 上限内の正の十進文字列。hostApplied / completion status は receipt を、
+receipt は send / ID / succeeded / errorCode を必要とする。未取得IDの send と未完了要求は
+部分実行の証拠として残せるが、completionを取得したようには記録しない。
 添付 schema は `timed-segment-result-v1.schema.json`。入力値を持たない独立 envelope で、
 旧 Recording ファイルや Trace の自動再生入力としては読まない。

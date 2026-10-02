@@ -19,6 +19,15 @@ public static class GuaRecordingTrace
         GuaObservationProfile profile = GuaObservationProfile.Debug) =>
         GuaTraceCapture.JsonAttachment(trace, stepId, "gua.timed-segment-result.v1", () =>
         {
+            for (var i = 0; i < result.Inputs.Count; i++)
+            {
+                var input = result.Inputs[i];
+                if (input.Index != i || i > 0 && input.ScheduledMilliseconds < result.Inputs[i - 1].ScheduledMilliseconds)
+                    throw new InvalidDataException("Invalid timed input sequence.");
+                if (result.Outcome == GuaSegmentOutcome.Succeeded &&
+                    (input.SentMilliseconds >= result.ExecutionTimeoutMilliseconds || input.ResultReceivedMilliseconds >= result.ExecutionTimeoutMilliseconds))
+                    throw new InvalidDataException("Successful input exceeded the execution deadline.");
+            }
             var requestIds = new HashSet<ulong>();
             if (result.Inputs.Any(input => input.RequestId is { } id && !requestIds.Add(id)))
                 throw new InvalidDataException("Duplicate timed input request correlation.");

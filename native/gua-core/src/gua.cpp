@@ -3815,7 +3815,7 @@ static int enqueue_game_input(gua_context_t* ctx,
     if (!validate_only && !ctx->game_input_owners.contains(descriptor->owner_id)) return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
     const auto revision = observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_game_input_revision : ctx->game_input_revision;
     if (guarded && (expected_session_epoch != ctx->session_epoch ||
-        (descriptor->kind == GUA_GAME_INPUT_SEMANTIC && descriptor->operation != GUA_GAME_INPUT_RELEASE && expected_action_revision != revision)))
+        (descriptor->kind == GUA_GAME_INPUT_SEMANTIC && expected_action_revision != revision)))
         return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
     const std::string target = descriptor->target != nullptr ? descriptor->target : "";
     const std::string value = descriptor->value_json != nullptr ? descriptor->value_json : "null";
@@ -3904,7 +3904,7 @@ extern "C" int gua_consume_game_input_request(gua_context_t* ctx, gua_game_input
         const auto& request = ctx->game_input_requests.front();
         const auto revision = request.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_game_input_revision : ctx->game_input_revision;
         const bool stale = request.guarded && (request.trace_epoch != ctx->session_epoch ||
-            (request.kind == GUA_GAME_INPUT_SEMANTIC && request.operation != GUA_GAME_INPUT_RELEASE && request.action_revision != revision));
+            (request.kind == GUA_GAME_INPUT_SEMANTIC && request.action_revision != revision));
         const int validation = stale ? GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT : request.kind == GUA_GAME_INPUT_SEMANTIC ?
             validate_semantic_game_input(ctx->game_input_actions, request.operation,
                 request.target, request.value_json, request.confirmed, request.observation_profile) : GUA_GAME_INPUT_OK;

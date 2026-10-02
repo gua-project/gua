@@ -11,6 +11,108 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase(100, 101, false)]
+    [TestCase(0, 100, false)]
+    [TestCase(0, 99, true)]
+    public void Review_SuccessfulEvidenceMustPrecedeExecutionDeadline(double sent, double received, bool valid) =>
+        AssertResultAttachment(new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded,
+            [new(0, 0, sent, 1, received, null, true, 0)], true, true, null)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, valid);
+
+    [TestCase(999, 1, false)]
+    [TestCase(0, 0, false)]
+    [TestCase(1, 0, false)]
+    [TestCase(0, 1, true)]
+    public void Review_ResultIndexesFollowOriginalArray(int first, int second, bool valid) =>
+        AssertResultAttachment(new GuaTimedSegmentResult(GuaSegmentOutcome.Succeeded,
+            [new(first, 0, 0, 1, 1, null, true, 0), new(second, 0, 0, 2, 1, null, true, 0)], true, true, null)
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, valid);
+
+    [TestCase("18446744073709551615", true)]
+    [TestCase("18446744073709551616", false)]
+    [TestCase("99999999999999999999", false)]
+    [TestCase("18446744073709551615\n", false)]
+    [TestCase("0", false)]
+    [TestCase("9999999999999999999", true)]
+    public void Review_RequestIdSchemaMatchesNativeUInt64(string requestId, bool valid)
+    {
+        var schema = Path.GetFullPath("../../../../../../../protocol/schema/timed-segment-result-v1.schema.json", TestContext.CurrentContext.TestDirectory);
+        var node = System.Text.Json.Nodes.JsonNode.Parse("{\"schemaVersion\":1,\"result\":{\"outcome\":0,\"cleanupSucceeded\":true,\"neutralConfirmed\":true,\"failureCode\":null,\"clock\":0,\"simulationScope\":null,\"maxLatenessMilliseconds\":20,\"executionTimeoutMilliseconds\":100,\"cleanupTimeoutMilliseconds\":100,\"applicationTimingConfirmed\":false,\"inputs\":[{\"index\":0,\"scheduledMilliseconds\":0,\"sentMilliseconds\":0,\"requestId\":\"1\",\"resultReceivedMilliseconds\":1,\"hostAppliedMilliseconds\":null,\"succeeded\":true,\"errorCode\":0}]}}")!;
+        node["result"]!["inputs"]![0]!["requestId"] = requestId;
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        Assert.That(Json.Schema.JsonSchema.FromFile(schema).Evaluate(document.RootElement).IsValid, Is.EqualTo(valid));
+    }
+
+    [TestCase("applied-only", false)]
+    [TestCase("receipt-no-id", false)]
+    [TestCase("receipt-no-status", false)]
+    [TestCase("receipt-no-error", false)]
+    [TestCase("status-only", false)]
+    [TestCase("id-no-send", false)]
+    [TestCase("unknown-send", true)]
+    [TestCase("pending", true)]
+    [TestCase("complete", true)]
+    public void Review_PartialEvidencePreservesRequestLifecycle(string shape, bool valid)
+    {
+        var input = new GuaTimedInputResult(0, 0, 0, 1, 1, null, false, 1);
+        input = shape switch
+        {
+            "applied-only" => new(0, 0, null, null, null, 1, null, null),
+            "receipt-no-id" => input with { RequestId = null },
+            "receipt-no-status" => input with { Succeeded = null },
+            "receipt-no-error" => input with { ErrorCode = null },
+            "status-only" => new(0, 0, null, null, null, null, false, 1),
+            "id-no-send" => new(0, 0, null, 1, null, null, null, null),
+            "unknown-send" => new(0, 0, 0, null, null, null, null, null),
+            "pending" => new(0, 0, 0, 1, null, null, null, null), _ => input,
+        };
+        AssertResultAttachment(new GuaTimedSegmentResult(GuaSegmentOutcome.Cancelled, [input], false, false, "caller-cancelled")
+            { MaxLatenessMilliseconds = 20, ExecutionTimeoutMilliseconds = 100, CleanupTimeoutMilliseconds = 100 }, valid);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Review_PlannedSemanticReleaseRejectsChangedMap(bool afterEnqueue)
+    {
+        using var runtime = new GuaRuntime();
+        runtime.EnableGameInput(GuaGameInputCapabilities.Semantic, () => { });
+        runtime.PublishGameInputActions("test", [new("move", "move", GuaGameInputValueType.Axis1D)]);
+        var plan = new GuaTimedSegment(1, 1, 20, 100, 100,
+            [new(0, GuaGameInputKind.Semantic, GuaGameInputOperation.Set, "move", JsonSerializer.SerializeToElement(0.5), 5000),
+             new(1, GuaGameInputKind.Semantic, GuaGameInputOperation.Release, "move")]);
+        var host = new GuaRuntimeSegmentHost(runtime, true); host.Begin(plan);
+        try
+        {
+            host.Send(plan.Inputs[0], null, () => { });
+            Assert.That(runtime.TryConsumeGameInput(out var hold), Is.True); runtime.CompleteGameInput(hold, true);
+            ulong id = 0;
+            if (afterEnqueue) id = host.Send(plan.Inputs[1], null, () => { });
+            runtime.PublishGameInputActions("test", [new("move", "replacement", GuaGameInputValueType.Axis1D)]);
+            if (!afterEnqueue) Assert.Throws<InvalidOperationException>(() => host.Send(plan.Inputs[1], null, () => { }));
+            else { Assert.That(runtime.TryConsumeGameInput(out _), Is.False); Assert.That(host.Poll(id)!.Succeeded, Is.False); }
+            var cleanup = host.ReleaseAll();
+            while (runtime.TryConsumeGameInput(out var request)) runtime.CompleteGameInput(request, true);
+            Assert.That(host.Poll(cleanup)!.Succeeded, Is.True); Assert.That(host.IsNeutral, Is.True);
+        }
+        finally { host.End(); }
+    }
+
+    [Test]
+    public void Review_ReleaseOnlyPlanUsesCurrentRevision()
+    {
+        using var runtime = new GuaRuntime(); runtime.EnableGameInput(GuaGameInputCapabilities.Semantic, () => { });
+        runtime.PublishGameInputActions("test", [new("move", "move", GuaGameInputValueType.Axis1D)]);
+        var input = new GuaTimedInput(0, GuaGameInputKind.Semantic, GuaGameInputOperation.Release, "move");
+        var host = new GuaRuntimeSegmentHost(runtime, true); host.Begin(new(1, 0, 20, 100, 100, [input]));
+        try
+        {
+            var id = host.Send(input, null, () => { });
+            Assert.That(runtime.TryConsumeGameInput(out var request), Is.True); runtime.CompleteGameInput(request, true);
+            Assert.That(host.Poll(id)!.Succeeded, Is.True);
+        }
+        finally { host.End(); }
+    }
+
     [TestCase(GuaGameInputKind.Gamepad, false)]
     [TestCase(GuaGameInputKind.TextInput, false)]
     [TestCase(GuaGameInputKind.Cleanup, false)]

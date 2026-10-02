@@ -48,7 +48,7 @@ public sealed class GuaRuntimeSegmentHost : IGuaTimedSegmentValueHost
             if (!runtime.SupportsGuardedGameInput) throw new NotSupportedException("Native guarded input is unavailable.");
             using var startTree = JsonDocument.Parse(runtime.GetUiTreeJson());
             epoch = startTree.RootElement.GetProperty("sessionEpoch").GetInt64();
-            actionRevision = segment.Inputs.Any(input => input.Kind == GuaGameInputKind.Semantic && input.Operation != GuaGameInputOperation.Release)
+            actionRevision = segment.Inputs.Any(input => input.Kind == GuaGameInputKind.Semantic)
                 ? runtime.FindGameInputActionsV2(new(Limit: 1), profile).Revision : 0;
             for (var i = 0; i < segment.Inputs.Count; i++)
             {
