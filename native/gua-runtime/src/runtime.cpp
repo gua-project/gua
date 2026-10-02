@@ -1,6 +1,7 @@
 #include "gua/runtime.h"
 #include "gua/semantic_lint.h"
 #include "../../gua-core/src/value_json.hpp"
+#include <optional>
 
 #if GUA_RUNTIME_WITH_WS
 #include "gua/ws_bridge.hpp"
@@ -177,9 +178,9 @@ std::string core_version_json()
     return json;
 }
 
-std::string decorate_version_json(gua_runtime_t* runtime, std::string json)
+std::string decorate_version_json(gua_runtime_t* runtime, std::string json,std::optional<uint64_t> spatial_client=std::nullopt)
 {
-    const auto spatial=spatial_advertisement_unlocked(runtime);
+    const auto spatial=spatial_advertisement_unlocked(runtime,spatial_client);
     if (!spatial.empty()) {
         const auto at=json.find("\"capabilities\":[");
         if(at!=std::string::npos) json.insert(at+16,"\"spatial_read_r1\",");
@@ -1729,6 +1730,10 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
         },
         .get_version_json = [runtime] {
             return copy_version_json(runtime);
+        },
+        .get_connection_version_json = [runtime](unsigned long long client) {
+            const std::lock_guard lock(runtime->context_mutex);
+            return decorate_version_json(runtime,core_version_json(),client);
         },
         .clock_supported = [runtime] {
             const std::lock_guard lock(runtime->context_mutex);

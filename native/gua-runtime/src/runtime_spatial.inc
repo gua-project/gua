@@ -27,15 +27,14 @@ bool spatial_enabled_unlocked(gua_runtime_t* r) {
         r->observation_profile==GUA_OBSERVATION_PROFILE_DEBUG &&
         r->spatial_epoch==spatial_runtime_epoch(r);
 }
-std::string spatial_advertisement_unlocked(gua_runtime_t* r) {
+std::string spatial_advertisement_unlocked(gua_runtime_t* r,std::optional<uint64_t> client=std::nullopt) {
     if(!spatial_enabled_unlocked(r)) return "";
-    gua_spatial_error_t e{}; uint64_t owner=0; gua_spatial_document_t* d=nullptr;
-    bool temporary=r->spatial_clients.empty();
-    if(!temporary) owner=r->spatial_clients.begin()->second;
-    else if(gua_spatial_host_open_owner(r->spatial_host,r->spatial_grants,&owner,&e)) return "";
-    int status=gua_spatial_host_describe(r->spatial_host,owner,r->spatial_provider,&d,&e);
+    gua_spatial_error_t e{}; gua_spatial_document_t* d=nullptr; int status;
+    if(client) {
+        const auto found=r->spatial_clients.find(*client); if(found==r->spatial_clients.end()) return "";
+        status=gua_spatial_host_describe(r->spatial_host,found->second,r->spatial_provider,&d,&e);
+    } else status=gua_spatial_host_describe_grants(r->spatial_host,r->spatial_grants,r->spatial_provider,&d,&e);
     std::unique_ptr<gua_spatial_document_t,decltype(&gua_spatial_destroy)> result(d,gua_spatial_destroy);
-    if(temporary) gua_spatial_host_close_owner(r->spatial_host,owner,&e);
     return status==0 ? spatial_document_json(d) : "";
 }
 const char* spatial_safe_error(int status) {
@@ -59,10 +58,9 @@ extern "C" int gua_runtime_bind_spatial(gua_runtime_t* r,gua_spatial_host_t* hos
         if(r->observation_profile!=GUA_OBSERVATION_PROFILE_DEBUG || value.at("enabled").text!="true" ||
             (value.at("profile").text!="Debug" && value.at("profile").text!="Testing") ||
             static_cast<uint64_t>(epoch)!=spatial_runtime_epoch(r)) return GUA_SPATIAL_NOT_AUTHORIZED;
-        uint64_t owner=0; gua_spatial_error_t e{}; gua_spatial_document_t* ad=nullptr;
-        int status=gua_spatial_host_open_owner(host,grants,&owner,&e); if(status) return status;
-        status=gua_spatial_host_describe(host,owner,provider,&ad,&e);
-        gua_spatial_destroy(ad); gua_spatial_host_close_owner(host,owner,&e); if(status) return status;
+        gua_spatial_error_t e{}; gua_spatial_document_t* ad=nullptr;
+        int status=gua_spatial_host_describe_grants(host,grants,provider,&ad,&e);
+        gua_spatial_destroy(ad); if(status) return status;
         gua_spatial_document_t* copy=nullptr; gua_spatial_parse_options_v1_t options{sizeof(options),GUA_SPATIAL_OWNER};
         status=gua_spatial_from_json(&options,{wire.data(),static_cast<uint32_t>(wire.size())},&copy,&e); if(status) return status;
         gua_spatial_host_retain(host); spatial_clear_unlocked(r);

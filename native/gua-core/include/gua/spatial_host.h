@@ -45,6 +45,11 @@ int gua_spatial_host_enqueue(gua_spatial_host_t*, uint64_t owner,
  * Unknown and forbidden provider handles both return NOT_AUTHORIZED. */
 int gua_spatial_host_describe(gua_spatial_host_t*, uint64_t owner, uint64_t provider,
     gua_spatial_document_t** advertisement, gua_spatial_error_t*);
+/* Trusted host-only grant validation/projection, without allocating an owner.
+ * Never accept these grants from a transport client. Uses the same discovery
+ * authorization as describe; cannot enqueue or execute a query. */
+int gua_spatial_host_describe_grants(gua_spatial_host_t*, const gua_spatial_document_t* grants,
+    uint64_t provider, gua_spatial_document_t** advertisement, gua_spatial_error_t*);
 int gua_spatial_host_cancel(gua_spatial_host_t*, uint64_t owner, uint64_t batch_id, gua_spatial_error_t*);
 int gua_spatial_host_poll(gua_spatial_host_t*, uint64_t owner, uint64_t batch_id,
     gua_spatial_document_t** result, gua_spatial_error_t*);

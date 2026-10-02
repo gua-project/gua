@@ -18,11 +18,17 @@ int main() {
     const auto fixture=gua_value_detail::parser(buffer.str()).parse().at("valid").items;
     gua::SpatialDocument registration(7,wire(fixture[0].at("json"))),grants(8,wire(fixture[1].at("json"))),batch(5,wire(fixture[2].at("json"))),boundary(9,wire(fixture[3].at("json")));
     gua_spatial_host_t* host=nullptr; gua_spatial_error_t e{};
-    gua_spatial_host_options_v1_t options{sizeof(options),2,4,4,64,2,1000,1000};
+    gua_spatial_host_options_v1_t options{sizeof(options),2,1,4,64,2,1000,1000};
     assert(gua_spatial_host_create(&options,{"cpp",3},&host,&e)==0);
     uint64_t provider=0; assert(gua_spatial_host_register(host,registration.get(),&provider,&e)==0);
     auto runtime=gua_runtime_create();
     assert(gua_runtime_bind_spatial(runtime,host,provider,grants.get())==0);
+    {
+        gua::SpatialClient old(runtime);
+        assert(gua_runtime_bind_spatial(runtime,host,provider,grants.get())==0);
+        bool stale=false; try { old.describe(); } catch(const gua::SpatialError& error) { stale=error.code==GUA_SPATIAL_STALE; }
+        assert(stale);
+    }
     {
         gua::SpatialClient client(runtime); auto info=client.describe(); assert(info.type()==GUA_SPATIAL_ADVERTISEMENT);
         client.enqueue(batch); assert(!client.poll(1));

@@ -210,6 +210,16 @@ void finish(gua_spatial_host_t& h,host_batch& b,const char* reason) {
     else if(std::string_view(reason)=="deadline_exceeded") expire(h,b);
     else terminate(b,reason);
 }
+json projected_advertisement(gua_spatial_host_t& h,uint64_t p,const json& g) {
+    auto pi=h.providers.find(p); require(pi!=h.providers.end(),GUA_SPATIAL_NOT_AUTHORIZED);
+    require(boolean(g.at("enabled"))&&(text(g,"profile")=="Debug"||text(g,"profile")=="Testing"),GUA_SPATIAL_NOT_AUTHORIZED);
+    auto descriptor=pi->second.registration.at("provider"); auto& policies=descriptor.fields.at("policies").items;
+    policies.erase(std::remove_if(policies.begin(),policies.end(),[&](const json& id) { return !contains(g.at("policies"),text(id)); }),policies.end());
+    require(!policies.empty(),GUA_SPATIAL_NOT_AUTHORIZED);
+    auto r=obj({{"schemaVersion",str("spatial-host-r1")},{"documentType",str("advertisement")},{"provider",std::move(descriptor)},
+        {"budgets",obj({{"maxQueueDepth",integer(h.limits.max_queue_depth)},{"queryDeadlineMs",number(h.limits.query_deadline_ms)},{"maxBatchWorkTimeMs",number(h.limits.max_batch_work_ms)}})}});
+    host_document(r,11); return r;
+}
 }
 extern "C" {
 int gua_spatial_host_create(const gua_spatial_host_options_v1_t* o,gua_value_text_t clock,gua_spatial_host_t** out,gua_spatial_error_t* e) {
@@ -296,16 +306,15 @@ int gua_spatial_host_enqueue(gua_spatial_host_t* h,uint64_t o,const gua_spatial_
 int gua_spatial_host_describe(gua_spatial_host_t* h,uint64_t o,uint64_t p,gua_spatial_document_t** out,gua_spatial_error_t* e) {
     if(out) *out=nullptr;
     return boundary(e,[&] {
-        host(h); require(out); std::lock_guard lock(h->mutex); auto oi=h->owners.find(o); auto pi=h->providers.find(p);
-        require(oi!=h->owners.end()&&pi!=h->providers.end(),GUA_SPATIAL_NOT_AUTHORIZED);
-        const auto& g=oi->second.grants; require(boolean(g.at("enabled"))&&(text(g,"profile")=="Debug"||text(g,"profile")=="Testing"),GUA_SPATIAL_NOT_AUTHORIZED);
-        auto descriptor=pi->second.registration.at("provider"); auto& policies=descriptor.fields.at("policies").items;
-        policies.erase(std::remove_if(policies.begin(),policies.end(),[&](const json& id) { return !contains(g.at("policies"),text(id)); }),policies.end());
-        require(!policies.empty(),GUA_SPATIAL_NOT_AUTHORIZED);
-        auto r=obj({{"schemaVersion",str("spatial-host-r1")},{"documentType",str("advertisement")},{"provider",std::move(descriptor)},
-            {"budgets",obj({{"maxQueueDepth",integer(h->limits.max_queue_depth)},{"queryDeadlineMs",number(h->limits.query_deadline_ms)},{"maxBatchWorkTimeMs",number(h->limits.max_batch_work_ms)}})}});
-        host_document(r,11); *out=doc(11,std::move(r)).release();
+        host(h); require(out); std::lock_guard lock(h->mutex); auto oi=h->owners.find(o);
+        require(oi!=h->owners.end(),GUA_SPATIAL_NOT_AUTHORIZED);
+        *out=doc(11,projected_advertisement(*h,p,oi->second.grants)).release();
     });
+}
+int gua_spatial_host_describe_grants(gua_spatial_host_t* h,const gua_spatial_document_t* grants,uint64_t p,gua_spatial_document_t** out,gua_spatial_error_t* e) {
+    if(out) *out=nullptr;
+    return boundary(e,[&] { host(h); document(grants,8); require(out); std::lock_guard lock(h->mutex);
+        *out=doc(11,projected_advertisement(*h,p,grants->value)).release(); });
 }
 int gua_spatial_host_cancel(gua_spatial_host_t* h,uint64_t o,uint64_t id,gua_spatial_error_t* e) {
     return boundary(e,[&] { host(h); std::lock_guard lock(h->mutex); require(h->owners.contains(o),GUA_SPATIAL_STALE); auto it=h->batches.find({o,id}); require(it!=h->batches.end(),GUA_SPATIAL_STALE); auto& b=it->second; if(!b.done) { b.cancelled=true; finish(*h,b,"cancelled"); } });

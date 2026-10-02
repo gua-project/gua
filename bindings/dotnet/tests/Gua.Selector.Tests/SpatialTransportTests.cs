@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json.Nodes;
+using System.Net.WebSockets;
+using System.Text;
 using Gua.Core;
 using Gua.Runtime;
 using Gua.Testing;
@@ -16,10 +18,10 @@ public sealed class SpatialTransportTests
     }
     sealed class Host : IDisposable
     {
-        internal readonly GuaSpatialHost Spatial=new(new GuaSpatialHostOptions {MaxProviders=2,MaxOwners=8,MaxQueueDepth=4,MaxQueriesPerBatch=64,MaxHitsPerQuery=2,QueryDeadlineMs=1000,MaxBatchWorkMs=1000},"transport-clock");
+        internal readonly GuaSpatialHost Spatial;
         internal readonly GuaRuntime Runtime=new();
         internal readonly ulong Provider;
-        internal Host() { using var registration=Doc(0); Provider=Spatial.Register(registration); Bind(); }
+        internal Host(uint maxOwners=8) { Spatial=new(new GuaSpatialHostOptions {MaxProviders=2,MaxOwners=maxOwners,MaxQueueDepth=4,MaxQueriesPerBatch=64,MaxHitsPerQuery=2,QueryDeadlineMs=1000,MaxBatchWorkMs=1000},"transport-clock"); using var registration=Doc(0); Provider=Spatial.Register(registration); Bind(); }
         internal void Bind() { using var grants=Doc(1); Runtime.BindSpatial(Spatial,Provider,grants.ReadOwner()); }
         internal void Pump()
         {
@@ -97,6 +99,86 @@ public sealed class SpatialTransportTests
         while(!request.IsCompleted && DateTime.UtcNow<deadline) { h.Pump(); Thread.Sleep(5); }
         var result=request.GetAwaiter().GetResult(); Assert.That(result.BatchId,Is.EqualTo(1));
         Assert.That(result.Items.Select(i=>i.RequestId),Is.EqualTo(batch.ReadBatch().Queries.Select(q=>q.RequestId)));
+    }
+    [Test]
+    public void RebindAtFullOwnerCapacityReplacesOldOwner()
+    {
+        using var h=new Host(1); using var old=h.Runtime.CreateSpatialClient();
+        h.Bind();
+        Assert.Throws<GuaSpatialException>(()=>old.Describe());
+        using var current=h.Runtime.CreateSpatialClient(); using var info=current.Describe();
+        Assert.That(info.ReadAdvertisement().Provider.ProviderId,Is.Not.Empty);
+    }
+    [Test]
+    public void OwnerlessConnectionNeverAdvertisesSpatialSupport()
+    {
+        using var h=new Host(1); var listener=new TcpListener(IPAddress.Loopback,0); listener.Start();
+        var port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); Assert.That(h.Runtime.StartInspectorBridge(port),Is.True);
+        using var first=new GuaWebSocketContext($"ws://127.0.0.1:{port}"); Assert.That(first.GetSpatialInfo(),Is.Not.Null);
+        using var second=new GuaWebSocketContext($"ws://127.0.0.1:{port}");
+        var version=second.GetVersion();
+        Assert.That(version.Capabilities,Does.Not.Contain("spatial_read_r1"));
+        Assert.That(Assert.Catch<InvalidOperationException>(()=>second.GetSpatialInfo())!.Message,Is.EqualTo("unsupported"));
+        Assert.That(first.GetVersion().Capabilities,Does.Contain("spatial_read_r1"));
+    }
+    sealed class StalledPeer : IDisposable
+    {
+        readonly HttpListener listener=new(); readonly CancellationTokenSource stop=new(); readonly Task worker;
+        internal readonly TaskCompletionSource<bool> Stalled=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource<bool> Closed=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly string Url;
+        internal StalledPeer(string stall,string advertisement)
+        {
+            var portSource=new TcpListener(IPAddress.Loopback,0); portSource.Start(); var port=((IPEndPoint)portSource.LocalEndpoint).Port; portSource.Stop();
+            Url=$"ws://127.0.0.1:{port}/"; listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+            worker=Task.Run(async()=> {
+                WebSocket? socket=null;
+                try {
+                    var context=await listener.GetContextAsync(); socket=(await context.AcceptWebSocketAsync(null)).WebSocket;
+                    var buffer=new byte[65536];
+                    while(!stop.IsCancellationRequested) {
+                        using var message=new MemoryStream(); WebSocketReceiveResult received;
+                        do { received=await socket.ReceiveAsync(new ArraySegment<byte>(buffer),stop.Token); if(received.MessageType==WebSocketMessageType.Close) return; message.Write(buffer,0,received.Count); } while(!received.EndOfMessage);
+                        var request=JsonNode.Parse(Encoding.UTF8.GetString(message.ToArray()))!; var type=request["type"]!.GetValue<string>();
+                        if(type==stall) { Stalled.TrySetResult(true); continue; }
+                        var payload=Encoding.UTF8.GetBytes("{\"id\":"+request["id"]!.ToJsonString()+",\"ok\":true,\"result\":"+(type=="get_spatial_info" ? advertisement : "null")+"}");
+                        await socket.SendAsync(new ArraySegment<byte>(payload),WebSocketMessageType.Text,true,stop.Token);
+                    }
+                } catch(Exception) when(stop.IsCancellationRequested||socket is not null) { }
+                finally { socket?.Dispose(); Closed.TrySetResult(true); }
+            });
+        }
+        public void Dispose() { stop.Cancel(); listener.Close(); worker.Wait(TimeSpan.FromSeconds(2)); stop.Dispose(); }
+    }
+    [TestCase("get_spatial_info",true)] [TestCase("query_spatial_batch",true)] [TestCase("poll_spatial_batch",true)]
+    [TestCase("get_spatial_info",false)] [TestCase("query_spatial_batch",false)] [TestCase("poll_spatial_batch",false)]
+    public async Task CancellationAndDeadlineInterruptEachWireWait(string stalled,bool cancel)
+    {
+        using var h=new Host(); using var client=h.Runtime.CreateSpatialClient(); using var ad=client.Describe(); using var batch=Doc(2);
+        using var peer=new StalledPeer(stalled,ad.ToJson()); using var remote=new GuaWebSocketContext(peer.Url); using var cancellation=new CancellationTokenSource();
+        var call=Task.Factory.StartNew(()=>remote.QuerySpatialBatch(batch.ReadBatch(),cancel ? TimeSpan.FromSeconds(5) : TimeSpan.FromMilliseconds(300),cancellation.Token),
+            CancellationToken.None,TaskCreationOptions.LongRunning,TaskScheduler.Default);
+        await peer.Stalled.Task.WaitAsync(TimeSpan.FromSeconds(2)); var clock=System.Diagnostics.Stopwatch.StartNew(); if(cancel) cancellation.Cancel();
+        try { await call.WaitAsync(TimeSpan.FromSeconds(1)); Assert.Fail("Stalled read must fail."); }
+        catch(OperationCanceledException) when(cancel) { }
+        catch(TimeoutException) when(!cancel && call.IsCompleted) { }
+        Assert.That(clock.Elapsed,Is.LessThan(TimeSpan.FromSeconds(1)));
+        await peer.Closed.Task.WaitAsync(TimeSpan.FromSeconds(1));
+    }
+    [TestCase(true)] [TestCase(false)]
+    public async Task SpatialDeadlineIncludesSharedGateAcquisition(bool cancel)
+    {
+        using var remote=new GuaWebSocketContext("ws://127.0.0.1:1/"); using var batch=Doc(2); using var cancellation=new CancellationTokenSource();
+        var gate=(SemaphoreSlim)typeof(GuaWebSocketContext).GetField("requestGate",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(remote)!;
+        gate.Wait();
+        try {
+            var call=Task.Factory.StartNew(()=>remote.QuerySpatialBatch(batch.ReadBatch(),cancel ? TimeSpan.FromSeconds(5) : TimeSpan.FromMilliseconds(100),cancellation.Token),
+                CancellationToken.None,TaskCreationOptions.LongRunning,TaskScheduler.Default);
+            if(cancel) cancellation.Cancel();
+            try { await call.WaitAsync(TimeSpan.FromSeconds(1)); Assert.Fail("Held gate must fail within deadline."); }
+            catch(OperationCanceledException) when(cancel) { }
+            catch(TimeoutException) when(!cancel && call.IsCompleted) { }
+        } finally { gate.Release(); }
     }
     [TestCase(1, false)]
     [TestCase(1048576, true)]

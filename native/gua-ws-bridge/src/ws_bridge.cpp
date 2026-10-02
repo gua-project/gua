@@ -1411,6 +1411,7 @@ private:
                     : error_response(command.id, "get_diagnostics is not supported by this bridge");
             }
             if (command.type == "get_version") {
+                if(handlers_.get_connection_version_json) return ok_response(command.id,handlers_.get_connection_version_json(spatial_client_id));
                 return handlers_.get_version_json
                     ? ok_response(command.id, handlers_.get_version_json())
                     : error_response(command.id, "get_version is not supported by this bridge");

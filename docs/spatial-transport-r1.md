@@ -26,6 +26,12 @@ validated grants, retain the same scheduler and invalidate old connection owners
 Configure before bridge startup. `DisableSpatial` / `disable_spatial` revokes
 connections. A Player runtime cannot bind privileged grants. There is no wire
 profile, registration, owner handle, collision-layer or arbitrary exclusion argument.
+Host binding projects trusted grants without allocating a spare owner, so rebind
+works at the configured owner capacity. WebSocket version discovery uses that
+connection's actual owner; an ownerless connection advertises no spatial capability.
+The .NET batch deadline includes shared gate acquisition, connect, send and receive.
+Cancellation aborts the pinned socket immediately, including a stalled peer or
+an unrelated request holding the gate, and never closes a replacement connection.
 
 The canonical `spatial_read_r1` runtime capability and optional `version.spatial`
 advertisement exist only while the bound registered provider is currently

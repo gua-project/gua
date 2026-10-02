@@ -104,6 +104,7 @@ struct BridgeHandlers {
     std::function<std::string()> get_diagnostics_json;
     std::function<CommandResult(bool include_world)> semantic_lint;
     std::function<std::string()> get_version_json;
+    std::function<std::string(unsigned long long)> get_connection_version_json;
     std::function<bool()> clock_supported;
     std::function<std::string()> get_clock_json;
     std::function<CommandResult(std::string_view command, double value_ms, double step_ms, bool step_ms_present)> control_clock;
