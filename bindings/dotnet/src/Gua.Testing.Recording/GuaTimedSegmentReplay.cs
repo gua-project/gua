@@ -88,7 +88,14 @@ public static class GuaTimedSegmentReplay
             return results.All(result => result.SentMilliseconds is null || result.ResultReceivedMilliseconds is not null);
         }
         if (host is IGuaTimedSegmentValueHost valueHost)
-            valueHost.Begin(segment, segment.Inputs.Select((input, i) => input.Sensitive ? secrets[i] : input.Value).ToArray());
+        {
+            // Custom preflight receives plaintext. Preserve useful rejection categories, never
+            // its message/inner exception, which may retain a resolved sensitive payload.
+            try { valueHost.Begin(segment, segment.Inputs.Select((input, i) => input.Sensitive ? secrets[i] : input.Value).ToArray()); }
+            catch (InvalidDataException) { throw new InvalidDataException("Segment value preflight failed."); }
+            catch (NotSupportedException) { throw new NotSupportedException("Segment value preflight failed."); }
+            catch { throw new InvalidOperationException("Segment value preflight failed."); }
+        }
         else host.Begin(segment);
         try
         {

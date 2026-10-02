@@ -60,6 +60,9 @@ queue、request ID、result、Trace event を作らない。scheduler は option
 `IGuaTimedSegmentValueHost` に秘密を含む解決済み値を渡し、local host は検証中だけ使用する。
 旧 host interface は変更しない。生の `Begin(segment)` は秘密値を取得できないため、秘密を
 含む区間の完全な preflight は `ReplayAsync` または解決値付き overload を使用する。
+秘密参照は Unicode whitespace だけの key を許可しない。`Save` は入力と JSON value を
+複製し、同じ snapshot を検証・保存する。値付き preflight の例外は固定文言へ置換し、
+元の例外や解決済み秘密を error に残さない。
 
 同 offset は配列順に送信する。host はこの順に consume/apply する契約が必要である。
 同 offset の送信間には結果 polling を挟まず、待機時は有限件数の round-robin polling を使う。

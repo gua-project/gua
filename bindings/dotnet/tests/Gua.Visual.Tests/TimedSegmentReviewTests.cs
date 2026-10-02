@@ -11,6 +11,86 @@ namespace Gua.Visual.Tests;
 
 public sealed partial class TimedSegmentTests
 {
+    [TestCase(0)]
+    [TestCase(1)]
+    [TestCase(2)]
+    public void Review_ValueHostPreflightExceptionsCannotExposeResolvedSecrets(int exceptionKind)
+    {
+        var input = new GuaTimedInput(0, GuaGameInputKind.TextInput, GuaGameInputOperation.Set, "", Sensitive: true, SecretKey: "chat");
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100, [input]);
+        var host = new ThrowingValueHost(exceptionKind);
+        var error = Assert.CatchAsync(() => GuaTimedSegmentReplay.ReplayAsync(host, plan,
+            _ => JsonSerializer.SerializeToElement("secret-marker-preflight"), realtime: new FakeRealtime()));
+        Assert.That(error!.ToString(), Does.Not.Contain("secret-marker-preflight"));
+        Assert.That(error.InnerException, Is.Null);
+        Assert.That(host.Sent, Is.False);
+        Assert.That(error.GetType(), Is.EqualTo(exceptionKind == 0 ? typeof(InvalidDataException) :
+            exceptionKind == 1 ? typeof(NotSupportedException) : typeof(InvalidOperationException)));
+    }
+
+    [TestCase(" ", false)]
+    [TestCase("\t\r\n", false)]
+    [TestCase("\u0085\u00a0", false)]
+    [TestCase("\u2007\u2028\u2029\u202f\u3000", false)]
+    [TestCase(" chat ", true)]
+    public void Review_SecretReferenceWhitespaceMatchesManagedValidation(string key, bool valid)
+    {
+        var plan = new GuaTimedSegment(1, 0, 20, 100, 100,
+            [new(0, GuaGameInputKind.TextInput, GuaGameInputOperation.Set, "", Sensitive: true, SecretKey: key)]);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(plan, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var path = Path.GetFullPath("../../../../../../../protocol/schema/timed-segment-v1.schema.json", TestContext.CurrentContext.TestDirectory);
+        Assert.That(JsonSchema.FromFile(path).Evaluate(document.RootElement).IsValid, Is.EqualTo(valid));
+        if (valid) Assert.DoesNotThrow(() => GuaTimedSegmentFile.Validate(plan));
+        else Assert.Throws<InvalidDataException>(() => GuaTimedSegmentFile.Validate(plan));
+    }
+
+    [Test]
+    public void Review_SaveSerializesTheValidatedInputSnapshot()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "gua-timed-snapshot-" + Guid.NewGuid().ToString("N") + ".json");
+        var input = new GuaTimedInput(0, GuaGameInputKind.TextInput, GuaGameInputOperation.Set, "", Sensitive: true, SecretKey: "chat");
+        var changing = new ChangingInputs(input, input with { Value = JsonSerializer.SerializeToElement("secret-marker-save") });
+        try
+        {
+            GuaTimedSegmentFile.Save(path, new(1, 0, 20, 100, 100, changing));
+            Assert.That(File.ReadAllText(path), Does.Not.Contain("secret-marker-save"));
+            Assert.That(GuaTimedSegmentFile.Load(path).Inputs.Single(), Is.EqualTo(input));
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    private sealed class ChangingInputs(GuaTimedInput initial, GuaTimedInput replacement) : IReadOnlyList<GuaTimedInput>
+    {
+        private int reads;
+        public int Count => 1;
+        public GuaTimedInput this[int index] => reads == 0 ? initial : replacement;
+        public IEnumerator<GuaTimedInput> GetEnumerator() { yield return reads++ == 0 ? initial : replacement; }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class ThrowingValueHost(int exceptionKind) : IGuaTimedSegmentValueHost
+    {
+        public bool OrderedApplication => true;
+        public bool ApplicationTimes => false;
+        public bool SameTickApplication => false;
+        public string? SimulationScope => null;
+        public double SimulationMilliseconds => 0;
+        public string? ExecutionFailureCode => null;
+        public bool Sent { get; private set; }
+        public void Begin(GuaTimedSegment segment) => throw new InvalidOperationException();
+        public void Begin(GuaTimedSegment segment, IReadOnlyList<JsonElement?> values)
+        {
+            var message = values[0]!.Value.GetString();
+            throw exceptionKind == 0 ? new InvalidDataException(message) : exceptionKind == 1 ?
+                new NotSupportedException(message) : new InvalidOperationException(message);
+        }
+        public ulong Send(GuaTimedInput input, JsonElement? secret, Action guard) { Sent = true; return 1; }
+        public GuaTimedCompletion? Poll(ulong id) => null;
+        public ulong ReleaseAll() => 1;
+        public bool IsNeutral => true;
+        public void End() { }
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task Review_PartialApplyStampsStillProveOrder(bool betweenKnown)

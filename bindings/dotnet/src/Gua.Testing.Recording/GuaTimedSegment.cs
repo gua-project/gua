@@ -39,6 +39,8 @@ public static class GuaTimedSegmentFile
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     public static void Save(string path, GuaTimedSegment segment)
     {
+        if (segment is null) throw new ArgumentNullException(nameof(segment));
+        segment = segment with { Inputs = segment.Inputs?.Select(input => input is null ? null! : input with { Value = input.Value?.Clone() }).ToArray()! };
         Validate(segment);
         var full = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);

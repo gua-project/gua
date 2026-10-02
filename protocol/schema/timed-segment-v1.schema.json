@@ -33,7 +33,7 @@
         "y": {"type": "number"},
         "deviceIndex": {"type": "integer", "minimum": 0, "maximum": 3},
         "sensitive": {"type": "boolean"},
-        "secretKey": {"type": ["string", "null"], "minLength": 1},
+        "secretKey": {"type": ["string", "null"], "minLength": 1, "pattern": "[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"},
         "semanticValueType": {"enum": [null, 1, 2, 3, 4], "description": "Declared semantic type, checked by host; text Set is stateless"}
       },
       "allOf": [
