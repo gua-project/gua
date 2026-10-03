@@ -57,3 +57,14 @@ the explicitly supplied fresh evidence directory for both fixture scenes; Linux
 requires the same Xvfb harness already used by the accepted UI Player route.
 Those failed attempts are not non-Windows spatial acceptance. New final-head
 execution must pass the unchanged geometry/profile and client assertions.
+
+Recipe `52721e2` / candidate 37101089385 passed Linux Editor, all four builds and
+full geometry/profile plus three spatial clients on Linux, Intel macOS and arm64
+macOS. Windows geometry passed, but readiness was observed between file creation
+and completion of its JSON write (Unexpected EOF). Both engine fixtures now close
+their temporary readiness file before atomic rename; existence denotes complete
+publication. This real failure is retained as violation detection, and the final
+recipe requires rerunning all actual routes. Normal CI37101078467 also aborted a
+Linux native bridge test with `std::length_error` during disconnect handling; the
+core/bridge files are unchanged by this branch. It is not a successful gate and
+needs final-head validation separately.

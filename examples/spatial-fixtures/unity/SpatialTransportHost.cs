@@ -52,7 +52,8 @@ public sealed class SpatialTransportHost : MonoBehaviour
         runtime.BeginFrame("spatial-route"); runtime.EndFrame();
         int port=int.Parse(spatialPort);
         if(!runtime.StartInspectorBridge(port)) throw new Exception("Native spatial bridge failed.");
-        File.WriteAllText("transport-ready.json",runtime.GetVersionJson());
+        File.WriteAllText("transport-ready.tmp",runtime.GetVersionJson());
+        File.Move("transport-ready.tmp","transport-ready.json");
     }
     void FixedUpdate()
     {
