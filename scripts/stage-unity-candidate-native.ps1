@@ -32,7 +32,7 @@ foreach ($package in @(@{ Id='Gua.Core'; Windows='gua.dll'; Unix='libgua' }, @{ 
         $file = "$($package.Unix).dylib"
         & lipo -create (Join-Path $thin "osx-x64/$file") (Join-Path $thin "osx-arm64/$file") -output (Join-Path $universal $file)
         if ($LASTEXITCODE -ne 0) { throw "Universal 2 assembly failed: $file" }
-        & lipo -verify_arch x86_64 arm64 (Join-Path $universal $file)
+        & lipo (Join-Path $universal $file) -verify_arch x86_64 arm64
         if ($LASTEXITCODE -ne 0) { throw "Universal 2 verification failed: $file" }
     } finally { $zip.Dispose() }
 }
