@@ -40,7 +40,9 @@ jobs:
           }
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_commit }}
+          # Native assembly helpers follow the dispatched workflow revision;
+          # the payload itself remains pinned to the validated main packages.
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@v4
         with:
           name: gua-native-nuget
@@ -105,7 +107,7 @@ jobs:
         run: |
           scripts/package-unity-upm-ci.ps1 -Version 0.0.0-ci -OutputDirectory artifacts/unity-candidate -DesktopOnly
           $archive = Get-Item artifacts/unity-candidate/com.link1345.gua-0.0.0-ci.tgz
-          @{ sourceCommit=$env:GUA_BUILD_ID; version='0.0.0-ci'; sha256=(Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); unityVersion='6000.5.3f1'; scope='four desktop RIDs; no WebGL acceptance' } |
+          @{ sourceCommit=$env:GUA_BUILD_ID; workflowCommit='${{ github.sha }}'; version='0.0.0-ci'; sha256=(Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); unityVersion='6000.5.3f1'; scope='four desktop RIDs; no WebGL acceptance' } |
             ConvertTo-Json | Set-Content artifacts/unity-candidate/artifact-provenance.json -Encoding utf8NoBOM
       - uses: actions/upload-artifact@v4
         with:
@@ -231,9 +233,9 @@ jobs:
           $executables = @(Get-ChildItem (Join-Path $env:CANDIDATE_PLAYER 'Contents/MacOS') -File)
           if ($executables.Count -ne 1) { throw 'Expected one actual app executable.' }
           $architecture = if ($env:CANDIDATE_RID -eq 'osx-arm64') { 'arm64' } else { 'x86_64' }
-          & lipo -verify_arch $architecture $executables[0].FullName
+          & lipo $executables[0].FullName -verify_arch $architecture
           if ($LASTEXITCODE -ne 0) { throw "Player is missing its declared $architecture slice." }
-          $slices = & lipo -archs $executables[0].FullName
+          $slices = & lipo $executables[0].FullName -archs
           if ($LASTEXITCODE -ne 0) { throw 'Player architecture inspection failed.' }
           @{ rid=$env:CANDIDATE_RID; requiredArchitecture=$architecture; actualArchitectures="$slices"; executableSha256=(Get-FileHash $executables[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() } |
             ConvertTo-Json | Set-Content artifacts/route-evidence/player-architecture.json -Encoding utf8NoBOM

@@ -75,6 +75,17 @@ Secret presence is only a prerequisite; it does not prove license validity or ro
 The workflow must actually pass before claiming its four Player routes. An
 invalid/missing existing license is an explicit failure, not a skipped pass.
 
+Candidate run `37095451957` against main `595f589eebdea812b0649ab5f57ac079728fa610`
+passed source-run identity checks and extracted the actual native packages, but
+failed Universal 2 verification: trailing filenames after `lipo -verify_arch`
+were parsed as architecture names. No Unity credentials were reached; downstream
+skips are not passes. Both native and Player checks now place the input file
+before the operation. The native assembler follows the dispatched workflow
+revision, while all product compilation/consumption remains pinned to the
+validated main source/packages. `artifact-provenance.json` records product
+`sourceCommit` and recipe `workflowCommit` separately, allowing a reviewed
+candidate helper fix to run against an already accepted product target.
+
 Non-Windows Editor Play Mode remains unverified and requires applicable existing
 licensed build/runtime hosts or separately authorized setup. Player UI success
 does not establish all spatial backends, patches, replay timing, Observe or other
