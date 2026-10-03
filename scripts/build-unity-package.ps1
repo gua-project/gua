@@ -60,6 +60,7 @@ $artifact = Join-Path $root "artifacts\unity\com.link1345.gua"
 if (Test-Path $artifact) { Remove-Item -Recurse -Force $artifact }
 New-Item -ItemType Directory -Force (Join-Path $artifact "Runtime\Plugins\Managed"), (Join-Path $artifact "Runtime\Plugins\Windows\x86_64"), (Join-Path $artifact "Editor"), (Join-Path $artifact "Documentation~") | Out-Null
 Copy-Item (Join-Path $root "bindings\unity\package.json") $artifact
+& (Join-Path $PSScriptRoot "copy-unity-package-notices.ps1") -AssetsFile (Join-Path $root "bindings/dotnet/src/Gua.Runtime/obj/project.assets.json") -OutputDirectory $artifact
 Copy-Item (Join-Path $root "bindings\unity\Documentation~\index.md") (Join-Path $artifact "Documentation~")
 Copy-Item (Join-Path $root "bindings\unity\Samples~") $artifact -Recurse
 Copy-Item (Join-Path $root "bindings\unity\Runtime\link.xml") (Join-Path $artifact "Runtime")

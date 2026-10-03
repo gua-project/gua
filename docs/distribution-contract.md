@@ -66,11 +66,15 @@ the extracted ZIPs. Its reviewed head is
 `0fd01cbcd11c5b5d30399c9a6273418d193edd68`; CI artifacts pin the identical-tree
 checkout `9c2eb7b59a356680806e287a4e2c48fb3b0fb1be` and package version `0.0.0-ci`.
 Windows Unity 6000.5.3f1 standalone Mono/PhysX passed the same three spatial
-client paths. These results establish that measured spatial scope, not every
-feature in the engine packages. Unity Linux/macOS Player routes remain
-unverified: suitable build modules/build hosts and target runtime hosts are
-missing. Neither this policy correction nor disclosure waives those declared
-routes or establishes Editor Play Mode, other features, patches or backends.
+client paths. The later [identified UPM route record](distribution-route-evidence.md)
+also establishes Windows artifact-only Editor Play Mode and Player UI operation,
+plus a precompiled-provider Player spatial run, at its stated commit/archive hash.
+These results establish their measured scope, not every feature in the engine
+packages. Existing release-only CI already defines four-RID Unity jobs; the
+separate candidate workflow makes Player validation available without a tag or
+publication. Its actual run remains required. Linux/macOS Player and Editor
+routes remain unverified until their execution evidence exists. Disclosure does
+not waive those declared routes or establish other features, patches or backends.
 
 Godot C# runtime samples, Unity IL2CPP, Unity IMGUI, EditorWindow automation,
 unlisted RIDs and experimental browser paths are outside this desktop acceptance.

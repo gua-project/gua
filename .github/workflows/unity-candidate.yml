@@ -1,0 +1,253 @@
+name: Unity candidate artifact acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Full main commit already validated by Syntax Check
+        required: true
+        type: string
+      package_run_id:
+        description: Successful main push Syntax Check run supplying candidate artifacts
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  GUA_BUILD_ID: ${{ inputs.source_commit }}
+  GUA_NATIVE_DIR: ''
+  GUA_RUNTIME_NATIVE_DIR: ''
+
+jobs:
+  native:
+    name: Pin candidate and assemble desktop native payload
+    runs-on: macos-latest
+    steps:
+      - name: Validate candidate source run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          PACKAGE_RUN: ${{ inputs.package_run_id }}
+        run: |
+          if ($env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or $env:PACKAGE_RUN -notmatch '^\d+$') { throw 'Full commit and numeric run ID required.' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PACKAGE_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.head_sha -ne $env:SOURCE_COMMIT -or $run.event -ne 'push' -or $run.head_branch -ne 'main' -or $run.name -ne 'Syntax Check' -or $run.conclusion -ne 'success' -or $run.head_repository.full_name -ne $env:GITHUB_REPOSITORY) {
+            throw 'Require a successful exact-commit main push Syntax Check run in this repository.'
+          }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-native-nuget
+          run-id: ${{ inputs.package_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/packages
+      - name: Assemble the identified native binaries
+        shell: pwsh
+        run: scripts/stage-unity-candidate-native.ps1 -PackageDirectory artifacts/packages -SourceCommit $env:GUA_BUILD_ID -OutputDirectory artifacts/unity-native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unity-candidate-native-${{ inputs.source_commit }}
+          path: artifacts/unity-native
+          if-no-files-found: error
+
+  package:
+    name: Compile and package candidate UPM
+    needs: native
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: unity-candidate-native-${{ inputs.source_commit }}
+          path: artifacts/unity-native
+      - name: Require the existing license inputs
+        shell: pwsh
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: |
+          foreach ($name in 'UNITY_LICENSE','UNITY_EMAIL','UNITY_PASSWORD') {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Existing Unity CI input is missing: $name" }
+          }
+      - name: Prepare identified desktop adapter dependencies
+        shell: pwsh
+        run: scripts/prepare-unity-package-ci.ps1 -Version 0.0.0-ci -NativeAssetsRoot artifacts/unity-native -DesktopOnly
+      - name: Compile using the existing Unity builder and license
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 6000.5.3f1
+          projectPath: examples/unity-smoke
+          targetPlatform: StandaloneWindows64
+          buildMethod: Gua.Unity.Editor.GuaUnityEditorCommands.BuildPlayer
+          customParameters: -guaScene Assets/Scenes/GuaUnityFixture.unity -guaOutput /github/workspace/artifacts/producer/GuaUnityFixture.exe
+          allowDirtyBuild: true
+      - name: Package the actual desktop UPM archive and notices
+        shell: pwsh
+        run: |
+          scripts/package-unity-upm-ci.ps1 -Version 0.0.0-ci -OutputDirectory artifacts/unity-candidate -DesktopOnly
+          $archive = Get-Item artifacts/unity-candidate/com.link1345.gua-0.0.0-ci.tgz
+          @{ sourceCommit=$env:GUA_BUILD_ID; version='0.0.0-ci'; sha256=(Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); unityVersion='6000.5.3f1'; scope='four desktop RIDs; no WebGL acceptance' } |
+            ConvertTo-Json | Set-Content artifacts/unity-candidate/artifact-provenance.json -Encoding utf8NoBOM
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unity-candidate-upm-${{ inputs.source_commit }}
+          path: |
+            artifacts/unity-candidate/*.tgz
+            artifacts/unity-candidate/artifact-provenance.json
+          if-no-files-found: error
+
+  build-player:
+    name: Build candidate Mono Player / ${{ matrix.rid }}
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            target: StandaloneWindows64
+            platform: WindowsX64
+            output: GuaUnityFixture.exe
+          - rid: linux-x64
+            target: StandaloneLinux64
+            platform: LinuxX64
+            output: GuaUnityFixture
+          - rid: osx-x64
+            target: StandaloneOSX
+            platform: MacOSX64
+            output: GuaUnityFixture.app
+          - rid: osx-arm64
+            target: StandaloneOSX
+            platform: MacOSArm64
+            output: GuaUnityFixture.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: unity-candidate-upm-${{ inputs.source_commit }}
+          path: artifacts/upm
+      - name: Install only the candidate archive
+        shell: pwsh
+        run: |
+          tar -xzf artifacts/upm/com.link1345.gua-0.0.0-ci.tgz -C artifacts/upm
+          if ($LASTEXITCODE -ne 0) { throw 'UPM extraction failed.' }
+          $target = 'examples/unity-smoke/Packages/com.link1345.gua'
+          New-Item -ItemType Directory -Force $target | Out-Null
+          Copy-Item artifacts/upm/package/* $target -Recurse
+          $manifestPath = 'examples/unity-smoke/Packages/manifest.json'
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $manifest.dependencies.PSObject.Properties.Remove('com.link1345.gua')
+          $manifest | ConvertTo-Json -Depth 20 | Set-Content $manifestPath -Encoding utf8NoBOM
+          if ((Get-Content "$target/package.json" -Raw | ConvertFrom-Json).version -ne '0.0.0-ci' -or -not (Test-Path "$target/LICENSE")) { throw 'Candidate version/license missing.' }
+          if (Get-ChildItem "$target/Runtime" -Recurse -Filter '*.cs') { throw 'Candidate contains Gua implementation source.' }
+      - name: Build from the installed archive
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 6000.5.3f1
+          projectPath: examples/unity-smoke
+          targetPlatform: ${{ matrix.target }}
+          buildMethod: Gua.Unity.Editor.GuaUnityEditorCommands.BuildPlayer
+          customParameters: -guaScene Assets/Scenes/GuaUnityFixture.unity -guaOutput /github/workspace/artifacts/player/${{ matrix.output }} -guaPlatform ${{ matrix.platform }}
+          allowDirtyBuild: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unity-candidate-player-${{ matrix.rid }}-${{ inputs.source_commit }}
+          path: artifacts/player
+          if-no-files-found: error
+
+  smoke:
+    name: Actual candidate Player / ${{ matrix.rid }}
+    needs: build-player
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+            player: GuaUnityFixture.exe
+          - rid: linux-x64
+            runner: ubuntu-22.04
+            player: GuaUnityFixture
+          - rid: osx-x64
+            runner: macos-15-intel
+            player: GuaUnityFixture.app
+          - rid: osx-arm64
+            runner: macos-latest
+            player: GuaUnityFixture.app
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: unity-candidate-player-${{ matrix.rid }}-${{ inputs.source_commit }}
+          path: artifacts/player
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-distribution-win-x64-${{ inputs.source_commit }}
+          run-id: ${{ inputs.package_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/consumer-feed
+      - name: Verify actual macOS Player architecture
+        if: startsWith(matrix.rid, 'osx-')
+        shell: pwsh
+        env:
+          CANDIDATE_RID: ${{ matrix.rid }}
+          CANDIDATE_PLAYER: artifacts/player/${{ matrix.player }}
+        run: |
+          New-Item -ItemType Directory -Force artifacts/route-evidence | Out-Null
+          $executables = @(Get-ChildItem (Join-Path $env:CANDIDATE_PLAYER 'Contents/MacOS') -File)
+          if ($executables.Count -ne 1) { throw 'Expected one actual app executable.' }
+          $architecture = if ($env:CANDIDATE_RID -eq 'osx-arm64') { 'arm64' } else { 'x86_64' }
+          & lipo -verify_arch $architecture $executables[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw "Player is missing its declared $architecture slice." }
+          $slices = & lipo -archs $executables[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Player architecture inspection failed.' }
+          @{ rid=$env:CANDIDATE_RID; requiredArchitecture=$architecture; actualArchitectures="$slices"; executableSha256=(Get-FileHash $executables[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() } |
+            ConvertTo-Json | Set-Content artifacts/route-evidence/player-architecture.json -Encoding utf8NoBOM
+      - name: Execute isolated package-only consumer
+        if: matrix.rid != 'linux-x64'
+        shell: pwsh
+        run: scripts/verify-unity-distribution-player.ps1 -PackageDirectory artifacts/consumer-feed/local-feed -PlayerPath artifacts/player/${{ matrix.player }} -SourceCommit $env:GUA_BUILD_ID -OutputDirectory artifacts/route-evidence
+      - name: Execute isolated package-only consumer with Xvfb
+        if: matrix.rid == 'linux-x64'
+        shell: bash
+        run: xvfb-run --auto-servernum pwsh -File scripts/verify-unity-distribution-player.ps1 -PackageDirectory artifacts/consumer-feed/local-feed -PlayerPath artifacts/player/${{ matrix.player }} -SourceCommit "$GUA_BUILD_ID" -OutputDirectory artifacts/route-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-candidate-route-${{ matrix.rid }}-${{ inputs.source_commit }}
+          path: artifacts/route-evidence
+          if-no-files-found: error
