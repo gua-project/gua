@@ -6,7 +6,8 @@ param(
     [Alias("NativeDirectory")]
     [string]$NativeAssetsRoot,
 
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [switch]$DesktopOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,20 +26,24 @@ dotnet build (Join-Path $root "bindings/dotnet/src/Gua.Core/Gua.Core.csproj") -c
 if ($LASTEXITCODE -ne 0) { throw "Failed to build Gua.Core for the Unity package." }
 dotnet build (Join-Path $root "bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj") -c $Configuration -f netstandard2.1 --no-restore -p:Version=$Version -p:RestoreEnablePackagePruning=false
 if ($LASTEXITCODE -ne 0) { throw "Failed to build Gua.Runtime for the Unity package." }
-dotnet build (Join-Path $root "bindings/dotnet/src/Gua.Core/Gua.Core.csproj") -c $Configuration -f netstandard2.1 --no-restore -p:Version=$Version -p:RestoreEnablePackagePruning=false -p:DefineConstants=GUA_STATIC_LINK -o $webManagedBuild
-if ($LASTEXITCODE -ne 0) { throw "Failed to build the WebGL Gua.Core assembly." }
-dotnet build (Join-Path $root "bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj") -c $Configuration -f netstandard2.1 --no-restore -p:Version=$Version -p:RestoreEnablePackagePruning=false -p:DefineConstants=GUA_STATIC_LINK -o $webManagedBuild
-if ($LASTEXITCODE -ne 0) { throw "Failed to build the WebGL Gua.Runtime assembly." }
+if (-not $DesktopOnly) {
+    dotnet build (Join-Path $root "bindings/dotnet/src/Gua.Core/Gua.Core.csproj") -c $Configuration -f netstandard2.1 --no-restore -p:Version=$Version -p:RestoreEnablePackagePruning=false -p:DefineConstants=GUA_STATIC_LINK -o $webManagedBuild
+    if ($LASTEXITCODE -ne 0) { throw "Failed to build the WebGL Gua.Core assembly." }
+    dotnet build (Join-Path $root "bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj") -c $Configuration -f netstandard2.1 --no-restore -p:Version=$Version -p:RestoreEnablePackagePruning=false -p:DefineConstants=GUA_STATIC_LINK -o $webManagedBuild
+    if ($LASTEXITCODE -ne 0) { throw "Failed to build the WebGL Gua.Runtime assembly." }
+}
 
 New-Item -ItemType Directory -Force $managed, $windowsNative, $linuxNative, $macNative, $webManaged | Out-Null
 Copy-Item (Join-Path $root "bindings/dotnet/src/Gua.Core/bin/$Configuration/netstandard2.1/Gua.Core.dll") $managed -Force
 Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Core.dll.meta") $managed -Force
 Copy-Item (Join-Path $root "bindings/dotnet/src/Gua.Runtime/bin/$Configuration/netstandard2.1/Gua.Runtime.dll") $managed -Force
 Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Runtime.dll.meta") $managed -Force
-Copy-Item (Join-Path $webManagedBuild "Gua.Core.dll") $webManaged -Force
-Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Core.WebGL.dll.meta") (Join-Path $webManaged "Gua.Core.dll.meta") -Force
-Copy-Item (Join-Path $webManagedBuild "Gua.Runtime.dll") $webManaged -Force
-Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Runtime.WebGL.dll.meta") (Join-Path $webManaged "Gua.Runtime.dll.meta") -Force
+if (-not $DesktopOnly) {
+    Copy-Item (Join-Path $webManagedBuild "Gua.Core.dll") $webManaged -Force
+    Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Core.WebGL.dll.meta") (Join-Path $webManaged "Gua.Core.dll.meta") -Force
+    Copy-Item (Join-Path $webManagedBuild "Gua.Runtime.dll") $webManaged -Force
+    Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Runtime.WebGL.dll.meta") (Join-Path $webManaged "Gua.Runtime.dll.meta") -Force
+}
 
 & (Join-Path $PSScriptRoot "copy-unity-managed-closure.ps1") `
     -AssetsFile (Join-Path $root "bindings/dotnet/src/Gua.Runtime/obj/project.assets.json") `

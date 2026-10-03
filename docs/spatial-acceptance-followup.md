@@ -97,12 +97,14 @@ control fails its intended count/correlation/completion assertion.
   execution routes, not public publication. Its original package/resource and
   route conditions remain mandatory; candidate packing/loading alone is
   insufficient. See [distribution contract](distribution-contract.md).
-- Actual Unity Linux/macOS engine/Mono consumer routes need an available
-  player-build/runtime-host pipeline. This Windows editor has only Windows
-  standalone and WebGL modules; Linux/macOS build modules and an existing Unity
-  engine CI job are absent. A suitable editor build host with applicable license,
-  or cross-build modules plus target runtime hosts, could provide it. No license/credential
-  changes are authorized. This does not block Godot desktop coverage.
+- Actual Unity Linux/macOS engine/Mono consumer routes need executed candidate
+  evidence. This Windows editor has only Windows standalone and WebGL modules.
+  The existing release workflow already defines four-RID Unity engine jobs, but
+  they are tag-only. The non-publishing `unity-candidate.yml` reuses existing
+  GameCI/license inputs for four Player routes; its run must pass before those
+  routes are established. Non-Windows Editor routes and independent spatial
+  feature conditions remain unverified. See [identified UPM route evidence](distribution-route-evidence.md).
+  No license/credential changes are authorized. This does not block Godot coverage.
 - Other patches/backends, meshes/one-way gameplay and physics error bounds
   remain outside the measured support claims documented in spatial-engine-r1.
 - Built-in privileged browser spatial remains Unsupported; #116 Codex routing
