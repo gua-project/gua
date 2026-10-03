@@ -28,7 +28,13 @@ public static class EditorCandidateRun
     [InitializeOnLoadMethod] static void Resume() {EditorApplication.update+=Poll;deadline=EditorApplication.timeSinceStartup+300;}
     static void Poll() {
         if(!SessionState.GetBool("gua-candidate-pending",false)) return;
-        if(EditorApplication.timeSinceStartup>deadline) {consumer?.Kill();EditorApplication.Exit(1);return;}
+        if(EditorApplication.timeSinceStartup>deadline) {
+            SessionState.SetBool("gua-candidate-pending",false);
+            try {if(consumer!=null && !consumer.HasExited) consumer.Kill();}
+            catch(InvalidOperationException) { /* Consumer exited during the timeout check. */ }
+            finally {EditorApplication.Exit(1);}
+            return;
+        }
         if(consumer==null && EditorApplication.isPlaying && Application.isPlaying) {
             var start=new ProcessStartInfo {FileName=SessionState.GetString("gua-candidate-client",""),UseShellExecute=false};
             start.Arguments="attach ws://127.0.0.1:"+SessionState.GetInt("gua-candidate-port",0)+" . "+SessionState.GetString("gua-candidate-output","")+" "+SessionState.GetString("gua-candidate-source","");

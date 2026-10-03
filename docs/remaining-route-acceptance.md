@@ -68,3 +68,18 @@ recipe requires rerunning all actual routes. Normal CI37101078467 also aborted a
 Linux native bridge test with `std::length_error` during disconnect handling; the
 core/bridge files are unchanged by this branch. It is not a successful gate and
 needs final-head validation separately.
+
+Recipe `100d6f5` / candidate 37101629200 passed all ten active Unity jobs,
+including Linux Editor and all four full geometry/profile/client routes. Final
+GitHub review then identified four supported assertion/infrastructure gaps:
+Godot CMake builds omitted the asserted source ID; constant CPU/wall clocks could
+pass; the spatial package client discarded unsuccessful Trace completion/reader
+issues; Editor timeout could race an exited child. Both native configurations now
+receive the source pin, phase clocks must actually advance, finalized complete
+Trace is required, and timeout exits in finally. Existing actual evidence from all
+four hosts passes the stronger clock checks. A constant-clock mutation passed the
+pre-fix assertion and fails the intended new advancing-clock assertion; a
+disposable exact-package client with forced false Trace completion exits at the
+required completion assertion after real engine queries. The unmutated strengthened
+package client passes the real Windows geometry/spatial route. These final review
+fixes require fresh exact-head CI and actual candidate execution.

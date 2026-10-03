@@ -14,6 +14,9 @@ export function assertEngineEvidence(evidence:any, fixture:any) {
   for(const size of [0,1,16]) {
     const samples=evidence.profile.filter((r:any)=>r.batchSize===size);
     if(samples.length!==120 || samples.filter((r:any)=>r.phaseMainThreadCpuUs!==null && r.phaseMainThreadCpuUs!==undefined).length!==1) throw Error("Required physics callback phase missing: "+size);
+    const phase=samples.find((r:any)=>r.phaseMainThreadCpuUs!==null && r.phaseMainThreadCpuUs!==undefined);
+    if(!Number.isFinite(phase.phaseMainThreadCpuUs) || phase.phaseMainThreadCpuUs<=0 ||
+       !Number.isFinite(phase.phaseElapsedUs) || phase.phaseElapsedUs<=0) throw Error("Actual phase CPU and wall clocks must advance: "+size);
     for(const sample of samples) {
       if(!["GetThreadTimes","clock_gettime(CLOCK_THREAD_CPUTIME_ID)"].includes(sample.threadCpuClock) ||
          !Number.isFinite(sample.threadCpuUs) || sample.threadCpuUs<0 ||

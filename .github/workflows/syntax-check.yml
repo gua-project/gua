@@ -60,8 +60,8 @@ jobs:
 
       - name: Configure Debug and Release native builds
         run: |
-          cmake -S . -B build/godot-debug -DCMAKE_BUILD_TYPE=Debug -DGUA_GODOT_CONFIGURATION=Debug -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF
-          cmake -S . -B build/godot-release -DCMAKE_BUILD_TYPE=Release -DGUA_GODOT_CONFIGURATION=Release -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF
+          cmake -S . -B build/godot-debug -DCMAKE_BUILD_TYPE=Debug -DGUA_GODOT_CONFIGURATION=Debug -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF -DGUA_VERSION=0.0.0-ci -DGUA_BUILD_ID=${{ github.sha }}
+          cmake -S . -B build/godot-release -DCMAKE_BUILD_TYPE=Release -DGUA_GODOT_CONFIGURATION=Release -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF -DGUA_VERSION=0.0.0-ci -DGUA_BUILD_ID=${{ github.sha }}
 
       - name: Build Debug and Release Godot GDExtensions
         run: |
