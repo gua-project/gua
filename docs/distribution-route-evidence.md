@@ -11,6 +11,9 @@ successful main Syntax Check run `37082802731`. The privately assembled Windows
 UPM archive SHA-256 is
 `a9a79360ee116f467614e62ab9a52ddb82bc0eec2d40cc74c34270e99151cc97`.
 This identifies a local candidate, not an existing public release artifact.
+Its earlier notices expose the own-MIT omission fixed here; route execution does
+not establish redistribution readiness of that earlier archive. The new helper
+closure check is separate, and candidate CI must pack the corrected archive.
 
 The producer compiled the adapter; the separate consumer installed only that
 `.tgz` via UPM's local-tarball route. Installed payload hashes matched the archive;
@@ -43,6 +46,11 @@ The workspace's ignored `artifacts/unity129-paths.json` identifies the exact roo
 Earlier failed setup/selector/spatial-port attempts are retained separately and
 are not counted as passes. Raw Editor licensing logs are not uploaded by the
 reusable consumer.
+The [durable Windows execution record](distribution-windows-run.md) retains actual
+operation/provenance outputs, archive file hashes, the new notice-helper manifest
+and selected failure logs for repository reviewers. Full binary/Viewer artifacts
+remain in the desktop evidence ZIP, not in git; candidate CI must independently
+retain the corrected archive and actual route evidence.
 
 ## Candidate CI route
 
