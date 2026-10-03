@@ -1,7 +1,7 @@
 # Spatial-r1 parent acceptance evidence (#130)
 
 This supplements the [route/support matrix](spatial-transport-r1.md), not a
-declaration that #130 or the public distribution gate #129 is complete. Child
+declaration that #130 or the artifact/route distribution gate #129 is complete. Child
 #131–#134 merges are implementation milestones; parent acceptance remains open.
 Built-in privileged browser spatial routes remain **Unsupported**. #116 actual
 Codex routing is investigated separately. No release, tag or deployment is part
@@ -86,18 +86,26 @@ logs are `artifacts/typescript-check.log`, `artifacts/spatial-mcp-tests.log`,
 The portable native CI lane now builds the MCP CLI and shared Trace viewer
 before running the integration tests. Unrun or skipped routes are not passes.
 
-## Remaining parent gates
+## Parent gates recorded at PR #167
 
-- #129 public distribution/published-artifact acceptance remains open. Local
-  builds, pack smokes and existing PR #161 unpacked consumers do not replace it.
+- #129 identified target commit/version artifact and declared-route acceptance
+  remains open. Public publication is separate; pack/loading smokes alone do
+  not establish engine attachment or feature support.
 - The existing support matrix's actual Linux/macOS engine/backend/patch spatial
   routes remain unverified; native synthetic-provider CI is separate evidence.
 - Complete identifiable-fixture nonleakage across TypeScript/MCP diagnostics and
   Trace after privilege loss/reset/scene replacement is still a parent condition.
   Existing native redaction tests are useful but not a blanket waiver.
-- Real-engine executions of the strengthened route verifier and published
+- Real-engine executions of the strengthened route verifier and artifact
   consumer verification on the final head remain distinct acceptance work.
 
 The parent must stay open while these required conditions remain unmet. Updating
 the focused batch-verification checkbox does not mark the whole integration,
 route support, or distribution checklist complete.
+
+PR #168 updates the historical route/confidentiality gaps above in
+[the follow-up record](spatial-acceptance-followup.md). Its four-RID Godot and
+Windows Unity evidence does not waive Unity Linux/macOS or #130's independent
+geometry/backend/patch and integration conditions. The corrected #129 policy is
+in [the distribution contract](distribution-contract.md); no public-release
+decision is added to either issue's completion requirements.

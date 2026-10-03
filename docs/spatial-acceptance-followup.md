@@ -93,8 +93,10 @@ control fails its intended count/correlation/completion assertion.
 
 ## Gates retained
 
-- #129 requires an owner-selected public version/channel and acceptance on the
-  actually published artifacts. Candidate packs/runs cannot close that gate.
+- #129 requires identified target commit/version artifacts and verified declared
+  execution routes, not public publication. Its original package/resource and
+  route conditions remain mandatory; candidate packing/loading alone is
+  insufficient. See [distribution contract](distribution-contract.md).
 - Actual Unity Linux/macOS engine/Mono consumer routes need an available
   player-build/runtime-host pipeline. This Windows editor has only Windows
   standalone and WebGL modules; Linux/macOS build modules and an existing Unity
