@@ -379,7 +379,12 @@ jobs:
           path: artifacts/upm
       - name: Stage only the actual precompiled UPM and fixture sources
         shell: pwsh
-        run: scripts/install-unity-candidate-fixture.ps1 -ArchiveDirectory artifacts/upm -ProjectDirectory artifacts/spatial-project -SourceCommit $env:GUA_BUILD_ID -Kind spatial
+        run: |
+          scripts/install-unity-candidate-fixture.ps1 -ArchiveDirectory artifacts/upm -ProjectDirectory artifacts/spatial-project -SourceCommit $env:GUA_BUILD_ID -Kind spatial
+          # Stage provenance before the container creates root-owned Player directories.
+          New-Item -ItemType Directory -Force artifacts/spatial-player | Out-Null
+          Copy-Item artifacts/spatial-project/artifact-provenance.json artifacts/spatial-player/upm-provenance.json
+          @{productSource=$env:GUA_BUILD_ID;recipeSource='${{ github.sha }}';rid='${{ matrix.rid }}'} | ConvertTo-Json | Set-Content artifacts/spatial-player/fixture-provenance.json
       - name: Build geometry and transport Players with existing license and image
         uses: game-ci/unity-builder@v4
         env:
@@ -393,11 +398,6 @@ jobs:
           buildMethod: SpatialTransportBuild.BuildCandidates
           allowDirtyBuild: true
           customParameters: -guaTarget ${{ matrix.target }} -guaArchitecture ${{ matrix.architecture }} -guaOutput /github/workspace/artifacts/spatial-player
-      - name: Preserve product versus fixture identity
-        shell: pwsh
-        run: |
-          Copy-Item artifacts/spatial-project/artifact-provenance.json artifacts/spatial-player/upm-provenance.json
-          @{productSource=$env:GUA_BUILD_ID;recipeSource='${{ github.sha }}';rid='${{ matrix.rid }}'} | ConvertTo-Json | Set-Content artifacts/spatial-player/fixture-provenance.json
       - uses: actions/upload-artifact@v4
         with:
           name: unity-spatial-player-${{ matrix.rid }}-${{ github.sha }}

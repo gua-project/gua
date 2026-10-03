@@ -16,6 +16,8 @@ async function executable(kind:string) {
     const required=rid==="osx-arm64"?"arm64":"x86_64";
     if(Bun.spawnSync(["lipo",binary,"-verify_arch",required]).exitCode!==0) throw Error("Spatial Player missing declared native slice");
   }
+  // Actions' raw artifact transfer resets file modes to 644.
+  if(process.platform!=="win32" && Bun.spawnSync(["chmod","u+x",binary]).exitCode!==0) throw Error("Cannot restore actual Player execute permission");
   await writeFile(join(output,kind+"-player-provenance.json"),JSON.stringify({rid,sourceCommit:process.env.GUA_BUILD_ID,recipeCommit:process.env.GUA_RECIPE_ID,sha256:createHash("sha256").update(await readFile(binary)).digest("hex")},null,2));
   return binary;
 }

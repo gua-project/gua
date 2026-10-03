@@ -20,7 +20,7 @@ public static class EditorCandidateRun
         var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();
         var port=((IPEndPoint)listener.LocalEndpoint).Port;listener.Stop();
         Environment.SetEnvironmentVariable("GUA_BRIDGE_PORT",port.ToString());
-        SessionState.SetInteger("gua-candidate-port",port);
+        SessionState.SetInt("gua-candidate-port",port);
         SessionState.SetBool("gua-candidate-pending",true);
         EditorSceneManager.OpenScene("Assets/Scenes/GuaUnityFixture.unity");
         EditorApplication.EnterPlaymode();
@@ -31,7 +31,7 @@ public static class EditorCandidateRun
         if(EditorApplication.timeSinceStartup>deadline) {consumer?.Kill();EditorApplication.Exit(1);return;}
         if(consumer==null && EditorApplication.isPlaying && Application.isPlaying) {
             var start=new ProcessStartInfo {FileName=SessionState.GetString("gua-candidate-client",""),UseShellExecute=false};
-            start.Arguments="attach ws://127.0.0.1:"+SessionState.GetInteger("gua-candidate-port",0)+" . "+SessionState.GetString("gua-candidate-output","")+" "+SessionState.GetString("gua-candidate-source","");
+            start.Arguments="attach ws://127.0.0.1:"+SessionState.GetInt("gua-candidate-port",0)+" . "+SessionState.GetString("gua-candidate-output","")+" "+SessionState.GetString("gua-candidate-source","");
             consumer=Process.Start(start);
         }
         if(consumer!=null && consumer.HasExited) {

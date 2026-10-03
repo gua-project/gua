@@ -29,3 +29,22 @@ remain open until their actual assertions execute; disclosure is not a waiver.
 Linux/macOS thread CPU clocks use CLOCK_THREAD_CPUTIME_ID; Windows retains
 GetThreadTimes and QueryThreadCycleTime. This measures the actual callback
 thread, not process CPU or wall time. See the [POSIX clock contract](https://pubs.opengroup.org/onlinepubs/000095399/functions/clock_getres.html).
+
+Local focused execution on Windows 11 / Unity6000.5.3f1 used the actual accepted
+UPM SHA256 `21da33106301de108ecb1ff0868fe0342a00af980e805ff14a67635d444412f3`
+and product `595f589`, with this branch's fixture recipe. Actual geometry produced
+67 results, 34 lease races and 360 callback samples with GetThreadTimes CPU.
+The same archive-only transport Player passed TypeScript, built MCP and a fresh
+external exact-package consumer. The corrected Editor entry point passed actual
+Play Mode with that product: matching BuildId/ABI/protocol, NodeNotFound and
+unchanged semantic state, correlated Click completion, observed loading screen,
+finalized Trace and embedded report. These local results do not substitute for
+the pending non-Windows or final-commit CI routes.
+
+Four disposable mutations of that actual geometry evidence were rejected:
+missing callback sample, missing CPU clock, fabricated Unix cycles and a duplicate
+case replacing a required case. Each triggered the intended completeness/CPU/case
+assertion. The initial extended candidate run 37099987545 is a failed pre-fix run:
+Linux Editor compilation exposed incorrect SessionState method names; all four
+Players built but root-owned output prevented later provenance writes. Stage
+provenance before the build; retain the failures separately from corrected runs.

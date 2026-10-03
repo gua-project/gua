@@ -45,7 +45,6 @@ for(const backend of ["GodotPhysics3D","Jolt Physics"]) {
   let project=await readFile(join(directory,"project.godot"),"utf8");
   await writeFile(join(directory,"project.godot"),project.replace("GodotPhysics3D",backend));
   const scene=await readFile(join(directory,"fixture.tscn"),"utf8");
-  await writeFile(join(directory,"fixture.tscn"),scene.replace("res://fixture.gd","res://transport.gd"));
   // Minimal deterministic import metadata for this source-only fixture. No
   // editor execution or geometry/result cache is needed or claimed.
   await writeFile(join(directory,".godot/extension_list.cfg"),"res://addons/gua/gua.gdextension\n");
@@ -53,6 +52,7 @@ for(const backend of ["GodotPhysics3D","Jolt Physics"]) {
   await run([executable,"--headless","--path",directory,"--max-fps","60"],backend+"-geometry.log");
   const geometry=JSON.parse(await readFile(join(directory,"evidence.json"),"utf8"));
   assertEngineEvidence(geometry,JSON.parse(await readFile("protocol/fixtures/spatial-engine-r1.json","utf8")));
+  await writeFile(join(directory,"fixture.tscn"),scene.replace("res://fixture.gd","res://transport.gd"));
   const server=createServer(); await new Promise<void>(r=>server.listen(0,"127.0.0.1",r)); const port=(server.address() as any).port; await new Promise<void>(r=>server.close(()=>r()));
   const game=Bun.spawn([executable,"--headless","--path",directory],{env:{...process.env,GUA_BRIDGE_PORT:String(port)},stdout:"pipe",stderr:"pipe"});
   const logs=Promise.all([new Response(game.stdout).text(),new Response(game.stderr).text()]);
