@@ -25,13 +25,24 @@ public sealed class SpatialProfile : MonoBehaviour
     static extern bool GetThreadTimes(IntPtr thread,out FileTime created,out FileTime exited,out FileTime kernel,out FileTime user);
     [DllImport("kernel32.dll",SetLastError=true)] [return:MarshalAs(UnmanagedType.Bool)]
     static extern bool QueryThreadCycleTime(IntPtr thread,out ulong cycles);
-    public static ulong CpuCycles()
+    [StructLayout(LayoutKind.Sequential)] struct Timespec { public long Seconds,Nanoseconds; }
+    [DllImport("libc",EntryPoint="clock_gettime",SetLastError=true)] static extern int LinuxThreadTime(int clock,out Timespec value);
+    [DllImport("/usr/lib/libSystem.B.dylib",EntryPoint="clock_gettime",SetLastError=true)] static extern int MacThreadTime(int clock,out Timespec value);
+    public static string CpuClock => Application.platform==RuntimePlatform.WindowsEditor || Application.platform==RuntimePlatform.WindowsPlayer ? "GetThreadTimes" : "clock_gettime(CLOCK_THREAD_CPUTIME_ID)";
+    public static ulong? CpuCycles()
     {
+        if(CpuClock!="GetThreadTimes") return null;
         if(!QueryThreadCycleTime(GetCurrentThread(),out var cycles)) throw new InvalidOperationException("Windows thread cycles unavailable");
         return cycles;
     }
     public static double CpuUs()
     {
+        if(CpuClock!="GetThreadTimes") {
+            Timespec value;
+            int status=Application.platform==RuntimePlatform.OSXEditor || Application.platform==RuntimePlatform.OSXPlayer ? MacThreadTime(16,out value) : LinuxThreadTime(3,out value);
+            if(status!=0) throw new InvalidOperationException("Thread CPU clock unavailable: "+Marshal.GetLastWin32Error());
+            return value.Seconds*1000000.0+value.Nanoseconds/1000.0;
+        }
         if(!GetThreadTimes(GetCurrentThread(),out var created,out var exited,out var kernel,out var user)) throw new InvalidOperationException("Windows thread CPU unavailable");
         return (kernel.Value+user.Value)/10.0;
     }
@@ -79,7 +90,8 @@ public sealed class SpatialProfile : MonoBehaviour
                 }
             }
             var end=Stopwatch.GetTimestamp(); var cpuEnd=CpuUs();
-            if(frame%150>=30) records.Add(new {batchSize=count,callbackWallUs=Us(end-start),threadCpuUs=cpuEnd-cpu,threadCpuCycles=CpuCycles()-cycles,pumpWallUs=pumpWall,queueWallUs=queueWall,callbackIntervalUs=Us(start-last),fixedUpdateCallback=frame,phaseMainThreadCpuUs=frame%150==149?(double?)(cpuEnd-phaseCpu):null,phaseElapsedUs=frame%150==149?(double?)Us(end-phaseWall):null});
+            if(cpuEnd<cpu) throw new Exception("Thread CPU clock moved backwards");
+            if(frame%150>=30) records.Add(new {batchSize=count,callbackWallUs=Us(end-start),threadCpuUs=cpuEnd-cpu,threadCpuClock=CpuClock,threadCpuCycles=CpuCycles()-cycles,pumpWallUs=pumpWall,queueWallUs=queueWall,callbackIntervalUs=Us(start-last),fixedUpdateCallback=frame,phaseMainThreadCpuUs=frame%150==149?(double?)(cpuEnd-phaseCpu):null,phaseElapsedUs=frame%150==149?(double?)Us(end-phaseWall):null});
             last=start; ++frame;
             if(frame==450) Finish(null);
         }

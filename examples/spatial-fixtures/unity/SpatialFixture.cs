@@ -6,8 +6,10 @@ using System.Reflection;
 using System.Text.Json;
 using Gua.Core;
 using Gua.Unity;
+#if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.SceneManagement;
+#endif
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -44,6 +46,7 @@ public static class SpatialFixture
                 Engine=new GuaSpatialEngine("Unity",Application.unityVersion,"PhysX","unknown"),
                 Limits=new GuaSpatialLimits(64,2,1000) }};
     }
+#if UNITY_EDITOR
     public static void Run()
     {
         SessionState.SetBool("GuaSpatialFixturePending", true);
@@ -58,7 +61,8 @@ public static class SpatialFixture
         EditorApplication.update -= RunWhenPlaying;
         RunCore();
     }
-    static void RunCore()
+#endif
+    public static void RunCore()
     {
         var exit = 1;
         try
@@ -212,17 +216,24 @@ public static class SpatialFixture
                 var profile=new GameObject("spatial-profile").AddComponent<SpatialProfile>();
                 profile.Completed=(records,error)=>
                 {
-                    if(error!=null) {UnityEngine.Debug.LogException(error);EditorApplication.Exit(1);return;}
+                    if(error!=null) {UnityEngine.Debug.LogException(error);Exit(1);return;}
                     File.WriteAllText("evidence.json",JsonSerializer.Serialize(new {configuration,results=evidence,profile=records,leaseRaces}));
                     UnityEngine.Debug.Log("SPATIAL PROFILE PASS: "+records.Count+" real FixedUpdate samples");
-                    EditorApplication.Exit(0);
+                    Exit(0);
                 };
                 UnityEngine.Debug.Log("SPATIAL PASS: "+evidence.Count+" real Unity cases");
             }
             return; // Runtime profile completes across normal FixedUpdate callbacks.
         }
         catch (Exception e) { UnityEngine.Debug.LogException(e); }
-        EditorApplication.Exit(exit);
+        Exit(exit);
+    }
+    static void Exit(int code) {
+#if UNITY_EDITOR
+        EditorApplication.Exit(code);
+#else
+        Application.Quit(code);
+#endif
     }
     static void LeaseRace(GuaSpatialHost host,GuaUnitySpatial adapter,ulong owner,GuaSpatialDocument grants,GuaSpatialRequest query,string expected,List<object> evidence,string id,bool deadline=false)
     {

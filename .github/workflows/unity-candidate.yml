@@ -11,6 +11,13 @@ on:
         description: Successful main push Syntax Check run supplying candidate artifacts
         required: true
         type: string
+      extended_routes:
+        description: Reuse an accepted actual UPM for Editor/spatial acceptance
+        type: boolean
+        default: false
+      candidate_run_id:
+        description: Successful candidate run supplying the actual UPM (extended routes)
+        type: string
 
 permissions:
   contents: read
@@ -23,6 +30,7 @@ env:
 
 jobs:
   native:
+    if: ${{ !inputs.extended_routes }}
     name: Pin candidate and assemble desktop native payload
     runs-on: macos-latest
     steps:
@@ -59,6 +67,7 @@ jobs:
           if-no-files-found: error
 
   package:
+    if: ${{ !inputs.extended_routes }}
     name: Compile and package candidate UPM
     needs: native
     runs-on: ubuntu-latest
@@ -118,6 +127,7 @@ jobs:
           if-no-files-found: error
 
   build-player:
+    if: ${{ !inputs.extended_routes }}
     name: Build candidate Mono Player / ${{ matrix.rid }}
     needs: package
     runs-on: ubuntu-latest
@@ -186,6 +196,7 @@ jobs:
           if-no-files-found: error
 
   smoke:
+    if: ${{ !inputs.extended_routes }}
     name: Actual candidate Player / ${{ matrix.rid }}
     needs: build-player
     strategy:
@@ -252,4 +263,200 @@ jobs:
         with:
           name: unity-candidate-route-${{ matrix.rid }}-${{ inputs.source_commit }}
           path: artifacts/route-evidence
+          if-no-files-found: error
+
+  remaining-pin:
+    if: ${{ inputs.extended_routes }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful identified artifact runs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE: ${{ inputs.source_commit }}
+          PACKAGE_RUN: ${{ inputs.package_run_id }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+        run: |
+          if($env:SOURCE -notmatch '^[a-f0-9]{40}$' -or $env:PACKAGE_RUN -notmatch '^\d+$' -or $env:CANDIDATE_RUN -notmatch '^\d+$') {throw 'Full source and numeric artifact run IDs required'}
+          $packages=gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:PACKAGE_RUN" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $packages.head_sha -ne $env:SOURCE -or $packages.event -ne 'push' -or $packages.head_branch -ne 'main' -or $packages.name -ne 'Syntax Check' -or $packages.conclusion -ne 'success' -or $packages.head_repository.full_name -ne $env:GITHUB_REPOSITORY) {throw 'Require successful exact-main packages'}
+          $candidate=gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:CANDIDATE_RUN" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $candidate.name -ne 'Unity candidate artifact acceptance' -or $candidate.conclusion -ne 'success' -or $candidate.head_repository.full_name -ne $env:GITHUB_REPOSITORY) {throw 'Require successful actual UPM candidate'}
+
+  linux-editor:
+    name: Actual archive Editor Play Mode / linux-x64
+    needs: remaining-pin
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
+    env:
+      GUA_RECIPE_ID: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: unity-candidate-upm-${{ inputs.source_commit }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/upm
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-distribution-linux-x64-${{ inputs.source_commit }}
+          run-id: ${{ inputs.package_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/feed
+      - name: Stage archive-only Editor fixture and isolated consumer
+        shell: pwsh
+        run: |
+          scripts/install-unity-candidate-fixture.ps1 -ArchiveDirectory artifacts/upm -ProjectDirectory artifacts/editor-project -SourceCommit $env:GUA_BUILD_ID -Kind editor
+          scripts/verify-unity-distribution-player.ps1 -PackageDirectory artifacts/feed/local-feed -SourceCommit $env:GUA_BUILD_ID -OutputDirectory artifacts/editor-evidence -Mode prepare -PublishRid linux-x64
+          Copy-Item artifacts/editor-project/artifact-provenance.json artifacts/editor-evidence/upm-provenance.json
+      - name: Execute Play Mode using the existing licensed Linux image
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 6000.5.3f1
+          projectPath: artifacts/editor-project
+          targetPlatform: StandaloneWindows64
+          buildMethod: EditorCandidateRun.Run
+          manualExit: true
+          enableGpu: true
+          allowDirtyBuild: true
+          customParameters: -guaClient /github/workspace/artifacts/editor-evidence/client/Consumer -guaEvidence /github/workspace/artifacts/editor-evidence -guaSource ${{ inputs.source_commit }}
+      - name: Require actual Editor operation result
+        shell: pwsh
+        run: |
+          $result=Get-Content artifacts/editor-evidence/result.json -Raw | ConvertFrom-Json
+          if($result.mode -ne 'attach' -or $result.sourceCommit -ne $env:GUA_BUILD_ID -or $result.finalScreen -ne 'loading') {throw 'Actual Editor evidence missing'}
+          @{productSource=$env:GUA_BUILD_ID;recipeSource=$env:GUA_RECIPE_ID;route='linux-x64 Editor Play Mode; existing GameCI image'} | ConvertTo-Json | Set-Content artifacts/editor-evidence/route-provenance.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-editor-linux-${{ github.sha }}
+          path: |
+            artifacts/editor-evidence/*.json
+            artifacts/editor-evidence/report.html
+            artifacts/editor-evidence/trace
+          if-no-files-found: error
+
+  spatial-build:
+    name: Build actual archive spatial fixtures / ${{ matrix.rid }}
+    needs: remaining-pin
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      deployment: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            target: StandaloneWindows64
+            architecture: x86_64
+          - rid: linux-x64
+            target: StandaloneLinux64
+            architecture: x86_64
+          - rid: osx-x64
+            target: StandaloneOSX
+            architecture: x86_64
+          - rid: osx-arm64
+            target: StandaloneOSX
+            architecture: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: unity-candidate-upm-${{ inputs.source_commit }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/upm
+      - name: Stage only the actual precompiled UPM and fixture sources
+        shell: pwsh
+        run: scripts/install-unity-candidate-fixture.ps1 -ArchiveDirectory artifacts/upm -ProjectDirectory artifacts/spatial-project -SourceCommit $env:GUA_BUILD_ID -Kind spatial
+      - name: Build geometry and transport Players with existing license and image
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 6000.5.3f1
+          projectPath: artifacts/spatial-project
+          targetPlatform: ${{ matrix.target }}
+          buildMethod: SpatialTransportBuild.BuildCandidates
+          allowDirtyBuild: true
+          customParameters: -guaTarget ${{ matrix.target }} -guaArchitecture ${{ matrix.architecture }} -guaOutput /github/workspace/artifacts/spatial-player
+      - name: Preserve product versus fixture identity
+        shell: pwsh
+        run: |
+          Copy-Item artifacts/spatial-project/artifact-provenance.json artifacts/spatial-player/upm-provenance.json
+          @{productSource=$env:GUA_BUILD_ID;recipeSource='${{ github.sha }}';rid='${{ matrix.rid }}'} | ConvertTo-Json | Set-Content artifacts/spatial-player/fixture-provenance.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unity-spatial-player-${{ matrix.rid }}-${{ github.sha }}
+          path: artifacts/spatial-player
+          if-no-files-found: error
+
+  spatial-smoke:
+    name: Actual geometry/profile/spatial routes / ${{ matrix.rid }}
+    needs: spatial-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+          - rid: linux-x64
+            runner: ubuntu-22.04
+          - rid: osx-x64
+            runner: macos-15-intel
+          - rid: osx-arm64
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    env:
+      GUA_RECIPE_ID: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/download-artifact@v4
+        with:
+          name: unity-spatial-player-${{ matrix.rid }}-${{ github.sha }}
+          path: artifacts/player
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-distribution-win-x64-${{ inputs.source_commit }}
+          run-id: ${{ inputs.package_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/feed
+      - name: Build only consumer tools and isolated package-only client
+        shell: pwsh
+        run: |
+          bun install --frozen-lockfile
+          if($LASTEXITCODE -ne 0) {throw 'Consumer tool install failed'}
+          bun run --filter gui-mcp build
+          if($LASTEXITCODE -ne 0) {throw 'MCP build failed'}
+          scripts/prepare-spatial-candidate-client.ps1 -PackageDirectory artifacts/feed/local-feed -OutputDirectory artifacts/evidence -SourceCommit $env:GUA_BUILD_ID
+          Copy-Item artifacts/player/*provenance.json artifacts/evidence
+      - name: Execute actual geometry and spatial Players on the native host
+        shell: pwsh
+        run: |
+          bun scripts/verify-unity-spatial-candidate.ts artifacts/player artifacts/evidence artifacts/evidence/client/SpatialClient.dll '${{ matrix.rid }}'
+          if($LASTEXITCODE -ne 0) {throw 'Actual packaged spatial acceptance failed'}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-spatial-evidence-${{ matrix.rid }}-${{ github.sha }}
+          path: artifacts/evidence
           if-no-files-found: error

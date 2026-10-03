@@ -7,6 +7,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#elif defined(__linux__) || defined(__APPLE__)
+#include <time.h>
 #endif
 namespace godot {
 Dictionary GuaSpatialHost::reply(int status, uint64_t handle) {
@@ -23,8 +25,16 @@ Dictionary GuaSpatialHost::thread_cpu_time() {
         const uint64_t k=(uint64_t(kernel.dwHighDateTime)<<32)|kernel.dwLowDateTime;
         const uint64_t u=(uint64_t(user.dwHighDateTime)<<32)|user.dwLowDateTime;
         result["status"]=GUA_SPATIAL_OK; result["microseconds"]=double(k+u)/10.0;
+        result["clock"]="GetThreadTimes";
         ULONG64 cycles=0;
         if(QueryThreadCycleTime(GetCurrentThread(),&cycles)&&cycles<=static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) result["cycles"]=static_cast<int64_t>(cycles);
+    }
+#elif defined(__linux__) || defined(__APPLE__)
+    timespec value{};
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &value) == 0) {
+        result["status"]=GUA_SPATIAL_OK;
+        result["microseconds"]=double(value.tv_sec)*1000000.0+double(value.tv_nsec)/1000.0;
+        result["clock"]="clock_gettime(CLOCK_THREAD_CPUTIME_ID)";
     }
 #endif
     return result;

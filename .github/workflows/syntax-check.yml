@@ -158,7 +158,10 @@ jobs:
         shell: pwsh
         run: |
           bun run --filter gui-mcp build
-          bun scripts/verify-godot-spatial-routes.ts '.godot-editor/${{ matrix.executable }}' artifacts/packaged-addon/addons/gua artifacts/spatial-route-acceptance artifacts/spatial-packages
+          bun scripts/verify-godot-spatial-routes.ts '.godot-editor/${{ matrix.executable }}' artifacts/gua-godot-candidate.zip artifacts/spatial-route-acceptance artifacts/spatial-packages
+        env:
+          GUA_BUILD_ID: ${{ github.sha }}
+          GUA_RECIPE_ID: ${{ github.sha }}
 
       - name: Preserve spatial route acceptance evidence
         if: always()

@@ -1,9 +1,11 @@
 param(
     [Parameter(Mandatory = $true)][string]$PackageDirectory,
-    [Parameter(Mandatory = $true)][string]$PlayerPath,
+    [string]$PlayerPath,
     [Parameter(Mandatory = $true)][string]$SourceCommit,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
-    [string]$Version = '0.0.0-ci'
+    [string]$Version = '0.0.0-ci',
+    [ValidateSet('player','prepare')][string]$Mode = 'player',
+    [string]$PublishRid
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -36,6 +38,14 @@ try {
     Copy-Item -LiteralPath (Join-Path $project 'obj/project.assets.json') -Destination $OutputDirectory
     @{ project=$project; sourceCommit=$SourceCommit; version=$Version; packageDirectory=$feed; nativeOverrides='absent'; projectLibraries=0 } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'client-provenance.json') -Encoding utf8NoBOM
-    dotnet (Join-Path $project 'bin/Release/net10.0/Consumer.dll') player ([IO.Path]::GetFullPath($PlayerPath)) $project ([IO.Path]::GetFullPath($OutputDirectory)) $SourceCommit
-    if ($LASTEXITCODE -ne 0) { throw 'Actual Player route verification failed.' }
+    if($Mode -eq 'prepare') {
+        if(-not $PublishRid) {throw 'Publish RID required for the isolated Editor client'}
+        dotnet publish (Join-Path $project 'Consumer.csproj') -c Release -r $PublishRid --self-contained true -o (Join-Path $OutputDirectory 'client') --configfile $config -p:GuaDistributionVersion=$Version -p:NuGetAudit=false
+        if($LASTEXITCODE -ne 0) {throw 'Isolated Editor client publication failed'}
+        Copy-Item (Join-Path $project 'obj/project.assets.json') $OutputDirectory -Force
+    } else {
+        if(-not $PlayerPath) {throw 'Player path required'}
+        dotnet (Join-Path $project 'bin/Release/net10.0/Consumer.dll') player ([IO.Path]::GetFullPath($PlayerPath)) $project ([IO.Path]::GetFullPath($OutputDirectory)) $SourceCommit
+        if ($LASTEXITCODE -ne 0) { throw 'Actual Player route verification failed.' }
+    }
 } finally { $env:NUGET_PACKAGES = $savedCache }

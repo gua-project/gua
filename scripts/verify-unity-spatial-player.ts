@@ -20,6 +20,8 @@ try {
     if(game.exitCode!==null) throw Error(`Unity Player exited before readiness: ${game.exitCode}`);
     if(performance.now()>deadline) throw Error("Unity Player readiness timeout"); await Bun.sleep(25);
   }
+  const ready=JSON.parse(await readFile(join(directory,"transport-ready.json"),"utf8"));
+  if(process.env.GUA_BUILD_ID && ready.buildId!==process.env.GUA_BUILD_ID) throw Error("Actual spatial Player source identity mismatch");
   await run([process.execPath,"scripts/verify-spatial-route.ts",`ws://127.0.0.1:${port}`,join(directory,"typescript-mcp")],"routes.log");
   await run(["dotnet",consumer,`ws://127.0.0.1:${port}`,join(directory,"package-consumer")],"consumer.log");
   await writeFile(join(directory,"transport-done"),"done");
