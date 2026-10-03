@@ -68,4 +68,3 @@ licensed build/runtime hosts or separately authorized setup. Player UI success
 does not establish all spatial backends, patches, replay timing, Observe or other
 features. The local spatial run establishes only its stated Windows PhysX path.
 WebGL/IL2CPP and the remaining #130 integration conditions are independent.
-

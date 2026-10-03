@@ -48,7 +48,3 @@ var report=GuaTraceReport.WriteHtml(trace.ArtifactPath,Path.Combine(output,"repo
 if(!report.Succeeded) throw new Exception("Packaged Viewer report failed");
 File.WriteAllText(Path.Combine(output,"result.json"),JsonSerializer.Serialize(new {mode,sourceCommit=args[4],version,requestId=request.ToString(),completion,missingTarget=rejected.ToString(),initialScreen=before.Screen,finalScreen=final.Screen,trace=trace.ArtifactPath,report=report.Path},new JsonSerializerOptions {WriteIndented=true}));
 Console.WriteLine("Actual artifact Unity "+mode+" route passed: "+output);
-
-
-
-
