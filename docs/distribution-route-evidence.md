@@ -26,8 +26,8 @@ project libraries and no native-directory overrides.
 | Required behavior | Concrete violation and assertion | Execution / retained evidence |
 | --- | --- | --- |
 | Artifact provenance and attachment | Wrong build ID, missing Unity adapter or incompatible ABI/protocol fails before operation | Actual Editor Play Mode and standalone Player reported the exact target, ABI 1 and protocol 2; `version.json`, UPM provenance and installed-file hashes |
-| Usable UI operation | Missing/duplicate/nonactionable Start control, rejected submission, absent/wrong completion or absent observed transition fails | `examples/distribution-unity-consumer/Program.cs` requires exactly one actionable `start`, nonzero request, correlated successful completion and actual title-to-loading UI transition; both actual routes passed |
-| Rejection does not act | Missing-node click must return NodeNotFound and leave title UI unchanged | Same actual Editor/Player client assertion, retained `result.json` |
+| Usable UI operation | Missing/duplicate/nonactionable Start control, rejected submission, absent/wrong completion or absent observed transition fails | `examples/distribution-unity-consumer/Program.cs` requires exactly one actionable `start`, nonzero request, correlated successful Click completion and actual title-to-loading UI transition; both actual routes passed |
+| Rejection does not act | Missing-node click must return NodeNotFound and leave semantic state unchanged | Client compares the entire UI JSON except volatile frameSequence/revision, including nodes/state/session/screen; retains rejected-before/after snapshots |
 | Saved observation and offline Viewer | Unfinalized/invalid Trace, fewer than two observed blobs or report failure fails | Both routes saved before/after real UI, finalized Trace with zero reader issues and generated HTML through the packaged embedded Viewer; no browser visual QA claim |
 | Precompiled spatial provider | Source fallback, unsupported provider, wrong result correlation or missing actual physics batches fails | Separate Player installed the same archive and supplied only fixture host/build scripts; existing TS, built Native MCP and isolated package-only .NET spatial consumer passed three actual PhysX batches, Unity 6000.5.3f1, clean exit |
 | Redistribution notices | Missing metadata/file or missing own MIT attribution fails packaging | `copy-unity-package-notices.ps1` passed the restored closure, including Microsoft dependencies' own copyright and MIT terms; a disposable Bad.Dep package without license metadata failed at the intended assertion |
@@ -61,7 +61,9 @@ It requires a successful exact-commit main push Syntax Check run, checks NuGet
 source/version identity, assembles Universal 2 macOS native libraries, compiles
 the UPM and installs its actual archive before building each of the four Mono
 Players. Each Player executes on its native RID host using the same isolated
-package-only client, with Xvfb on Linux. Archive hashes, dependency notices,
+package-only client, with Xvfb on Linux. macOS validates the actual app executable's
+declared arm64/x86_64 slice with lipo before execution, so translation cannot
+substitute for the declared architecture. Archive hashes, dependency notices,
 package manifests, assets, real operation results and Trace/report are retained.
 
 The candidate uses the existing release environment's Unity license inputs and

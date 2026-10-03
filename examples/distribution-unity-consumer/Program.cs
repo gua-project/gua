@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Gua.Core;
 using Gua.Testing;
 using Gua.Testing.Unity;
@@ -26,15 +27,19 @@ File.WriteAllText(Path.Combine(output,"initial-ui.json"),remote.GetUiTreeJson())
 var starts=initial.Nodes.Where(n=>n.Id=="start" && n.Role=="button" && n.Visible && n.Enabled && n.Actions.Contains("click")).ToArray();
 if(starts.Length!=1) throw new Exception("Required unique actionable Start Game control missing");
 var before=remote.GetRemoteTree();
+var beforeRejected=remote.GetUiTreeJson();
 var rejected=remote.EnqueueAction(new(GuaActionType.Click,"missing-artifact-target"),out _);
-if(rejected!=GuaActionError.NodeNotFound || remote.GetRemoteTree().Screen!="title") throw new Exception("Missing-target rejection or no-side-effect assertion failed");
+var afterRejected=remote.GetUiTreeJson();
+if(rejected!=GuaActionError.NodeNotFound || !JsonNode.DeepEquals(SemanticState(beforeRejected),SemanticState(afterRejected))) throw new Exception("Missing-target rejection or no-side-effect assertion failed");
+File.WriteAllText(Path.Combine(output,"rejected-before-ui.json"),beforeRejected);
+File.WriteAllText(Path.Combine(output,"rejected-after-ui.json"),afterRejected);
 using var trace=new GuaTraceSession(new GuaTraceOptions {OutputDirectory=Path.Combine(output,"trace"),SavePolicy=GuaTraceSavePolicy.Always});
 var step=trace.BeginStep(GuaTraceStepKind.Action,"artifact Unity "+mode+" click");
 GuaTraceCapture.Tree(trace,step,"ui","unity-"+mode,"before",()=>remote.GetUiTreeJson());
 if(remote.EnqueueAction(new(GuaActionType.Click,starts[0].Id),out var request)!=GuaActionError.None || request==0) throw new Exception("Candidate click was not accepted");
 GuaActionEvent? completion=null; deadline=DateTime.UtcNow+TimeSpan.FromSeconds(10);
 while(DateTime.UtcNow<deadline) { if(remote.TryPollActionEvent(request,out var fact)) {completion=fact;break;} Thread.Sleep(20); }
-if(completion is not {Succeeded:true,Error:GuaActionError.None} || completion.Value.RequestId!=request || completion.Value.NodeId!=starts[0].Id) throw new Exception("Correlated successful click completion missing");
+if(completion is not {Succeeded:true,Error:GuaActionError.None,Action:GuaActionType.Click} || completion.Value.RequestId!=request || completion.Value.NodeId!=starts[0].Id) throw new Exception("Correlated successful click completion missing");
 deadline=DateTime.UtcNow+TimeSpan.FromSeconds(10); var final=remote.GetRemoteTree();
 while(final.Screen!="loading" && DateTime.UtcNow<deadline) {Thread.Sleep(20);final=remote.GetRemoteTree();}
 if(final.Screen!="loading" || !final.Nodes.Any(n=>n.Text=="Loading..." && n.Visible)) throw new Exception("Completed click did not produce observed loading UI");
@@ -48,3 +53,11 @@ var report=GuaTraceReport.WriteHtml(trace.ArtifactPath,Path.Combine(output,"repo
 if(!report.Succeeded) throw new Exception("Packaged Viewer report failed");
 File.WriteAllText(Path.Combine(output,"result.json"),JsonSerializer.Serialize(new {mode,sourceCommit=args[4],version,requestId=request.ToString(),completion,missingTarget=rejected.ToString(),initialScreen=before.Screen,finalScreen=final.Screen,trace=trace.ArtifactPath,report=report.Path},new JsonSerializerOptions {WriteIndented=true}));
 Console.WriteLine("Actual artifact Unity "+mode+" route passed: "+output);
+
+static JsonNode SemanticState(string json)
+{
+    var state=JsonNode.Parse(json)!.AsObject();
+    state.Remove("frameSequence");
+    state.Remove("revision");
+    return state;
+}

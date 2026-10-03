@@ -743,3 +743,25 @@ Wrong candidate source pin (`ffffffffffffffffffffffffffffffffffffffff`) was reje
 ## Boundaries
 
 This earlier Windows archive exposes the Microsoft own-MIT notice omission fixed by this PR; its native/managed execution proves the measured routes, not full redistribution readiness. The new helper notice manifest above is a separate positive closure check. The candidate CI must build the corrected archive and pass its own exact-source acceptance. Linux/macOS Player, non-Windows Editor, other features/backends/patches and independent #130 integration conditions are unverified. Full binary/Viewer artifacts stay outside git; this durable record provides operation, identity, hashes and failure outputs to reviewers. No browser visual QA, public release or credential change is claimed.
+
+## Review-strengthened checks
+
+The strengthened current client passed actual Player and Editor against corrected Windows archive SHA-256 `9448f1218ec74ff4abf9c5dae2a4031ce4d3c60629b68c6a851d1bef36ae9c05`, with product source still the identified 0a5cbc8 target. Installed own-MIT notice hashes and actual Player output are retained in [PR evidence](https://github.com/gua-project/gua/pull/171#issuecomment-5964365719). The client now compares all rejection-before/after semantic JSON except volatile frameSequence/revision, and requires completion.Action == Click. It saves both rejection snapshots. A macOS app slice check is also added to candidate CI; macOS execution remains unverified until that workflow runs.
+
+### negative-rejected-state
+
+```text
+Unhandled exception. System.Exception: Missing-target rejection or no-side-effect assertion failed
+   at Program.<Main>$(String[] args) in C:\Users\testk\AppData\Local\Temp\gua-unity-client-8edb0a1e46a347978e123e18d19c051b\Program.cs:line 33
+   at Program.<Main>(String[] args)
+```
+
+### negative-action-type
+
+```text
+Unhandled exception. System.Exception: Correlated successful click completion missing
+   at Program.<Main>$(String[] args) in C:\Users\testk\AppData\Local\Temp\gua-unity-client-8edb0a1e46a347978e123e18d19c051b\Program.cs:line 42
+   at Program.<Main>(String[] args)
+```
+
+The first variant modifies only the actual post-rejection snapshot nodes[0].visible to false while keeping screen unchanged; the second modifies only the actual completion Action to Focus while keeping request/node/success fields. Both fail their intended assertions after successful build and real Player attachment. The clean source was restored with an explicit full rebuild, then actual Editor passed; no mutation is submitted. Prior record sections retain their original assertions and are not retroactively called strengthened runs.

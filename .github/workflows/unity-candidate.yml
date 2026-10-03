@@ -216,6 +216,23 @@ jobs:
           run-id: ${{ inputs.package_run_id }}
           github-token: ${{ github.token }}
           path: artifacts/consumer-feed
+      - name: Verify actual macOS Player architecture
+        if: startsWith(matrix.rid, 'osx-')
+        shell: pwsh
+        env:
+          CANDIDATE_RID: ${{ matrix.rid }}
+          CANDIDATE_PLAYER: artifacts/player/${{ matrix.player }}
+        run: |
+          New-Item -ItemType Directory -Force artifacts/route-evidence | Out-Null
+          $executables = @(Get-ChildItem (Join-Path $env:CANDIDATE_PLAYER 'Contents/MacOS') -File)
+          if ($executables.Count -ne 1) { throw 'Expected one actual app executable.' }
+          $architecture = if ($env:CANDIDATE_RID -eq 'osx-arm64') { 'arm64' } else { 'x86_64' }
+          & lipo -verify_arch $architecture $executables[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw "Player is missing its declared $architecture slice." }
+          $slices = & lipo -archs $executables[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Player architecture inspection failed.' }
+          @{ rid=$env:CANDIDATE_RID; requiredArchitecture=$architecture; actualArchitectures="$slices"; executableSha256=(Get-FileHash $executables[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() } |
+            ConvertTo-Json | Set-Content artifacts/route-evidence/player-architecture.json -Encoding utf8NoBOM
       - name: Execute isolated package-only consumer
         if: matrix.rid != 'linux-x64'
         shell: pwsh
