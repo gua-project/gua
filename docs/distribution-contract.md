@@ -5,15 +5,20 @@ does not reference Playtest or build its product. A consumer must pin the packag
 version, full source commit and artifact hashes; runtime startup never retrieves
 the latest schemas or rebuilds the Viewer.
 
-## Candidate versus public acceptance
+## Artifact acceptance and separate publication
 
 `0.0.0-ci` is the existing private CI candidate identifier. It is meaningful only
 with a full commit and SHA-256 manifest, and must never be uploaded as a public
 release. The source default `0.5.0-preview.3` and existing GitHub releases do not
 select the next release version or channel. No tag or publication is needed to
-run candidate acceptance. A final public version/channel remains an owner
-decision, followed by repeating acceptance on the actual published packages and
-archives. A locally staged addon does not establish public artifact support.
+run artifact acceptance. Issue #129 is judged against actual artifacts built
+from an identified target commit/version, including retained hashes and evidence
+for each declared execution route. The existing commit-pinned `0.0.0-ci`
+candidate can identify that validation target; it does not select a new public
+release version. Public version/channel selection and publication are separate
+future operations, not prerequisites for #129 closure. If publication is later
+authorized, repeat acceptance on the actual published packages and archives.
+A locally staged addon alone does not prove the contents of an archive.
 
 ## Package and resource APIs
 
@@ -49,8 +54,23 @@ complete in that host. Inspect `get_version` / capability negotiation and test t
 actual operation with correlated completion. Observe, InputAction metadata,
 spatial provider binding and replay timing have independent contracts. Offline
 spatial DTO validation does not bind or execute a physics provider. Engine smoke
-tests on a source fixture are supporting evidence only; final public acceptance
-must install the shipped addon/UPM archive into the engine fixture first.
+tests on a source fixture are supporting evidence only; artifact acceptance
+must use the identified addon/UPM payload in the engine fixture and verify the
+actual archive composition separately. A published release is not required.
+
+The [PR #168 execution record](spatial-acceptance-followup.md) provides actual
+Godot 4.7 stable GodotPhysics3D/Jolt bridge, built Native MCP and isolated
+NuGet-consumer runs on all four RIDs. It uses the candidate addon payload also
+assembled into validated ZIPs, rather than demonstrating engine execution from
+the extracted ZIPs. Its reviewed head is
+`0fd01cbcd11c5b5d30399c9a6273418d193edd68`; CI artifacts pin the identical-tree
+checkout `9c2eb7b59a356680806e287a4e2c48fb3b0fb1be` and package version `0.0.0-ci`.
+Windows Unity 6000.5.3f1 standalone Mono/PhysX passed the same three spatial
+client paths. These results establish that measured spatial scope, not every
+feature in the engine packages. Unity Linux/macOS Player routes remain
+unverified: suitable build modules/build hosts and target runtime hosts are
+missing. Neither this policy correction nor disclosure waives those declared
+routes or establishes Editor Play Mode, other features, patches or backends.
 
 Godot C# runtime samples, Unity IL2CPP, Unity IMGUI, EditorWindow automation,
 unlisted RIDs and experimental browser paths are outside this desktop acceptance.
@@ -141,7 +161,14 @@ scripts/verify-distribution-consumer.ps1 -PackageDirectory artifacts/packages `
 
 Candidate acceptance incorporates merged #122 at
 `989163781a0e5ce6ac629e99a7d140a47e0db1ad` and repeats the four-RID consumer gates.
-Final issue closure additionally requires exact-head required CI/audit success,
-the owner's public version/channel decision and verification
-of that actual public distribution across the declared engine routes. Candidate
-success does not authorize publication or satisfy that release-only gate.
+Issue closure requires exact-head required CI/audit success and a mapping of
+the original #129 acceptance conditions to the identified target artifacts,
+environment, assertions, results and remaining support scope. Retain package
+versions, source commits, hashes, dependency/license manifests, Viewer evidence
+and actual launch/attach/operation evidence for each declared RID/route; skips,
+loading alone and unrelated consumer success do not satisfy those conditions.
+The four-RID package gates and PR #168 Godot evidence can be reused within their
+measured scope. Unity Linux/macOS and any other unmeasured declared execution
+routes still prevent closure until verified, or until the owner explicitly
+approves a support-scope change. Public publication is separate and is neither
+required for closure nor authorized by successful artifact acceptance.

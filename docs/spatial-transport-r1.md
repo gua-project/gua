@@ -121,7 +121,10 @@ desktop Godot CI checks require three actual physics batches (TypeScript, MCP,
 NuGet consumer) and a clean engine exit. Full 67-result geometry, 360-sample CPU
 profiling and 34 lease-race reruns were measured on the pinned Windows engines;
 those full-fixture measurements are not inherited by the other OS route checks.
-Candidate package checks do not establish published-artifact acceptance for #129.
+Candidate package checks alone do not establish #129's declared engine routes.
+Actual identified commit/version artifacts can satisfy its distribution
+conditions; public publication is a separate future operation. See the
+[distribution contract](distribution-contract.md) for the remaining route gates.
 Report payload/HTML checks do not imply a new browser visual QA pass.
 
 `guaSpatialBrowserSupport` reports Unsupported. Registering tool names or a fake
