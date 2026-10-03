@@ -68,8 +68,10 @@ package manifests, assets, real operation results and Trace/report are retained.
 
 The candidate uses the existing release environment's Unity license inputs and
 GameCI images. It adds no publication job, tag, credential changes, desktop
-module installation or new Personal-license acquisition step. Secret presence
-is only a prerequisite; it does not prove license validity or route execution.
+module installation or new Personal-license acquisition step. The environment
+references set `deployment: false` to access existing secrets
+without creating a GitHub deployment object; environment policies stay unchanged.
+Secret presence is only a prerequisite; it does not prove license validity or route execution.
 The workflow must actually pass before claiming its four Player routes. An
 invalid/missing existing license is an explicit failure, not a skipped pass.
 

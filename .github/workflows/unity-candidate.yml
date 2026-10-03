@@ -60,7 +60,9 @@ jobs:
     name: Compile and package candidate UPM
     needs: native
     runs-on: ubuntu-latest
-    environment: release
+    environment:
+      name: release
+      deployment: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,7 +119,9 @@ jobs:
     name: Build candidate Mono Player / ${{ matrix.rid }}
     needs: package
     runs-on: ubuntu-latest
-    environment: release
+    environment:
+      name: release
+      deployment: false
     strategy:
       fail-fast: false
       matrix:
