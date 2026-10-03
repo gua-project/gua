@@ -13,9 +13,11 @@ var options=new UnitySceneTestHostOptions {
     ProjectPath=Path.GetFullPath(args[2]), ConnectTimeout=TimeSpan.FromSeconds(150),
     AdditionalArguments=mode=="editor" ? new[]{"-batchmode","-disable-assembly-updater"} : new[]{"-batchmode"}
 };
-using var host=mode=="editor" ? UnitySceneTestHost.LoadEditor(args[1],options) :
+using var host=mode=="attach" ? null : mode=="editor" ? UnitySceneTestHost.LoadEditor(args[1],options) :
     mode=="player" ? UnitySceneTestHost.LoadRenderedPlayer(args[1],options) : throw new Exception("Unknown mode");
-var remote=host.RemoteContext; var version=remote.GetVersion();
+using var attached=mode=="attach" ? new GuaWebSocketContext(args[1]) : null;
+attached?.WaitUntilAvailable(options.ConnectTimeout);
+var remote=host?.RemoteContext ?? attached!; var version=remote.GetVersion();
 if(version.BuildId!=args[4] || !version.AdapterVersions!.ContainsKey("unity")) throw new Exception("Candidate engine provenance mismatch");
 version.EnsureCompatible(abiVersion:1,protocolSchemaVersion:"2");
 File.WriteAllText(Path.Combine(output,"version.json"),JsonSerializer.Serialize(version));

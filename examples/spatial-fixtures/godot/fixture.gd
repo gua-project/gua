@@ -260,7 +260,7 @@ func _profile_frame() -> bool:
 		profile_query.spaceEpoch = index+1
 	var start := Time.get_ticks_usec()
 	var cpu: Dictionary = host.thread_cpu_time()
-	_check(cpu.status==0 and cpu.has("cycles"),"Windows thread CPU evidence")
+	_check(cpu.status==0 and cpu.has("microseconds") and cpu.has("clock"),"actual thread CPU evidence")
 	if profile_frame%150 == 30:
 		profile_phase_cpu = cpu.microseconds
 		profile_phase_wall = start
@@ -290,8 +290,9 @@ func _profile_frame() -> bool:
 			_check(item.state=="completed" and item.result.outcome=="clear","profile fixed geometry")
 	var end := Time.get_ticks_usec()
 	var cpu_end: Dictionary = host.thread_cpu_time()
+	_check(cpu_end.status==0 and cpu_end.clock==cpu.clock and cpu_end.microseconds>=cpu.microseconds,"monotonic thread CPU evidence")
 	if profile_frame%150 >= 30:
-		profile_records.append({"batchSize":count,"callbackWallUs":end-start,"threadCpuUs":cpu_end.microseconds-cpu.microseconds,"threadCpuCycles":cpu_end.cycles-cpu.cycles,"pumpWallUs":pump_wall,"queueWallUs":queue_wall,"callbackIntervalUs":start-profile_last,"tick":Engine.get_physics_frames(),"phaseMainThreadCpuUs":cpu_end.microseconds-profile_phase_cpu if profile_frame%150 == 149 else null,"phaseElapsedUs":end-profile_phase_wall if profile_frame%150 == 149 else null})
+		profile_records.append({"batchSize":count,"callbackWallUs":end-start,"threadCpuUs":cpu_end.microseconds-cpu.microseconds,"threadCpuClock":cpu.clock,"threadCpuCycles":cpu_end.cycles-cpu.cycles if cpu.has("cycles") and cpu_end.has("cycles") else null,"pumpWallUs":pump_wall,"queueWallUs":queue_wall,"callbackIntervalUs":start-profile_last,"tick":Engine.get_physics_frames(),"phaseMainThreadCpuUs":cpu_end.microseconds-profile_phase_cpu if profile_frame%150 == 149 else null,"phaseElapsedUs":end-profile_phase_wall if profile_frame%150 == 149 else null})
 	profile_last = start
 	profile_frame += 1
 	if profile_frame == 450:

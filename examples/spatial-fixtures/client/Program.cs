@@ -24,9 +24,10 @@ foreach(var (item,index) in result.Items.Select((item,index)=>(item,index))) {
 }
 if(result.Items.Where((i,index)=>i.State!="completed" || i.Result?.Status!="completed" || i.Result.Outcome!=expected[index]).Any()) throw new Exception("Real geometry route did not produce ray hit, overlap detection and blocked sweep.");
 if(result.Items.Select(i=>i.Result!.Sample!.PhysicsSampleId).Distinct().Count()!=1) throw new Exception("Sample correlation drift.");
-await trace.CompleteAsync(GuaTraceOutcome.Passed);
+if(!await trace.CompleteAsync(GuaTraceOutcome.Passed)) throw new Exception("Required Trace completion failed.");
 var directories=Directory.GetDirectories(output).Where(d=>File.Exists(Path.Combine(d,"manifest.json"))).ToArray();
 var saved=GuaTraceReader.Read(directories.Single());
+if(!saved.Manifest.Finalized || saved.Issues.Any()) throw new Exception("Required finalized, complete Trace missing.");
 if(saved.Events.Any(e=>e.Type=="step.begin" && e.Data.GetProperty("kind").GetString()=="action")) throw new Exception("Read polluted input budget.");
 if(!saved.Blobs.Values.Any(b=>b.TryGetProperty("advertisement",out _))) throw new Exception("Spatial attachment missing.");
 var report=GuaTraceReport.WriteHtml(directories.Single(),Path.Combine(output,"spatial-report.html"));

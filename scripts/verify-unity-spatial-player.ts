@@ -5,7 +5,7 @@ const [playerArg, outputArg, consumerArg]=process.argv.slice(2);
 const player=resolve(playerArg!), output=resolve(outputArg!), consumer=resolve(consumerArg!);
 await mkdir(output,{recursive:true}); const directory=await mkdtemp(join(output,"unity-player-"));
 const server=createServer(); await new Promise<void>(r=>server.listen(0,"127.0.0.1",r)); const port=(server.address() as any).port; await new Promise<void>(r=>server.close(()=>r()));
-const game=Bun.spawn([player,"-batchmode","-nographics","-logFile",join(directory,"engine.log")],{cwd:directory,env:{...process.env,GUA_BRIDGE_PORT:String(port)},stdout:"pipe",stderr:"pipe"});
+const game=Bun.spawn([player,"-batchmode","-nographics","-logFile",join(directory,"engine.log")],{cwd:directory,env:{...process.env,GUA_BRIDGE_PORT:String(port),GUA_FIXTURE_DIRECTORY:directory},stdout:"pipe",stderr:"pipe"});
 const logs=Promise.all([new Response(game.stdout).text(),new Response(game.stderr).text()]);
 async function run(command:string[], log:string) {
   const child=Bun.spawn(command,{env:{...process.env,GUA_NATIVE_DIR:"",GUA_RUNTIME_NATIVE_DIR:""},stdout:"pipe",stderr:"pipe"});
@@ -20,6 +20,8 @@ try {
     if(game.exitCode!==null) throw Error(`Unity Player exited before readiness: ${game.exitCode}`);
     if(performance.now()>deadline) throw Error("Unity Player readiness timeout"); await Bun.sleep(25);
   }
+  const ready=JSON.parse(await readFile(join(directory,"transport-ready.json"),"utf8"));
+  if(process.env.GUA_BUILD_ID && ready.buildId!==process.env.GUA_BUILD_ID) throw Error("Actual spatial Player source identity mismatch");
   await run([process.execPath,"scripts/verify-spatial-route.ts",`ws://127.0.0.1:${port}`,join(directory,"typescript-mcp")],"routes.log");
   await run(["dotnet",consumer,`ws://127.0.0.1:${port}`,join(directory,"package-consumer")],"consumer.log");
   await writeFile(join(directory,"transport-done"),"done");

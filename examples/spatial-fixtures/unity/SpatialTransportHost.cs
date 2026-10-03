@@ -13,6 +13,19 @@ public sealed class SpatialTransportHost : MonoBehaviour
     GuaUnitySpatial reader;
     int pumped;
     float started;
+    static string spatialPort;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void SeparateFixtureBridges() {
+        // macOS Players reset cwd to the app bundle. Both fixture scenes use the
+        // caller's fresh evidence directory, independently of engine launch cwd.
+        var directory=Environment.GetEnvironmentVariable("GUA_FIXTURE_DIRECTORY");
+        if(!string.IsNullOrEmpty(directory)) Directory.SetCurrentDirectory(directory);
+        spatialPort=Environment.GetEnvironmentVariable("GUA_BRIDGE_PORT") ?? "8875";
+        var listener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback,0);
+        listener.Start();
+        try { Environment.SetEnvironmentVariable("GUA_BRIDGE_PORT",((System.Net.IPEndPoint)listener.LocalEndpoint).Port.ToString()); }
+        finally { listener.Stop(); }
+    }
     static GuaSpatialVector V(double x,double y,double z) => new GuaSpatialVector(x,y,z);
     void Start()
     {
@@ -37,9 +50,10 @@ public sealed class SpatialTransportHost : MonoBehaviour
         runtime=new GuaRuntime(); runtime.BindSpatial(host,reader.Provider,new GuaSpatialOwnerGrants {
             SessionEpoch=1,Profile="Testing",Enabled=true,Policies=new[]{"solid"},Region=region});
         runtime.BeginFrame("spatial-route"); runtime.EndFrame();
-        int port=int.Parse(Environment.GetEnvironmentVariable("GUA_BRIDGE_PORT") ?? "8875");
+        int port=int.Parse(spatialPort);
         if(!runtime.StartInspectorBridge(port)) throw new Exception("Native spatial bridge failed.");
-        File.WriteAllText("transport-ready.json",runtime.GetVersionJson());
+        File.WriteAllText("transport-ready.tmp",runtime.GetVersionJson());
+        File.Move("transport-ready.tmp","transport-ready.json");
     }
     void FixedUpdate()
     {

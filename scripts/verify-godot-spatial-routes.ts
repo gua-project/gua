@@ -3,8 +3,11 @@ import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import { assertCandidateLibraries } from "./spatial-candidate-assertions";
+import { assertEngineEvidence } from "./spatial-engine-evidence";
+import { createHash } from "node:crypto";
 const [executableArg, addonArg, outputArg, packageArg] = process.argv.slice(2);
-const executable=resolve(executableArg!), addon=resolve(addonArg!), output=resolve(outputArg!);
+const executable=resolve(executableArg!), output=resolve(outputArg!);
+let addon=resolve(addonArg!);
 await mkdir(output,{recursive:true});
 async function run(command:string[], log:string, env:Record<string,string|undefined>={}) {
   const child=Bun.spawn(command,{cwd:process.cwd(),env:{...process.env,...env},stdout:"pipe",stderr:"pipe"});
@@ -14,6 +17,13 @@ async function run(command:string[], log:string, env:Record<string,string|undefi
   finally {clearTimeout(timer);}
 }
 let consumer:string|undefined;
+if(addon.endsWith(".zip")) {
+  const archive=addon;
+  const extracted=await mkdtemp(join(tmpdir(),"gua-godot-archive-"));
+  await run(["pwsh","-NoProfile","-File","scripts/expand-godot-candidate-archive.ps1","-ArchivePath",archive,"-OutputDirectory",extracted],"archive-extract.log");
+  addon=join(extracted,"addons/gua");
+  await writeFile(join(output,"archive-provenance.json"),JSON.stringify({archive,sha256:createHash("sha256").update(await readFile(archive)).digest("hex"),sourceCommit:process.env.GUA_BUILD_ID,recipeCommit:process.env.GUA_RECIPE_ID},null,2));
+}
 if(packageArg) {
   consumer=await mkdtemp(join(tmpdir(),"gua-spatial-consumer-"));
   await cp("examples/spatial-fixtures/client/Program.cs",join(consumer,"Program.cs"));
@@ -35,11 +45,14 @@ for(const backend of ["GodotPhysics3D","Jolt Physics"]) {
   let project=await readFile(join(directory,"project.godot"),"utf8");
   await writeFile(join(directory,"project.godot"),project.replace("GodotPhysics3D",backend));
   const scene=await readFile(join(directory,"fixture.tscn"),"utf8");
-  await writeFile(join(directory,"fixture.tscn"),scene.replace("res://fixture.gd","res://transport.gd"));
   // Minimal deterministic import metadata for this source-only fixture. No
   // editor execution or geometry/result cache is needed or claimed.
   await writeFile(join(directory,".godot/extension_list.cfg"),"res://addons/gua/gua.gdextension\n");
   await writeFile(join(directory,".godot/global_script_class_cache.cfg"),'list=[{\n"base": &"RefCounted",\n"class": &"GuaSpatialReader",\n"icon": "",\n"is_abstract": false,\n"is_tool": false,\n"language": &"GDScript",\n"path": "res://addons/gua/gua_spatial.gd"\n}]\n');
+  await run([executable,"--headless","--path",directory,"--max-fps","60"],backend+"-geometry.log");
+  const geometry=JSON.parse(await readFile(join(directory,"evidence.json"),"utf8"));
+  assertEngineEvidence(geometry,JSON.parse(await readFile("protocol/fixtures/spatial-engine-r1.json","utf8")));
+  await writeFile(join(directory,"fixture.tscn"),scene.replace("res://fixture.gd","res://transport.gd"));
   const server=createServer(); await new Promise<void>(r=>server.listen(0,"127.0.0.1",r)); const port=(server.address() as any).port; await new Promise<void>(r=>server.close(()=>r()));
   const game=Bun.spawn([executable,"--headless","--path",directory],{env:{...process.env,GUA_BRIDGE_PORT:String(port)},stdout:"pipe",stderr:"pipe"});
   const logs=Promise.all([new Response(game.stdout).text(),new Response(game.stderr).text()]);
@@ -51,6 +64,8 @@ for(const backend of ["GodotPhysics3D","Jolt Physics"]) {
       await Bun.sleep(25);
     }
     const url=`ws://127.0.0.1:${port}`;
+    const ready=JSON.parse(await readFile(join(directory,"transport-ready.json"),"utf8"));
+    if(process.env.GUA_BUILD_ID && ready.buildId!==process.env.GUA_BUILD_ID) throw Error("Actual Godot archive source identity mismatch");
     await run([process.execPath,"scripts/verify-spatial-route.ts",url,join(directory,"typescript-mcp")],backend+"-routes.log");
     if(consumer) await run(["dotnet",join(consumer,"bin/Release/net10.0/SpatialClient.dll"),url,join(directory,"package-consumer")],backend+"-consumer.log",{GUA_NATIVE_DIR:"",GUA_RUNTIME_NATIVE_DIR:""});
     await writeFile(join(directory,"transport-done"),"done");

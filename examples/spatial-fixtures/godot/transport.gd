@@ -39,8 +39,10 @@ func _ready() -> void:
 	context.end_frame()
 	var port := int(OS.get_environment("GUA_BRIDGE_PORT"))
 	_check(context.start_inspector_bridge(port),"transport bridge")
-	var file := FileAccess.open("res://transport-ready.json",FileAccess.WRITE)
+	var file := FileAccess.open("res://transport-ready.tmp",FileAccess.WRITE)
 	file.store_string(version_json)
+	file.close()
+	_check(DirAccess.rename_absolute(ProjectSettings.globalize_path("res://transport-ready.tmp"),ProjectSettings.globalize_path("res://transport-ready.json")) == OK,"complete readiness publication")
 func _physics_process(_delta: float) -> void:
 	if reader != null and reader.pump() == 0:
 		pumped += 1
