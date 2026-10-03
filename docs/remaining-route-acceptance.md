@@ -48,3 +48,12 @@ assertion. The initial extended candidate run 37099987545 is a failed pre-fix ru
 Linux Editor compilation exposed incorrect SessionState method names; all four
 Players built but root-owned output prevented later provenance writes. Stage
 provenance before the build; retain the failures separately from corrected runs.
+
+Corrected recipe `4d7ec6f` / candidate 37100569090 passed Linux actual Editor Play
+Mode and all four spatial builds; Windows geometry/profile and three spatial
+clients passed. The native-host failures exposed fixture harness requirements:
+macOS resets the launch cwd to its app bundle, so SubsystemRegistration restores
+the explicitly supplied fresh evidence directory for both fixture scenes; Linux
+requires the same Xvfb harness already used by the accepted UI Player route.
+Those failed attempts are not non-Windows spatial acceptance. New final-head
+execution must pass the unchanged geometry/profile and client assertions.

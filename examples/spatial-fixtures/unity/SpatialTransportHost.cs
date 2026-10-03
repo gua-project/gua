@@ -16,6 +16,10 @@ public sealed class SpatialTransportHost : MonoBehaviour
     static string spatialPort;
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void SeparateFixtureBridges() {
+        // macOS Players reset cwd to the app bundle. Both fixture scenes use the
+        // caller's fresh evidence directory, independently of engine launch cwd.
+        var directory=Environment.GetEnvironmentVariable("GUA_FIXTURE_DIRECTORY");
+        if(!string.IsNullOrEmpty(directory)) Directory.SetCurrentDirectory(directory);
         spatialPort=Environment.GetEnvironmentVariable("GUA_BRIDGE_PORT") ?? "8875";
         var listener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback,0);
         listener.Start();

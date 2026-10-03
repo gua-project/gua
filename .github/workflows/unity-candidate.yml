@@ -450,10 +450,15 @@ jobs:
           scripts/prepare-spatial-candidate-client.ps1 -PackageDirectory artifacts/feed/local-feed -OutputDirectory artifacts/evidence -SourceCommit $env:GUA_BUILD_ID
           Copy-Item artifacts/player/*provenance.json artifacts/evidence
       - name: Execute actual geometry and spatial Players on the native host
+        if: matrix.rid != 'linux-x64'
         shell: pwsh
         run: |
           bun scripts/verify-unity-spatial-candidate.ts artifacts/player artifacts/evidence artifacts/evidence/client/SpatialClient.dll '${{ matrix.rid }}'
           if($LASTEXITCODE -ne 0) {throw 'Actual packaged spatial acceptance failed'}
+      - name: Execute actual Linux Players with the existing X11 harness
+        if: matrix.rid == 'linux-x64'
+        shell: bash
+        run: xvfb-run --auto-servernum bun scripts/verify-unity-spatial-candidate.ts artifacts/player artifacts/evidence artifacts/evidence/client/SpatialClient.dll '${{ matrix.rid }}'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

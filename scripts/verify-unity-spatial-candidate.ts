@@ -23,7 +23,7 @@ async function executable(kind:string) {
 }
 const geometry=await mkdtemp(join(output,"geometry-"));
 await copyFile("protocol/fixtures/spatial-engine-r1.json",join(geometry,"spatial-engine-r1.json"));
-const child=Bun.spawn([await executable("Geometry"),"-batchmode","-nographics","-logFile",join(geometry,"engine.log")],{cwd:geometry,stdout:"ignore",stderr:"ignore"});
+const child=Bun.spawn([await executable("Geometry"),"-batchmode","-nographics","-logFile",join(geometry,"engine.log")],{cwd:geometry,env:{...process.env,GUA_FIXTURE_DIRECTORY:geometry},stdout:"ignore",stderr:"ignore"});
 const timer=setTimeout(()=>child.kill(),180000);
 try {if(await child.exited!==0) throw Error("Actual Unity geometry Player failed");}
 finally {clearTimeout(timer);if(child.exitCode===null) child.kill();await child.exited;}
