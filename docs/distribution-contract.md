@@ -118,6 +118,9 @@ Previously published package names, native ABI and public managed signatures are
 The new Value package is `gua-value-tools`; the rejected `gua-value` name was
 never published. See the [1.1.0 release plan](release-1.1.0.md) for the bounded
 compatibility review and publication prerequisites.
+Retained signatures and ABI do not guarantee that a strict legacy JSON Schema
+consumer accepts new response fields: the release plan records the 1.0.10
+diagnostics/version unknown-property blocker that still needs resolution.
 The current native version API reports `abiVersion: 1` and
 `protocolSchemaVersion: "2"`; versioned descriptor structs remain additive C ABI
 extensions. The external consumer asserts these values and retains
