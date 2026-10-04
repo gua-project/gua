@@ -4,7 +4,7 @@
     <TargetFrameworks>net10.0;net8.0;netstandard2.1</TargetFrameworks><Nullable>enable</Nullable><LangVersion>latest</LangVersion><ImplicitUsings>enable</ImplicitUsings>
     <PackageId>Gua.Testing.Unity</PackageId><Version>$(GuaPackageVersion)</Version><Authors>Gua contributors</Authors>
     <Title>Gua Testing Unity</Title><Description>Unity Editor and Player process test host for Gua runtime UI automation.</Description>
-    <PackageProjectUrl>https://github.com/link1345/gua</PackageProjectUrl><RepositoryUrl>https://github.com/link1345/gua</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/gua-project/gua</PackageProjectUrl><RepositoryUrl>https://github.com/gua-project/gua</RepositoryUrl>
     <RepositoryType>git</RepositoryType><PackageLicenseExpression>MIT</PackageLicenseExpression><PackageOutputPath>$(GuaPackageOutputPath)</PackageOutputPath>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <IncludeSymbols>true</IncludeSymbols><SymbolPackageFormat>snupkg</SymbolPackageFormat>

@@ -18,6 +18,6 @@
       "path": "Samples~/Runtime UI Fixture"
     }
   ],
-  "author": { "name": "Gua contributors", "url": "https://github.com/link1345/gua" },
+  "author": { "name": "Gua contributors", "url": "https://github.com/gua-project/gua" },
   "license": "MIT"
 }

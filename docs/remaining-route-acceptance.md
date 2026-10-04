@@ -1,5 +1,48 @@
 # Remaining artifact and spatial acceptance
 
+## Current acceptance status
+
+As of 2026-10-04, #129/#130 are closed with one explicitly retained limitation:
+**native Intel macOS / Unity 6000.5.3f1 / actual UPM / Editor Play Mode:
+UNVERIFIED (not executed because no Intel Mac is available).** It is neither
+PASSED, FAILED nor Unsupported. M4, Rosetta and Intel Mono Player execution do
+not establish native Intel Editor acceptance. There is no ongoing Intel
+hardware request, procurement, provisioning, persistent runner or emulation plan.
+[Issue #174](https://github.com/gua-project/gua/issues/174) tracks this documentation.
+
+Native arm64 Editor Play Mode passed twice on an Apple M4 Mac mini / macOS
+26.6.1 / Unity 6000.5.3f1 with the actual accepted UPM. Both runs checked native
+identity, rejection without semantic side effects, correlated Click and loading
+UI, finalized Trace and packaged Viewer. Two disposable exact-package consumers
+performed the actual Editor operation before injecting a false Trace completion
+or unfinalized saved manifest; both failed the intended assertion. These are
+verdict/manifest controls, not claims of real storage failure.
+
+Product: `595f589eebdea812b0649ab5f57ac079728fa610`, private `0.0.0-ci`;
+UPM SHA-256 `21da33106301de108ecb1ff0868fe0342a00af980e805ff14a67635d444412f3`.
+Recipe: `4816b5c929fd74f6ceea9d8017986da3fce27577`, PR #173 tree
+`089efe190e949413657cbbfeaafefe52e3f6ecfa`. Product and recipe are distinct.
+The sanitized evidence ZIP SHA-256 is
+`f5beb44f30f5e8d903f8c07e09d029a6957e9bc5f5c0d1eb119366ddef1d7a07`;
+it is privately retained, not publicly downloadable from these comments.
+See the [#129 execution record](https://github.com/gua-project/gua/issues/129#issuecomment-5975220196)
+and [#130 execution record](https://github.com/gua-project/gua/issues/130#issuecomment-5975220444).
+
+Windows/Linux Editor, all four native-host Mono Players, Unity PhysX spatial
+and Godot 4.7 GodotPhysics3D/Jolt retain their measured scope. Final PR #173
+recipe `8ac6c6161d8576f8fe308eed54d8842b5d8c4604` has a
+[successful candidate run](https://github.com/gua-project/gua/actions/runs/37102760247).
+This does not revalidate those products at a later source commit or prove every
+capability, engine patch or backend. Intel package/Player/spatial/Godot evidence
+is not relabeled unverified because the Intel Editor route is unexecuted.
+Public version/channel selection and publication remain separate operations.
+
+## Historical investigation and execution
+
+The entries below describe the requirements and outcomes at their stated
+recipe revisions. Pending work and failures in this history do not supersede
+the current status above; failed attempts remain failed evidence.
+
 Baseline product: main `3a850c041093bd87c3e20530d60927d68782d8f5`.
 Existing actual UPM target is `595f589eebdea812b0649ab5f57ac079728fa610`,
 private version `0.0.0-ci`, recipe `98cb571d2566bcd510519d40002cdef49acd512e`,

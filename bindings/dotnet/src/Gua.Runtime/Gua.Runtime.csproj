@@ -13,8 +13,8 @@
     <Authors>Gua contributors</Authors>
     <Title>Gua Runtime</Title>
     <Description>Managed wrapper over the shared Gua runtime C ABI for engine adapters.</Description>
-    <PackageProjectUrl>https://github.com/link1345/gua</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/link1345/gua</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/gua-project/gua</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gua-project/gua</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

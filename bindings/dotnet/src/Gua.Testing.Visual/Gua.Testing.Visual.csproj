@@ -11,8 +11,8 @@
     <Title>Gua Testing Visual</Title>
     <Description>Opt-in PNG baseline comparison for Gua UI automation tests.</Description>
     <PackageTags>gua;game-ui;automation;testing;visual-regression;screenshot</PackageTags>
-    <PackageProjectUrl>https://github.com/link1345/gua</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/link1345/gua</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/gua-project/gua</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gua-project/gua</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

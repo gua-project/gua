@@ -3,6 +3,18 @@
 This record supplements issue #129; it does not waive any declared route or the
 independent #130 spatial integration requirements. Publication is separate.
 
+## Current route status
+
+The [current acceptance record](remaining-route-acceptance.md#current-acceptance-status)
+supersedes the historical pending-route statements below. Windows/Linux Editor
+and four-RID Mono Player/spatial evidence are retained at their stated product
+and recipe pins. Native arm64 M4 Editor Play Mode passed twice with actual UPM
+on macOS 26.6.1 / Unity 6000.5.3f1, with two Trace negative controls.
+Native Intel macOS / Unity 6000.5.3f1 / actual UPM / Editor Play Mode is
+**UNVERIFIED** because no Intel Mac is available; it was not executed, and is
+neither failed nor Unsupported. #129/#130 closure preserves that limitation.
+It does not invalidate Intel Player/native package/spatial/Godot evidence.
+
 ## Windows execution
 
 Target: main `0a5cbc83fbfd5ce9a465508644f96aced5694d4a`, existing private version
@@ -86,8 +98,9 @@ validated main source/packages. `artifact-provenance.json` records product
 `sourceCommit` and recipe `workflowCommit` separately, allowing a reviewed
 candidate helper fix to run against an already accepted product target.
 
-Non-Windows Editor Play Mode remains unverified and requires applicable existing
-licensed build/runtime hosts or separately authorized setup. Player UI success
-does not establish all spatial backends, patches, replay timing, Observe or other
-features. The local spatial run establishes only its stated Windows PhysX path.
-WebGL/IL2CPP and the remaining #130 integration conditions are independent.
+At this historical revision, non-Windows Editor Play Mode was unverified.
+Later Linux and native arm64 Editor evidence is recorded in the current status
+above; native Intel Editor alone remains unexecuted. Player UI success does not
+establish all spatial backends, patches, replay timing, Observe or other features.
+The local spatial run in this section establishes only its stated Windows PhysX
+path. WebGL/IL2CPP remain independent of this desktop evidence.

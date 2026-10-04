@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/link1345/gua.git",
+    "url": "git+https://github.com/gua-project/gua.git",
     "directory": "packages/webmcp"
   },
   "exports": {
