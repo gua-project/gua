@@ -23,7 +23,7 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "gua-value": "workspace:*",
+    "gua-value-tools": "workspace:*",
     "@tauri-apps/api": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

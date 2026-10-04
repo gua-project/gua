@@ -1,9 +1,14 @@
 {
-  "name": "gua-value",
+  "name": "gua-value-tools",
   "version": "0.0.0",
   "description": "Gua Value v1 types, validation and equality",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gua-project/gua.git",
+    "directory": "packages/value"
+  },
   "exports": {".": {"types": "./src/index.ts", "bun": "./src/index.ts", "import": "./dist/index.js"}},
   "files": ["src", "dist", "README.md"],
   "scripts": {"check": "tsc --noEmit", "test": "bun test", "build": "bun build src/index.ts --target browser --format esm --outfile dist/index.js && tsc --emitDeclarationOnly", "prepack": "bun run build"},

@@ -25,7 +25,7 @@
     "prepack": "bun run build"
   },
   "devDependencies": {
-    "gua-value": "workspace:*",
+    "gua-value-tools": "workspace:*",
     "gua-world-tools": "workspace:*",
     "@types/pngjs": "^6.0.5",
     "bun-types": "^1.3.0",

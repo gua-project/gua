@@ -4,7 +4,7 @@ export * from "./tool-definitions.js";
 export const guaSpatialBrowserSupport = Object.freeze({ status: "Unsupported" as const,
   reason: "No host-authorized Testing/Debug browser session exists in the built-in ports.",
   tools: [] as readonly string[] });
-import { observeTools, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value";
+import { observeTools, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value-tools";
 export * from "./ports.js";
 export type {
   GuaWorldObject,
