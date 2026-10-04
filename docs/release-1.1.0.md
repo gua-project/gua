@@ -44,31 +44,30 @@ an action already sent. These tighten invalid-input/lifecycle handling and do
 not establish a removed valid v1 contract. Code that depended on those earlier
 edge behaviors should be checked when upgrading.
 
-### Strict legacy-schema compatibility blocker
+### External tools with pinned legacy schemas
 
-The additive signature review alone does **not** clear 1.1.0 for publication.
-The published 1.0.10 diagnostics and version schemas use
-`additionalProperties: false`. Current Debug diagnostics emits `traceLifecycle`
-at the existing diagnostics schemaVersion 1; authorized bound spatial version
-responses add `spatial` while retaining protocolSchemaVersion 2 and ABI 1.
-Those fields are absent from the corresponding 1.0.10 schemas, so a consumer
-that validates current responses against its pinned old schemas rejects them.
-Player diagnostics does not expose the Debug lifecycle journal; the spatial
-case requires authorized host binding and is not claimed for every connection.
+External tools that validate new responses against the strict 1.0.10 schemas
+must update their schema bundle when upgrading. Debug diagnostics adds
+`traceLifecycle`; authorized bound spatial version responses add `spatial`.
+Those keys fail the old `additionalProperties: false` root rules, while the
+current schemas permit them. Player diagnostics omits the Debug journal, and
+the spatial field requires authorized host binding.
 
-Bounded reproduction: the unchanged 1.0.10 diagnostics/version fixtures pass
-their old top-level unknown-property gate; adding the actual new field fails
-that gate, while the current schema permits it. Source emission is in
-`native/gua-core/src/gua.cpp` (`build_diagnostics_json`) and
-`native/gua-runtime/src/runtime.cpp` (`decorate_version_json`). This checks the
-strict top-level boundary, not full nested-schema or live-engine validation.
+This old-schema check does not demonstrate a failure on a supported same-release
+path. The distribution contract pins package version, source commit and hashes;
+external acceptance uses exact same-version references and rejects mixed Gua
+dependencies. Current Trace diagnostics validation uses schemas embedded from
+the same source. The 1.0.10 testing package did not embed these schemas or the
+new Trace validator; its existing diagnostics/version parsing accepts added
+fields. Independently installed MCP can differ from the engine release, but its
+version response handling does not validate against the old strict schema.
+No affected deployed external validator was identified.
 
-**1.1.0 remains the proposed version, but this strict-schema compatibility
-issue must be resolved before publishing it as a backward-compatible release.**
-Preserve the legacy response shape through an explicitly versioned or negotiated
-extension, or reassess the version/support contract as a breaking change. This
-metadata/docs PR does not change runtime behavior or silently waive that issue.
-No exhaustive binary compatibility or every-engine-feature certification is implied.
+**1.1.0 remains the proposed version.** This caveat does not establish a need
+for runtime negotiation, preservation of the old response shape or a major
+version change. Private trusted-publisher checks and the other publication
+prerequisites below remain required. No exhaustive binary compatibility or
+every-engine-feature certification is implied.
 See the [distribution compatibility contract](distribution-contract.md#compatibility-and-completion-gates).
 
 ## Support and known limitations
