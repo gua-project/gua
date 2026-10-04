@@ -93,7 +93,7 @@ Unknown or evicted snapshots still permit authorized pixels but no guessed overl
 
 ```powershell
 bun install --frozen-lockfile
-bun run --filter gua-value build
+bun run --filter gua-value-tools build
 bun run --filter @gua/inspector build:trace
 dotnet run --project examples/dotnet-trace-viewer/Gua.TraceViewerExample.csproj -- artifacts/trace-viewer-qa
 bun run --filter @gua/inspector dev

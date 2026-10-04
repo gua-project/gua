@@ -1,7 +1,7 @@
-import { ObserveWireRejectionError, decodeObserveWireResponse, parseObserveTransport, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value";
+import { ObserveWireRejectionError, decodeObserveWireResponse, parseObserveTransport, observeSubscriptionId, type ObserveTransport, type ObserveSubscription } from "gua-value-tools";
 import { parseSemanticLintReport, type SemanticLintReport } from "./semanticLint";
 export type { SemanticLintReport, LintFinding, LintSeverity } from "./semanticLint";
-export type { ObserveTransport, ObserveSubscription } from "gua-value";
+export type { ObserveTransport, ObserveSubscription } from "gua-value-tools";
 
 export interface GuaBounds {
   x?: number;

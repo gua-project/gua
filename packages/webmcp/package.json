@@ -25,7 +25,7 @@
     "prepack": "bun run build"
   },
   "dependencies": {
-    "gua-value": "workspace:*",
+    "gua-value-tools": "workspace:*",
     "gua-world-tools": "workspace:*"
   },
   "devDependencies": {

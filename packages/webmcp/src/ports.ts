@@ -4,7 +4,7 @@ import {
   type GuaGameInputActionSearchResult, type GuaGameInputActionSelector,
   type GuaGameInputState, type GuaScreenshot, type GuaUiTree, type GuaWebActionCompletion, type GuaWebActionRequest,
 } from "./index.js";
-import { parseObserveTransport, observeSubscriptionId, type ObserveSubscription } from "gua-value";
+import { parseObserveTransport, observeSubscriptionId, type ObserveSubscription } from "gua-value-tools";
 import { parseInputActionMetadataJson, validInputActionMetadata } from "./input-metadata.js";
 import {
   parseWorldObjectTree,

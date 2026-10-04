@@ -72,7 +72,7 @@ scalarだけでなく空enum collectionにも登録済みenumTypeが必要。
 - C#: `Gua.Core.GuaValue`／`GuaEnumCatalog`。SafeHandle／P/Invokeで同じnative実装を使用。
   `Bool`、`Integer`、`Number`、`String`、`Enum`、`Collection`、`FromJson`、`ToJson`、
   `ValueEquals`を提供する。Disposeとの競合ではSafeHandle参照でnative寿命を保持する。
-- TS: `gua-value`。判別union、`createValue`、`parseValue`、`serializeValue`、
+- TS: `gua-value-tools`。判別union、`createValue`、`parseValue`、`serializeValue`、
   `valuesEqual`、`EnumCatalog`を提供する。検証時にコピー・freezeする。
   enum値の検証・出力・比較には対応するcatalogを渡す。
 

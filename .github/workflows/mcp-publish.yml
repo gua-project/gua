@@ -42,7 +42,7 @@ jobs:
         id: value_npm_version
         shell: bash
         run: |
-          package_name="gua-value"
+          package_name="gua-value-tools"
           package_version="${{ steps.version.outputs.version }}"
           status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             "https://registry.npmjs.org/${package_name}/${package_version}")"
@@ -136,8 +136,8 @@ jobs:
 
       - name: Check
         run: |
-          bun run --filter gua-value check
-          bun run --filter gua-value test
+          bun run --filter gua-value-tools check
+          bun run --filter gua-value-tools test
           bun run --filter gua-world-tools check
           bun run --filter gua-world-tools test
           bun run --filter gua-webmcp check
@@ -146,7 +146,7 @@ jobs:
 
       - name: Build
         run: |
-          bun run --filter gua-value build
+          bun run --filter gua-value-tools build
           bun run --filter gua-world-tools build
           bun run --filter gua-webmcp build
           bun run --filter gui-mcp build
@@ -156,7 +156,7 @@ jobs:
         shell: bash
         run: |
           package_version="${{ steps.version.outputs.version }}"
-          publish_dir="${RUNNER_TEMP}/gua-value-package"
+          publish_dir="${RUNNER_TEMP}/gua-value-tools-package"
 
           rm -rf "${publish_dir}"
           mkdir -p "${publish_dir}/dist" "${publish_dir}/src"
@@ -253,7 +253,7 @@ jobs:
           const packageJson = JSON.parse(fs.readFileSync("packages/webmcp/package.json", "utf8"));
           packageJson.version = process.env.PACKAGE_VERSION;
           packageJson.dependencies["gua-world-tools"] = `^${process.env.PACKAGE_VERSION}`;
-          packageJson.dependencies["gua-value"] = `^${process.env.PACKAGE_VERSION}`;
+          packageJson.dependencies["gua-value-tools"] = `^${process.env.PACKAGE_VERSION}`;
           delete packageJson.scripts;
           delete packageJson.devDependencies;
           for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {

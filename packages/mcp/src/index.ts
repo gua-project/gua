@@ -1,7 +1,7 @@
 import path from "node:path";
 import { spatialTools, spatialBatchArguments, type GuaSpatialAdvertisement, type GuaSpatialBatch, type GuaSpatialBatchResult } from "gua-world-tools";
 import { isSpatialBatchResult } from "./spatial-result.js";
-import { ObserveWireRejectionError, decodeObserveWireResponse, observeTools, observeSubscriptionId, parseObserveTransport } from "gua-value";
+import { ObserveWireRejectionError, decodeObserveWireResponse, observeTools, observeSubscriptionId, parseObserveTransport } from "gua-value-tools";
 
 import {
   guaPhysicalKeyboardCodes,
