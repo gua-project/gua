@@ -11,8 +11,8 @@
     <Title>Gua Core</Title>
     <Description>.NET P/Invoke bindings for the Gua runtime UI automation C ABI.</Description>
     <PackageTags>gua;game-ui;automation;testing;pinvoke</PackageTags>
-    <PackageProjectUrl>https://github.com/link1345/gua</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/link1345/gua</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/gua-project/gua</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gua-project/gua</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

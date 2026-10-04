@@ -10,8 +10,8 @@
     <Title>Gua Testing Recording</Title>
     <Description>Semantic UI operation recording and correlated replay for Gua.</Description>
     <PackageTags>gua;game-ui;automation;testing;recording;replay</PackageTags>
-    <PackageProjectUrl>https://github.com/link1345/gua</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/link1345/gua</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/gua-project/gua</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gua-project/gua</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

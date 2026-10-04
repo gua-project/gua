@@ -44,7 +44,7 @@ an external archive without locating a Gua checkout.
 | --- | --- | --- | --- |
 | `win-x64` | Required CI acceptance on Windows | Godot 4.7 GDScript GDExtension Debug/Release, external bridge | Unity 6000.5+ desktop Mono, Editor Play Mode / Player |
 | `linux-x64` | Required CI acceptance on Ubuntu 22.04 | Same addon contract, Linux Debug/Release; rendered tests require display/Xvfb | Same Mono contract; rendered tests require display/Xvfb |
-| `osx-x64` | Required CI acceptance on Intel macOS | Same addon contract, x86_64 Debug/Release | Same Mono contract with an Intel Editor / Player |
+| `osx-x64` | Required CI acceptance on Intel macOS | Same addon contract, x86_64 Debug/Release | Mono Player evidence retained; native Intel Editor Play Mode **UNVERIFIED**, not executed because no Intel Mac is available |
 | `osx-arm64` | Required CI acceptance on Apple Silicon macOS | Same addon contract, arm64 Debug/Release | Same Mono contract with an arm64 Editor / Player |
 
 These are declared routes and their required verification, not an unconditional
@@ -72,9 +72,14 @@ plus a precompiled-provider Player spatial run, at its stated commit/archive has
 These results establish their measured scope, not every feature in the engine
 packages. Existing release-only CI already defines four-RID Unity jobs; the
 separate candidate workflow makes Player validation available without a tag or
-publication. Its actual run remains required. Linux/macOS Player and Editor
-routes remain unverified until their execution evidence exists. Disclosure does
-not waive those declared routes or establish other features, patches or backends.
+publication. The [current acceptance record](remaining-route-acceptance.md#current-acceptance-status)
+retains Windows/Linux Editor, four-RID Mono Player/spatial and Godot evidence,
+and the later native arm64 Editor success. Native Intel macOS / Unity
+6000.5.3f1 / actual UPM / Editor Play Mode is **UNVERIFIED**: no Intel Mac is
+available and the test was not executed. This is not a failed or unsupported
+route. Issue #129/#130 closure does not establish Intel Editor acceptance;
+M4, Rosetta and Intel Player results cannot substitute for it. This limitation
+does not extend to all Intel routes or other measured features, patches or backends.
 
 Godot C# runtime samples, Unity IL2CPP, Unity IMGUI, EditorWindow automation,
 unlisted RIDs and experimental browser paths are outside this desktop acceptance.
@@ -109,7 +114,10 @@ Godot addon archives include the MIT notice for the pinned godot-cpp dependency
 
 ## Compatibility and completion gates
 
-Existing package names, native ABI and public managed signatures are retained.
+Previously published package names, native ABI and public managed signatures are retained.
+The new Value package is `gua-value-tools`; the rejected `gua-value` name was
+never published. See the [1.1.0 release plan](release-1.1.0.md) for the bounded
+compatibility review and publication prerequisites.
 The current native version API reports `abiVersion: 1` and
 `protocolSchemaVersion: "2"`; versioned descriptor structs remain additive C ABI
 extensions. The external consumer asserts these values and retains
@@ -172,7 +180,8 @@ versions, source commits, hashes, dependency/license manifests, Viewer evidence
 and actual launch/attach/operation evidence for each declared RID/route; skips,
 loading alone and unrelated consumer success do not satisfy those conditions.
 The four-RID package gates and PR #168 Godot evidence can be reused within their
-measured scope. Unity Linux/macOS and any other unmeasured declared execution
-routes still prevent closure until verified, or until the owner explicitly
-approves a support-scope change. Public publication is separate and is neither
-required for closure nor authorized by successful artifact acceptance.
+measured scope. The owner closed #129/#130 with the native Intel Editor
+unverified limitation retained and tracked in #174; see the current acceptance
+record above. Closure is not a claim that every declared route passed. Public
+publication is separate and is neither required for closure nor authorized by
+successful artifact acceptance.

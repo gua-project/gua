@@ -17,8 +17,8 @@
     <Authors>Gua contributors</Authors>
     <Title>Gua Testing Godot</Title>
     <Description>Godot process test host for Gua runtime UI automation assertions.</Description>
-    <PackageProjectUrl>https://github.com/link1345/gua</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/link1345/gua</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/gua-project/gua</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/gua-project/gua</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>gua;godot;game-ui;automation;testing</PackageTags>
     <RepositoryType>git</RepositoryType>

@@ -91,24 +91,26 @@ modified to missing/duplicate/partial/nested-ID/nested-state variants; the old
 marker/count checks accept the selected two-item violations, and the strengthened
 control fails its intended count/correlation/completion assertion.
 
-## Gates retained
+## Current acceptance and retained scope
 
 - #129 requires identified target commit/version artifacts and verified declared
   execution routes, not public publication. Its original package/resource and
   route conditions remain mandatory; candidate packing/loading alone is
   insufficient. See [distribution contract](distribution-contract.md).
-- Actual Unity Linux/macOS engine/Mono consumer routes need executed candidate
-  evidence. This Windows editor has only Windows standalone and WebGL modules.
-  The existing release workflow already defines four-RID Unity engine jobs, but
-  they are tag-only. The non-publishing `unity-candidate.yml` reuses existing
-  GameCI/license inputs for four Player routes; its run must pass before those
-  routes are established. Non-Windows Editor routes and independent spatial
-  feature conditions remain unverified. See [identified UPM route evidence](distribution-route-evidence.md).
-  No license/credential changes are authorized. This does not block Godot coverage.
+- The [current acceptance record](remaining-route-acceptance.md#current-acceptance-status)
+  retains Windows/Linux Editor, four-RID native-host Mono Player, Unity PhysX
+  spatial and Godot 4.7 GodotPhysics3D/Jolt results at their measured pins.
+  Native arm64 M4 Editor Play Mode passed twice on macOS 26.6.1 / Unity
+  6000.5.3f1 with actual UPM and two Trace negative controls.
+  Native Intel macOS / Unity 6000.5.3f1 / actual UPM / Editor Play Mode remains
+  **UNVERIFIED**, not executed because no Intel Mac is available. This is neither
+  failed nor Unsupported, and does not invalidate the other Intel routes.
+  #129/#130 are closed with this limitation retained; #174 tracks its documentation.
 - Other patches/backends, meshes/one-way gameplay and physics error bounds
   remain outside the measured support claims documented in spatial-engine-r1.
 - Built-in privileged browser spatial remains Unsupported; #116 Codex routing
   remains a separate investigation. No publication/tag/deployment is performed.
 
-Non-publication acceptance must be reconciled against the final execution
-record. Missing mandatory routes remain a parent gate even when documented.
+Historical pending requirements above are scoped to their recorded revisions.
+Closure does not turn native Intel Editor's unexecuted route into a pass or
+extend measured results to all features, engine versions or physics backends.
