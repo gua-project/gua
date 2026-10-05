@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build Value browser entry
+        run: bun run --filter gua-value-tools build
+
       - name: Build web inspector
         run: bun run --filter @gua/inspector build
 
