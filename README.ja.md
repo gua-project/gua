@@ -189,7 +189,8 @@ Gua v1.0.4以降には、Linux／macOS platformで必要なcross-platform UPM na
   エンジンアダプター開発者向けの共有マネージドラッパーと、同じ4つのdesktop RID用ネイティブランタイムです。P/Invokeを重複実装せず、Semantic frameの公開、actionの処理、スクリーンショット要求の完了、Inspectorブリッジのホストに利用できます。通常のゲームテストでは各エンジン向けパッケージを使用します。
 - **Gua.Testing.Visual:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Visual)](https://www.nuget.org/packages/Gua.Testing.Visual) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Visual)<br>
   Semantic assertionでは検出できないclipping、Controlの位置ずれ、asset間違い、予期しないoverlayなどの描画regressionをPNG baseline比較で検出します。失敗時はexpected、actual、diff、機械可読な比較結果を保存します。
-- **[Gua.Testing.Snapshots](bindings/dotnet/src/Gua.Testing.Snapshots/README.md):** UI と任意の World の deterministic JSON baseline を比較。意味構造の差分、明示更新、利用者が指定する mask/ignore に対応します。
+- **Gua.Testing.Snapshots:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Snapshots)](https://www.nuget.org/packages/Gua.Testing.Snapshots) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Snapshots)<br>
+  UIと任意のWorldのdeterministic JSON baselineを比較。意味構造の差分、明示更新、呼び出し側が設定するmask/ignoreに対応します。 [パッケージリファレンス](bindings/dotnet/src/Gua.Testing.Snapshots/README.md)を参照してください。
 - **Gua.Testing.Recording:** [![NuGet Version](https://img.shields.io/nuget/v/Gua.Testing.Recording)](https://www.nuget.org/packages/Gua.Testing.Recording) ![NuGet Downloads](https://img.shields.io/nuget/dt/Gua.Testing.Recording)<br>
   再現可能なユーザーフローをSemantic操作として記録し、各stepをホスト側の完了と相関確認しながら再生します。壊れやすい座標や秘密値の平文を保存せず、regression flow、bug再現、scenario共有に利用できます。
 
@@ -276,6 +277,8 @@ adapterはinput pumpとcleanup経路が初期化済みのcapabilityだけを公�
 capability、owner、lease、confirmation、engine設定の詳細は
 [ゲーム入力編](https://gua.orizika.com/ja/game-input/)を参照してください。
 
+- **gua-value-tools:** [![NPM Version](https://img.shields.io/npm/v/gua-value-tools)](https://www.npmjs.com/package/gua-value-tools) ![NPM Downloads](https://img.shields.io/npm/dw/gua-value-tools)<br>
+  共通Value v1の型、検証、JSON入出力、enum catalog、等価比較を提供します。[パッケージリファレンス](packages/value/README.md)を参照してください。
 - **gua-webmcp:** [![NPM Version](https://img.shields.io/npm/v/gua-webmcp)](https://www.npmjs.com/package/gua-webmcp) ![NPM Downloads](https://img.shields.io/npm/dw/gua-webmcp)<br>
   ページのWebMCP APIを通じて、GuaのSemantic UI、World Object Tree、
   ゲーム入力ツールを登録するブラウザネイティブadapterです。
