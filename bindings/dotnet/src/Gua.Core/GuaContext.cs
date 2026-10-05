@@ -145,15 +145,28 @@ public sealed partial class GuaContext : IGuaContext, IGuaClockContext, IDisposa
 
     public string GetDiagnosticsJson()
     {
-        ThrowIfDisposed();
-        return ReadCopiedJson(JsonSource.Diagnostics, _handle);
+        // Trace readers can run in the background. Keep their native handle
+        // alive across both the size query and every copy/retry.
+        lock (ObserveGate)
+        {
+            ThrowIfDisposed();
+            return ReadCopiedJson(JsonSource.Diagnostics, _handle);
+        }
     }
 
     public string GetDiagnosticsJson(GuaObservationProfile profile) => ReadProfileJson(profile, diagnostics: true);
 
-    private unsafe string ReadProfileJson(GuaObservationProfile profile, bool diagnostics)
+    private string ReadProfileJson(GuaObservationProfile profile, bool diagnostics)
     {
-        ThrowIfDisposed();
+        lock (ObserveGate)
+        {
+            ThrowIfDisposed();
+            return ReadProfileJsonCore(profile, diagnostics);
+        }
+    }
+
+    private unsafe string ReadProfileJsonCore(GuaObservationProfile profile, bool diagnostics)
+    {
         int Copy(byte* buffer, int size) => diagnostics
             ? Native.gua_copy_diagnostics_json_for_profile(_handle, (int)profile, buffer, size)
             : Native.gua_copy_ui_tree_json_for_profile(_handle, (int)profile, buffer, size);
