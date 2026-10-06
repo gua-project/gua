@@ -22,6 +22,7 @@ This PR does not merge, tag, or publish a package.
 | Malformed completion must not establish completion | Eight actual native proxy tests remove succeeded, error/errorCode, frameSequence, revision, requestId or epoch after real host completion: terminal Uncertain, no completion evidence, session poisoned, faults=1 and polls=1 |
 | Pointer/gamepad marshalling | Real native absolute/delta pointer, wheel and indexed axis requests retain X/Y/device/value and correlated completion; delta omits coordinateSpace and absolute defaults to viewport_pixels |
 | Schema composition | Existing AJV command consumers register the additive schema; guarded/legacy examples and missing/unauthorized/lifecycle negatives validate without broadening legacy verbs |
+| Required guarded UI payloads | `GuardedUiRequiresTypedVerbPayloadBeforeEnqueue`: twelve missing/wrong-type root payloads reject with invalid_request and no host request; explicit checked:false enqueues, consumes and completes. Schema negatives derive required fields from legacy definitions |
 
 ## Local execution
 
@@ -39,8 +40,12 @@ GUA_BUILD_EXAMPLES=OFF, GUA_BUILD_IMGUI_EXAMPLE=OFF; build/guarded-msvc.
   dropped-response and eight malformed-completion paths).
 - Final full managed suite after audit fixes: 448/448 passed, no skips;
   artifacts/guarded-reviewed retains the TRX.
-- `bun run --filter gua-value-tools test`: 208/208 passed; schema test log
-  artifacts/guarded-schema-tests.log.
+- After actual GitHub review fixes: full managed suite 449/449 passed, no skips
+  (includes all 23 guarded cases); artifacts/guarded-github-review-fixed retains
+  the TRX. Native CTest remains 18/18 passed.
+- `bun run --filter gua-value-tools test`: 209/209 passed after GitHub review
+  fixes; schema test log artifacts/guarded-schema-review-tests.log.
+  `bun run --filter gua-value-tools check` also passed.
 - `dotnet build bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release
   -f netstandard2.1 --no-restore`: passed without warnings/errors.
 - Native output and result logs: build/guarded-msvc/Testing/Temporary;
@@ -52,6 +57,22 @@ The parent added complete typed result validation and the eight proxy negatives
 above. Parent inspection also corrected pointer coordinate marshalling. First PR
 CI TypeScript failed because the new schema reference lacked registration in two
 existing AJV consumers; both are now updated and all 208 tests pass locally.
+The bounded final repo audit closed its original finding and found no additional
+actionable findings on 64089e0; no further repo audit was spawned.
+
+Actual Codex GitHub review of 64089e0 identified a P2 missing-required-UI-payload
+defect: https://github.com/gua-project/gua/pull/180#discussion_r4193324360.
+The new regression failed against the old native binary because a checkbox
+request without checked returned ok:true. The guarded bridge now rejects missing
+or wrong-type verb fields before enqueue and the schema requires the same UI
+fields/types. The new regression passes against the rebuilt runtime, including
+explicit checked:false completion.
+
+macOS x64 CI on both prior heads timed out the new direct wire helper at its
+three-second deadline during a one-shot receive; the real proxy/managed tests
+passed. Its deadline now includes 15 seconds for handshake/snapshot delivery on
+that slower runner, retaining one send and all assertions. Final-head CI must
+confirm that correction; no retry or expectation weakening was added.
 
 The first broad managed run had 14 environment failures (Trace viewer/MCP artifacts
 not yet built). After the CI-prescribed locked Bun restore, gui-mcp build and

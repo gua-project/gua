@@ -80,6 +80,7 @@ struct Command {
     bool game_input_metadata_get_valid = true;
     bool guarded = false;
     bool guard_valid = false;
+    bool guard_payload_valid = true;
     unsigned long long expected_revision = 0;
     int expected_profile = -1;
 };
@@ -885,6 +886,23 @@ Command parse_command(std::string_view json)
             command.expected_profile = profile <= 1 ? static_cast<int>(profile) : -1;
             command.expected_session_epoch = number("expectedSessionEpoch");
             command.guard_valid = command.expected_session_epoch != 0 && profile <= 1;
+            // Guarded UI must not inherit the legacy parser's absent-field defaults.
+            // Validate required payload fields at the root before any host enqueue.
+            try {
+                using gua_value_detail::json;
+                auto require = [&](const char* name, json::kind type, bool nonempty = false) {
+                    const auto& value = root.at(name);
+                    if (value.type != type || (nonempty && value.text.empty()))
+                        throw std::runtime_error("invalid_request");
+                };
+                const bool ui = command.type == "click_node" || command.type == "focus_node" ||
+                    command.type == "set_value" || command.type == "set_checked" || command.type == "select" || command.type == "scroll";
+                if (ui) require("nodeId", json::string, true);
+                if (command.type == "set_value" || command.type == "select") require("value", json::string, command.type == "select");
+                if (command.type == "set_checked") require("checked", json::boolean);
+                if (command.type == "scroll") { require("deltaX", json::number); require("deltaY", json::number); }
+                if (command.type == "press_key") require("key", json::string, true);
+            } catch (...) { command.guard_payload_valid = false; }
         }
         catch (...) { command.guard_valid = false; }
     }
@@ -1363,6 +1381,8 @@ private:
         try {
             if (command.guarded && (!command.guard_valid || game_input_owner_id == 0))
                 return error_response(command.id, "invalid_guard");
+            if (command.guarded && !command.guard_payload_valid)
+                return error_response(command.id, "invalid_request");
             if (command.guarded && (!handlers_.guarded_dispatch_supported || !handlers_.guarded_dispatch_supported()))
                 return error_response(command.id, "unsupported");
             if (command.guarded && (command.type == "poll_action" || command.type == "poll_game_input")) {

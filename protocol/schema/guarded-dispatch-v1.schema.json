@@ -28,7 +28,11 @@
   "allOf": [
     {"if":{"properties":{"type":{"enum":["guarded_poll_action","guarded_poll_game_input"]}}},"then":{"required":["requestId"]}},
     {"if":{"properties":{"type":{"enum":["guarded_click_node","guarded_focus_node","guarded_set_value","guarded_set_checked","guarded_select","guarded_scroll"]}}},"then":{"required":["nodeId"],"properties":{"nodeId":{"type":"string","minLength":1}}}},
-    {"if":{"properties":{"type":{"const":"guarded_press_key"}}},"then":{"required":["key"]}},
+    {"if":{"properties":{"type":{"const":"guarded_set_value"}}},"then":{"required":["value"],"properties":{"value":{"type":"string"}}}},
+    {"if":{"properties":{"type":{"const":"guarded_set_checked"}}},"then":{"required":["checked"]}},
+    {"if":{"properties":{"type":{"const":"guarded_select"}}},"then":{"required":["value"],"properties":{"value":{"type":"string","minLength":1}}}},
+    {"if":{"properties":{"type":{"const":"guarded_scroll"}}},"then":{"required":["deltaX","deltaY"]}},
+    {"if":{"properties":{"type":{"const":"guarded_press_key"}}},"then":{"required":["key"],"properties":{"key":{"type":"string","minLength":1}}}},
     {"if":{"properties":{"type":{"enum":["guarded_press_game_input_action","guarded_set_game_input_action","guarded_release_game_input_action"]}}},"then":{"required":["actionId"]}},
     {"if":{"properties":{"type":{"enum":["guarded_key_down","guarded_key_up","guarded_press_physical_key"]}}},"then":{"required":["code"]}},
     {"if":{"properties":{"type":{"enum":["guarded_pointer_button_down","guarded_pointer_button_up","guarded_gamepad_button_down","guarded_gamepad_button_up"]}}},"then":{"required":["button"]}},

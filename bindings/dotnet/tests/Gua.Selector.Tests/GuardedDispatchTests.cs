@@ -58,8 +58,44 @@ public sealed class GuardedDispatchTests
         Assert.That(stolen.GetProperty("ok").GetBoolean(), Is.True); Assert.That(stolen.GetProperty("result").ValueKind, Is.EqualTo(JsonValueKind.Null));
         Assert.That(s.Poll(a).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
     }
+    [Test]
+    public async Task GuardedUiRequiresTypedVerbPayloadBeforeEnqueue() {
+        using var r = new GuaRuntime();
+        r.BeginFrame("shop"); r.RegisterNode(new("buy", "checkbox", "Buy", new(0, 0, 20, 20), Checked: true)); r.EndFrame();
+        using var c = Bridge(r);
+        var g = UiGuard(c);
+        foreach (var payload in new[] {
+            "\"type\":\"guarded_set_checked\",\"nodeId\":\"buy\"",
+            "\"type\":\"guarded_set_checked\",\"nodeId\":\"buy\",\"checked\":null",
+            "\"type\":\"guarded_set_checked\",\"nodeId\":\"buy\",\"checked\":\"false\"",
+            "\"type\":\"guarded_set_value\",\"nodeId\":\"buy\"",
+            "\"type\":\"guarded_set_value\",\"nodeId\":\"buy\",\"value\":42",
+            "\"type\":\"guarded_select\",\"nodeId\":\"buy\"",
+            "\"type\":\"guarded_select\",\"nodeId\":\"buy\",\"value\":\"\"",
+            "\"type\":\"guarded_scroll\",\"nodeId\":\"buy\"",
+            "\"type\":\"guarded_scroll\",\"nodeId\":\"buy\",\"deltaX\":0",
+            "\"type\":\"guarded_scroll\",\"nodeId\":\"buy\",\"deltaX\":0,\"deltaY\":\"1\"",
+            "\"type\":\"guarded_press_key\",\"key\":null",
+            "\"type\":\"guarded_click_node\",\"nodeId\":null"
+        }) {
+            var reply = await Wire(r.InspectorBridgeUrl, "{\"id\":1," + payload +
+                $",\"expectedSessionEpoch\":{g.SessionEpoch},\"expectedProfile\":0,\"expectedRevision\":{g.Revision}" + "}");
+            Assert.That(reply.GetProperty("ok").GetBoolean(), Is.False, payload);
+            Assert.That(reply.GetProperty("error").GetString(), Is.EqualTo("invalid_request"), payload);
+            foreach (var action in new[] {GuaActionType.SetChecked, GuaActionType.SetValue, GuaActionType.Select, GuaActionType.Scroll, GuaActionType.PressKey, GuaActionType.Click})
+                Assert.That(r.TryConsumeAction(action, "buy", out _), Is.False, payload);
+        }
+        using var session = c.CreateGuardedDispatchSession();
+        var valid = session.SendUi(g, new(GuaActionType.SetChecked, "buy", BoolValue: false));
+        Assert.That(valid.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued));
+        Assert.That(r.TryConsumeAction(GuaActionType.SetChecked, "buy", out var checkedRequest), Is.True);
+        Assert.That(checkedRequest.BoolValue, Is.False); r.EmitActionResult(checkedRequest, true);
+        Assert.That(session.Poll(valid).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+    }
     private static async Task<JsonElement> Wire(string url, string command) {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3)); using var s = new ClientWebSocket();
+        // Include handshake and snapshot delivery on slower macOS x64 CI runners.
+        // This is a bounded one-shot exchange, never a resend after timeout.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); using var s = new ClientWebSocket();
         await s.ConnectAsync(new(url), timeout.Token); await s.SendAsync(Encoding.UTF8.GetBytes(command).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
         while (true) {
             using var d = JsonDocument.Parse(await FaultProxy.Read(s, timeout.Token));
