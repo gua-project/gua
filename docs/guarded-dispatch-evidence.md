@@ -31,6 +31,9 @@ This PR does not merge, tag, or publish a package.
 | Aggregate retention across disconnected owners | Native owner test retains a consumed request after disconnect, fills the remaining 255 slots through another owner, rejects a third owner, and frees capacity only after late host completion |
 | Legacy input poll cannot bypass guards | Original-revision regression first attempts legacy polling of both Semantic and Raw guarded completions; guarded_poll_required preserves each result for the correct guarded poll |
 | Explicit empty text preserves legacy parity | `EmptyTextRetainsLegacyWireAndManagedGuardedCompletion`: legacy and guarded actual-wire requests consume identical empty JSON string values and return correlated completions; the managed guarded session also completes the same payload |
+| Escaped NUL text preserves JSON values | Two actual-wire and managed cases retain `a\\u0000b` for Raw text and Semantic Text Set, matching legacy native consumption and correlated completion |
+| Full native modifier range | Two managed guarded UI cases consume exact 2147483648 and 4294967295 modifier masks; schema accepts those masks and rejects values beyond uint32 |
+| Opaque replay reference compatibility | Legacy/guarded wire and managed text requests accept a nonempty secretKey reference and consume only the supplied fixture text; invalid reference types/empty strings reject before enqueue, with no secret resolution |
 
 ## Local execution
 
@@ -140,6 +143,24 @@ timeouts or fault counts were weakened.
 After the teardown fix, all 31 guarded cases pass locally; their TRX is retained
 in artifacts/guarded-proxy-teardown-focus. Cross-platform CI verifies the actual
 Linux shutdown path before merge.
+
+Actual Codex review of 729bb9c found three further payload parity P2s:
+4201205405 (escaped NUL JSON text), 4201205413 (uint32 modifier masks), and
+4201205416 (optional text replay reference). Five new cases all failed against
+the old runtime in artifacts/guarded-parity-before after the legacy paths passed
+where applicable. The corrected bridge accepts NUL only in JSON text values,
+uses strict uint32 modifier parsing without the later legacy signed overwrite,
+and validates/accepts the opaque secretKey metadata just like the legacy wire.
+Managed text requests may forward the optional reference. Native bridge/core
+code has no secret resolver; the test uses only synthetic reference/text data.
+Legacy command parsing and native ABI layouts are unchanged. The schema now
+specifies the native uint32 bound and restores the legacy optional reference.
+After rebuild, all 36 guarded cases, native CTest 18/18, schema 211/211 (1071
+assertions) and tsc pass; artifacts/guarded-parity-fixed-focus and
+guarded-parity-schema.log retain those results.
+The full managed suite passes 462/462 with one NUnit worker (no skips), retained
+in artifacts/guarded-parity-fixed-full; netstandard2.1 builds with no warnings
+or errors after the additive managed replay-reference field.
 
 The first broad managed run had 14 environment failures (Trace viewer/MCP artifacts
 not yet built). After the CI-prescribed locked Bun restore, gui-mcp build and

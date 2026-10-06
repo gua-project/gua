@@ -18,6 +18,13 @@ enqueue. Required payload fields, types, bounds and verb-specific allowed fields
 are checked before dispatch; absent fields never become default host inputs.
 As in the legacy text-input schema and core, an explicit empty `text` string is
 valid; a missing or non-string field still rejects before enqueue.
+Escaped U+0000 is also valid inside JSON text values for Semantic Set and Raw
+text input, as in the legacy/core contract. UI key modifiers use the full
+native uint32 range, 0 through 4294967295, without signed conversion.
+Raw text input accepts the optional nonempty `secretKey` replay reference;
+the managed request can forward it. As with the legacy bridge, the host receives
+the supplied text: secret resolution belongs to the caller/replay tooling.
+This reference does not grant profile authority or trigger a secret lookup.
 
 Epoch/revision counters do not identify a host. A wire client observing through
 another connection must capture Observe sourceId with the observation, verify

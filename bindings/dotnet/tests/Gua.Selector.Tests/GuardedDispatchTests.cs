@@ -169,6 +169,79 @@ public sealed class GuardedDispatchTests
         Assert.That(r.TryConsumeGameInput(out var managed), Is.True); Assert.That(managed.ValueJson, Is.EqualTo("\"\""));
         r.CompleteGameInput(managed, true); Assert.That(session.Poll(attempt).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
     }
+    [TestCase(false)] [TestCase(true)]
+    public async Task EscapedNulTextRetainsLegacyAndGuardedNativeValues(bool semantic) {
+        using var r = new GuaRuntime(); r.EnableGameInput(GuaGameInputCapabilities.Text | GuaGameInputCapabilities.Semantic, () => {});
+        r.PublishGameInputActions("play", [new("message", "Message", GuaGameInputValueType.Text)]);
+        using var c = Bridge(r); var g = semantic ? InputGuard(r) : UiGuard(c) with {Revision=999};
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new(r.InspectorBridgeUrl), timeout.Token);
+        foreach (var guarded in new[] {false, true}) {
+            var verb = semantic ? "set_game_input_action" : "text_input";
+            var fields = new Dictionary<string, object?> { ["id"] = 1, ["type"] = guarded ? "guarded_" + verb : verb, [semantic ? "value" : "text"] = "a\0b" };
+            if (semantic) fields["actionId"] = "message";
+            if (guarded) { fields["expectedSessionEpoch"] = g.SessionEpoch; fields["expectedProfile"] = 0; fields["expectedRevision"] = g.Revision; }
+            var receipt = await Exchange(socket, fields, timeout.Token); Assert.That(receipt.GetProperty("ok").GetBoolean(), Is.True, receipt.ToString());
+            var id = receipt.GetProperty("result").GetProperty("requestId").GetUInt64();
+            Assert.That(r.TryConsumeGameInput(out var request), Is.True); Assert.That(request.RequestId, Is.EqualTo(id));
+            using var value = JsonDocument.Parse(request.ValueJson); Assert.That(value.RootElement.GetString(), Is.EqualTo("a\0b"));
+            r.CompleteGameInput(request, true);
+            fields.Remove(semantic ? "value" : "text"); fields.Remove("actionId"); fields["requestId"] = id;
+            fields["type"] = guarded ? "guarded_poll_game_input" : "poll_game_input";
+            var result = (await Exchange(socket, fields, timeout.Token)).GetProperty("result");
+            Assert.That(result.GetProperty("requestId").GetUInt64(), Is.EqualTo(id)); Assert.That(result.GetProperty("succeeded").GetBoolean(), Is.True);
+        }
+        using var session = c.CreateGuardedDispatchSession();
+        var attempt = session.SendGameInput(g, semantic ? new("set_game_input_action", "message", Value: "a\0b") : new("text_input", "a\0b"));
+        Assert.That(attempt.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued), attempt.Error);
+        Assert.That(r.TryConsumeGameInput(out var managed), Is.True);
+        using var managedValue = JsonDocument.Parse(managed.ValueJson); Assert.That(managedValue.RootElement.GetString(), Is.EqualTo("a\0b"));
+        r.CompleteGameInput(managed, true); Assert.That(session.Poll(attempt).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+    }
+    [TestCase(2147483648u)] [TestCase(uint.MaxValue)]
+    public void GuardedPressKeyPreservesUnsignedModifierBits(uint modifiers) {
+        using var r = new GuaRuntime(); r.BeginFrame("input"); r.RegisterNode(new("entry", "textbox", "Entry", new(0, 0, 20, 20))); r.EndFrame();
+        using var c = Bridge(r); using var session = c.CreateGuardedDispatchSession();
+        var attempt = session.SendUi(UiGuard(c), new(GuaActionType.PressKey, "entry", Key: "Enter", Modifiers: modifiers));
+        Assert.That(attempt.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued), attempt.Error);
+        Assert.That(r.TryConsumeAction(GuaActionType.PressKey, "entry", out var request), Is.True);
+        Assert.That(request.Modifiers, Is.EqualTo(modifiers)); r.EmitActionResult(request, true);
+        Assert.That(session.Poll(attempt).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+    }
+    [Test]
+    public async Task GuardedTextAcceptsOpaqueReplayReferenceLikeLegacyWire() {
+        using var r = new GuaRuntime(); r.EnableGameInput(GuaGameInputCapabilities.Text, () => {});
+        using var c = Bridge(r); var g = UiGuard(c) with {Revision=999};
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new(r.InspectorBridgeUrl), timeout.Token);
+        foreach (var guarded in new[] {false, true}) {
+            var fields = new Dictionary<string, object?> { ["id"] = 1, ["type"] = guarded ? "guarded_text_input" : "text_input", ["text"] = "safe fixture text", ["secretKey"] = "opaque-test-reference" };
+            if (guarded) { fields["expectedSessionEpoch"] = g.SessionEpoch; fields["expectedProfile"] = 0; fields["expectedRevision"] = g.Revision; }
+            var receipt = await Exchange(socket, fields, timeout.Token); Assert.That(receipt.GetProperty("ok").GetBoolean(), Is.True, receipt.ToString());
+            var id = receipt.GetProperty("result").GetProperty("requestId").GetUInt64();
+            Assert.That(r.TryConsumeGameInput(out var request), Is.True);
+            using var value = JsonDocument.Parse(request.ValueJson); Assert.That(value.RootElement.GetString(), Is.EqualTo("safe fixture text"));
+            r.CompleteGameInput(request, true); fields.Remove("text"); fields.Remove("secretKey"); fields["requestId"] = id;
+            fields["type"] = guarded ? "guarded_poll_game_input" : "poll_game_input";
+            Assert.That((await Exchange(socket, fields, timeout.Token)).GetProperty("result").GetProperty("succeeded").GetBoolean(), Is.True);
+        }
+        using var session = c.CreateGuardedDispatchSession();
+        var attempt = session.SendGameInput(g, new("text_input", "safe fixture text", SecretKey: "opaque-test-reference"));
+        Assert.That(attempt.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued), attempt.Error);
+        Assert.That(r.TryConsumeGameInput(out var managed), Is.True);
+        using var managedValue = JsonDocument.Parse(managed.ValueJson); Assert.That(managedValue.RootElement.GetString(), Is.EqualTo("safe fixture text"));
+        r.CompleteGameInput(managed, true); Assert.That(session.Poll(attempt).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+        foreach (var invalid in new object?[] {"", null, 1}) {
+            var rejected = await Exchange(socket, new {id=1,type="guarded_text_input",text="fixture",secretKey=invalid,
+                expectedSessionEpoch=g.SessionEpoch,expectedProfile=0,expectedRevision=g.Revision}, timeout.Token);
+            Assert.That(rejected.GetProperty("ok").GetBoolean(), Is.False); Assert.That(rejected.GetProperty("error").GetString(), Is.EqualTo("invalid_request"));
+            Assert.That(r.TryConsumeGameInput(out _), Is.False);
+        }
+    }
+    private static async Task<JsonElement> Exchange(ClientWebSocket socket, object command, CancellationToken token) {
+        var json = JsonSerializer.Serialize(command); await socket.SendAsync(Encoding.UTF8.GetBytes(json).AsMemory(), WebSocketMessageType.Text, true, token);
+        return await ReadReply(socket, json, token);
+    }
     private static async Task<JsonElement> Wire(string url, string command, int expectedId = 1) {
         // Include handshake and snapshot delivery on slower macOS x64 CI runners.
         // This is a bounded one-shot exchange, never a resend after timeout.

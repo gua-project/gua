@@ -51,6 +51,12 @@ test("guarded UI preserves required legacy payload fields and their types", () =
     {type:"guarded_press_key", key:null},
   ]) expect(validate({...guard, ...invalid})).toBe(false);
 });
+test("guarded UI modifier masks preserve the native uint32 range", () => {
+  for (const modifiers of [0,2147483648,4294967295])
+    expect(validate({...guard,type:"guarded_press_key",key:"Enter",modifiers})).toBe(true);
+  for (const modifiers of [-1,4294967296,null,"2147483648"])
+    expect(validate({...guard,type:"guarded_press_key",key:"Enter",modifiers})).toBe(false);
+});
 test("guarded input payloads preserve legacy required fields, enums, bounds and exclusions", () => {
   const valid = [
     {type:"press_game_input_action", actionId:"jump"}, {type:"set_game_input_action", actionId:"move", value:0.5, leaseMs:5000},
@@ -63,6 +69,8 @@ test("guarded input payloads preserve legacy required fields, enums, bounds and 
     ...["gamepad_button_down","gamepad_button_up"].map(type => ({type, button:"south", gamepadIndex:3})),
     {type:"set_gamepad_axis", axis:"left_stick_x", value:-1, gamepadIndex:0}, {type:"text_input", text:"Hello"},
     {type:"text_input", text:""},
+    {type:"text_input", text:"a\u0000b"}, {type:"text_input", text:"fixture", secretKey:"opaque-test-reference"},
+    {type:"set_game_input_action", actionId:"message", value:"a\u0000b"},
   ];
   const invalid = [
     {type:"set_gamepad_axis", axis:"left_stick_x"}, {type:"set_gamepad_axis", axis:"left_stick_x", value:1.1},
@@ -75,6 +83,7 @@ test("guarded input payloads preserve legacy required fields, enums, bounds and 
     {type:"set_game_input_action", actionId:"move"}, {type:"press_game_input_action", actionId:"jump", value:false},
     {type:"release_game_input_action", actionId:"move", confirmed:false}, {type:"press_game_input_action", actionId:"Invalid"},
     {type:"text_input", text:"x".repeat(41)},
+    {type:"text_input", text:"fixture", secretKey:""}, {type:"text_input", text:"fixture", secretKey:null},
   ];
   for (const payload of valid) {
     expect(validate(payload)).toBe(true); expect(validate({...guard,...payload,type:"guarded_"+payload.type})).toBe(true);

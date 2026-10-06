@@ -698,13 +698,13 @@ bool valid_game_input_identifier(std::string_view value)
     });
 }
 
-bool valid_game_input_text(std::string_view value, std::size_t maximum_code_points)
+bool valid_game_input_text(std::string_view value, std::size_t maximum_code_points, bool allow_nul = false)
 {
     if (value.empty()) return false;
     std::size_t code_points = 0;
     for (std::size_t index = 0; index < value.size();) {
         const unsigned char first = static_cast<unsigned char>(value[index]);
-        if (first == 0U) return false;
+        if (first == 0U && !allow_nul) return false;
         const std::size_t width = first < 0x80U ? 1U : first >= 0xC2U && first <= 0xDFU ? 2U :
             first >= 0xE0U && first <= 0xEFU ? 3U : first >= 0xF0U && first <= 0xF4U ? 4U : 0U;
         if (width == 0U || index + width > value.size()) return false;
@@ -874,7 +874,7 @@ Command parse_command(std::string_view json)
                 std::string_view("sensitive"), std::string_view("confirmed"), std::string_view("actionId"), std::string_view("code"),
                 std::string_view("button"), std::string_view("axis"), std::string_view("text"), std::string_view("mode"),
                 std::string_view("coordinateSpace"), std::string_view("wheelUnit"), std::string_view("leaseMs"),
-                std::string_view("x"), std::string_view("y"), std::string_view("gamepadIndex") };
+                std::string_view("x"), std::string_view("y"), std::string_view("gamepadIndex"), std::string_view("secretKey") };
             for (const auto& [key, value] : root.fields)
                 if (std::find(fields.begin(), fields.end(), key) == fields.end()) throw std::runtime_error("invalid_guard");
             auto number = [&](const char* name) -> unsigned long long {
@@ -934,7 +934,7 @@ Command parse_command(std::string_view json)
                         const auto& value = root.at("value");
                         if (value.type != json::boolean && value.type != json::number && value.type != json::string && value.type != json::object) throw std::runtime_error("invalid_request");
                         if (value.type == json::number) numeric("value");
-                        if (value.type == json::string && !value.text.empty() && !valid_game_input_text(value.text,40)) throw std::runtime_error("invalid_request");
+                        if (value.type == json::string && !value.text.empty() && !valid_game_input_text(value.text,40,true)) throw std::runtime_error("invalid_request");
                     }
                 } else if (verb == "key_down" || verb == "key_up" || verb == "press_physical_key") { allow({"code","leaseMs"}); require("code",json::string,true); }
                 else if (verb == "pointer_move") {
@@ -952,13 +952,17 @@ Command parse_command(std::string_view json)
                     if (present("wheelUnit")) { require("wheelUnit",json::string,true); const auto& unit = root.at("wheelUnit").text; if (unit != "pixels" && unit != "lines") throw std::runtime_error("invalid_request"); }
                 } else if (verb == "gamepad_button_down" || verb == "gamepad_button_up") { allow({"button","gamepadIndex","leaseMs"}); require("button",json::string,true); }
                 else if (verb == "set_gamepad_axis") { allow({"axis","value","gamepadIndex","leaseMs"}); require("axis",json::string,true); const double value = numeric("value"); if (value < -1 || value > 1) throw std::runtime_error("invalid_request"); }
-                else if (verb == "text_input") { allow({"text","sensitive"}); require("text",json::string); const auto& text = root.at("text").text; if (!text.empty() && !valid_game_input_text(text,40)) throw std::runtime_error("invalid_request"); }
+                else if (verb == "text_input") { allow({"text","sensitive","secretKey"}); require("text",json::string); const auto& text = root.at("text").text; if (!text.empty() && !valid_game_input_text(text,40,true)) throw std::runtime_error("invalid_request"); if (present("secretKey")) require("secretKey",json::string,true); }
                 else if (verb == "poll_action" || verb == "poll_game_input") allow({"requestId"});
                 for (auto field : {"checked","sensitive","confirmed"}) if (present(field)) require(field,json::boolean);
                 if (present("leaseMs")) { const auto lease = number("leaseMs"); if (lease < 1 || lease > 60000) throw std::runtime_error("invalid_request"); }
                 if (present("gamepadIndex") && number("gamepadIndex") > 3) throw std::runtime_error("invalid_request");
                 if (present("scrollUnit") && number("scrollUnit") > 1) throw std::runtime_error("invalid_request");
-                if (present("modifiers") && number("modifiers") > static_cast<unsigned long long>(std::numeric_limits<int>::max())) throw std::runtime_error("invalid_request");
+                if (present("modifiers")) {
+                    const auto modifiers = number("modifiers");
+                    if (modifiers > std::numeric_limits<std::uint32_t>::max()) throw std::runtime_error("invalid_request");
+                    command.modifiers = static_cast<unsigned int>(modifiers);
+                }
                 if (present("requestId") && number("requestId") == 0) throw std::runtime_error("invalid_request");
             } catch (...) { command.guard_payload_valid = false; }
         }
@@ -1070,7 +1074,7 @@ Command parse_command(std::string_view json)
     command.delta_x = static_cast<float>(json_number_field(json, "deltaX").value_or(0));
     command.delta_y = static_cast<float>(json_number_field(json, "deltaY").value_or(0));
     command.bool_value = json_bool_field(json, "checked");
-    command.modifiers = static_cast<unsigned int>(json_int_field(json, "modifiers").value_or(0));
+    if (!command.guarded) command.modifiers = static_cast<unsigned int>(json_int_field(json, "modifiers").value_or(0));
     command.sensitive = json_bool_field(json, "sensitive");
     command.confirmed = json_bool_field(json, "confirmed");
     command.scroll_unit = json_int_field(json, "scrollUnit").value_or(0);

@@ -79,7 +79,9 @@ public sealed class GuaRemoteGuardedSession : IDisposable
                 fields["x"] = request.X; fields["y"] = request.Y;
                 if (request.Target != "delta") fields["coordinateSpace"] = request.CoordinateSpace;
                 break;
-            case "text_input": fields["text"] = request.Target; fields["sensitive"] = request.Sensitive; break;
+            case "text_input": fields["text"] = request.Target; fields["sensitive"] = request.Sensitive;
+                if (request.SecretKey != null) fields["secretKey"] = request.SecretKey;
+                break;
             default: throw new ArgumentException("Unsupported guarded input verb.", nameof(request));
         }
         return Send(guard, false, null, fields, beforeDispatch);
@@ -160,7 +162,7 @@ public sealed class GuaRemoteGuardedSession : IDisposable
 
 public sealed record GuaRemoteGameInputRequest(string Command, string Target, object? Value = null,
     uint LeaseMs = 5000, double X = 0, double Y = 0, int DeviceIndex = 0, bool Sensitive = false,
-    bool Confirmed = false, string CoordinateSpace = "viewport_pixels");
+    bool Confirmed = false, string CoordinateSpace = "viewport_pixels", string? SecretKey = null);
 internal sealed class GuaRemoteDispatchRejectedException(string? message) : InvalidOperationException(message);
 
 public sealed partial class GuaWebSocketContext
