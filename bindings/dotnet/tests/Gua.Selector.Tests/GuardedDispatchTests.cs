@@ -400,7 +400,7 @@ public sealed class GuardedDispatchTests
             host = Task.Run(async () => {
                 var clients = new List<Task>();
                 try { while (!cancel.IsCancellationRequested) {
-                    var incoming = await listener.GetContextAsync(); var target = route?.Invoke() ?? upstream;
+                    var incoming = await listener.GetContextAsync().WaitAsync(cancel.Token); var target = route?.Invoke() ?? upstream;
                     clients.Add(Task.Run(async () => {
                     try { using var downstream = (await incoming.AcceptWebSocketAsync(null)).WebSocket;
                     using var remote = new ClientWebSocket(); await remote.ConnectAsync(new(target), cancel.Token);
@@ -430,6 +430,15 @@ public sealed class GuardedDispatchTests
             do { result = await s.ReceiveAsync(new ArraySegment<byte>(b), token); if (result.MessageType == WebSocketMessageType.Close) throw new WebSocketException(); stream.Write(b, 0, result.Count); } while (!result.EndOfMessage);
             return stream.ToArray();
         }
-        public void Dispose() { cancel.Cancel(); listener.Close(); host.GetAwaiter().GetResult(); cancel.Dispose(); }
+        public void Dispose() {
+            cancel.Cancel();
+            // Join accepts/relays before closing HttpListener response streams.
+            // Linux may have already disposed a peer stream during disconnect.
+            try { host.GetAwaiter().GetResult(); }
+            finally {
+                try { listener.Close(); } catch (ObjectDisposedException) { }
+                finally { cancel.Dispose(); }
+            }
+        }
     }
 }

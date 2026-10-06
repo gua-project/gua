@@ -131,6 +131,15 @@ invalid_request at the guarded receipt on the old runtime; the TRX is retained
 in artifacts/guarded-empty-text-before. The bridge now allows explicit empty
 strings without broadening required-field, UTF-8 or length checks. The schema
 differential test also includes empty text; no existing schema changed.
+The first ee6cbf3 Linux CI passed empty-text dispatch but failed the two-host
+test in HttpListener.Close with an already disposed NetworkStream during fixture
+teardown. The proxy now cancels accept waits, joins all accept/relay tasks before
+closing listener streams, and tolerates only ObjectDisposedException from the
+final listener close. Host assertion failures still propagate; no assertions,
+timeouts or fault counts were weakened.
+After the teardown fix, all 31 guarded cases pass locally; their TRX is retained
+in artifacts/guarded-proxy-teardown-focus. Cross-platform CI verifies the actual
+Linux shutdown path before merge.
 
 The first broad managed run had 14 environment failures (Trace viewer/MCP artifacts
 not yet built). After the CI-prescribed locked Bun restore, gui-mcp build and
