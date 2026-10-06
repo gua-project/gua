@@ -13,6 +13,13 @@ keys are invalid. The connection/host profile remains authoritative: an expected
 profile is a comparison, never an authorization grant. The native runtime holds
 its context lock across profile/capability verification and core guarded enqueue.
 
+Epoch/revision counters do not identify a host. A wire client observing through
+another connection must capture Observe sourceId with the observation, verify
+that identity on the dispatch connection before enabling sends, and keep that
+connection pinned. A native bridge connection serves one core context with an
+immutable Observe sourceId. The managed session enforces this identity binding;
+a source comparison grants no profile authority.
+
 UI revision is the published UI tree revision for the authoritative profile.
 Semantic input revision is that profile's Action Map revision, returned by
 `get_game_input_actions`. As in local `guarded_v2`, Raw input requires the epoch
@@ -34,7 +41,9 @@ retain the same profile-projected errors.
 
 Each connection owns a native input owner and its guarded UI requests. Receipts
 carry `requestId`. `guarded_poll_action` and `guarded_poll_game_input` require
-that requestId and the original guard. Native polling verifies epoch and profile
+that requestId and the original guard. The connection retains each accepted
+request's original epoch/profile/revision; a mismatched poll is rejected before
+calling the consuming host poll, including Raw revision metadata. Native polling verifies epoch and profile
 under the same lock as result consumption. UI pending is null; input pending is
 `completed:false`. Terminal results are one-shot, request-correlated, and include
 sessionEpoch; UI also retains nodeId, action, frameSequence, revision, succeeded
@@ -42,15 +51,27 @@ and error, input retains succeeded and errorCode. A stale poll is an uncertain
 completion, not evidence of nonexecution. A different owner cannot poll another
 owner's result; legacy UI poll paths cannot consume guarded UI results.
 
-UI retention is bounded to 256 outstanding requests/results per owner; overflow
+The connection guard table is bounded to 256 outstanding UI/input requests/results
+combined per owner; UI core retention is also bounded to 256. Overflow
 rejects without enqueue. Disconnect removes that owner's pending UI requests and
 results and invokes existing held-input cleanup. Already-consumed UI requests
 retain a host completion path; a later completion is discarded after owner loss.
 Other owners and the host runtime remain alive. Existing input lease/reset
 cleanup semantics remain authoritative.
 
-Managed `GuaWebSocketContext.CreateGuardedDispatchSession()` creates a dedicated
-connection and negotiates the capability. `GuaRemoteGuardedSession.SendUi` and
+Managed `GuaWebSocketContext.CreateGuardedDispatchSession(observedSourceId)` creates a dedicated
+connection, negotiates the capability and compares its existing Observe sourceId
+with the original observation connection and supplied observed identity before
+enabling sends. The optional argument defaults to the original connection's
+current sourceId; callers with saved observations should supply their captured
+sourceId. The dedicated generation is pinned and never reconnected for dispatch.
+`GuaDispatchGuard` carries the observed SourceId, epoch, profile and revision;
+a different source is locally Rejected before dispatch. Obtain UI sourceId,
+sessionEpoch and uiRevision together from the observation snapshot's document,
+not from independent observations across reconnects. Semantic guards use the
+map read through the pinned session and its verified SourceId. This does not add
+a Raw map revision comparison or an identity namespace distinct from Observe.
+`GuaRemoteGuardedSession.SendUi` and
 `SendGameInput` return a `GuaRemoteDispatchAttempt`: Rejected, Enqueued, Completed,
 or Uncertain. A receipt lost after send, malformed receipt, lost/malformed poll,
 or stale completion poisons and disconnects the session. There is no automatic

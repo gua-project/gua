@@ -14,6 +14,7 @@
 #include <locale>
 #include <limits>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -92,6 +93,9 @@ struct ClientConnection {
     unsigned long long observe_client_id = 0;
     unsigned long long spatial_client_id = 0;
 };
+
+struct DispatchGuard { unsigned long long epoch, revision; int profile; };
+using GuardedRequests = std::map<std::pair<bool, unsigned long long>, DispatchGuard>;
 
 std::string spatial_wire(const gua_value_detail::json& j) {
     using gua_value_detail::json;
@@ -855,11 +859,9 @@ Command parse_command(std::string_view json)
     command.guarded = command.type.starts_with("guarded_");
     if (command.guarded) {
         command.type.erase(0, 8);
-        command.expected_revision = json_uint64_field(json, "expectedRevision").value_or(0);
-        command.expected_profile = json_int_field(json, "expectedProfile").value_or(-1);
-        command.guard_valid = json_uint64_field(json, "expectedSessionEpoch").value_or(0) != 0 &&
-            json_uint64_field(json, "expectedRevision").has_value() &&
-            (command.expected_profile == 0 || command.expected_profile == 1);
+        // Capture correlation before rejecting malformed metadata. Parse guards
+        // only once with from_chars; the legacy stoull path is unnecessary here.
+        command.id = json_int_field(json, "id").value_or(0);
         // Read guards from the root object: nested payload fields cannot impersonate metadata.
         try {
             const auto root = gua_value_detail::parser(json).parse();
@@ -910,7 +912,7 @@ Command parse_command(std::string_view json)
     // Do not first narrow it through the legacy std::stoi parser.
     if (command.type == "get_observe_snapshot" || command.type == "subscribe_observations" ||
         command.type == "poll_observations" || command.type == "unsubscribe_observations" || command.type == "semantic_lint") return command;
-    command.id = json_int_field(json, "id").value_or(0);
+    if (!command.guarded) command.id = json_int_field(json, "id").value_or(0);
     command.node_id = json_string_field(json, "nodeId").value_or("");
     command.key = json_string_field(json, "key").value_or("");
     command.selector.id = json_string_field(json, "selectorId").value_or("");
@@ -1334,6 +1336,7 @@ private:
             connection.game_input_owner_id = 0;
         };
         try {
+            GuardedRequests guarded_requests; // bounded, destroyed with this connection owner
             {
                 const std::lock_guard lock(clients_mutex_);
                 clients_.push_back(connection);
@@ -1347,7 +1350,7 @@ private:
                     break;
                 }
 
-                const std::string response = handle_command(*message, connection.game_input_owner_id, connection.observe_client_id, connection.spatial_client_id);
+                const std::string response = handle_command(*message, connection.game_input_owner_id, connection.observe_client_id, connection.spatial_client_id, guarded_requests);
                 send_text_frame(connection, response);
             }
         } catch (...) {
@@ -1373,7 +1376,7 @@ private:
         ::send_text_frame(client.socket, text);
     }
 
-    [[nodiscard]] std::string handle_command(std::string_view message, unsigned long long game_input_owner_id, unsigned long long observe_client_id, unsigned long long spatial_client_id)
+    [[nodiscard]] std::string handle_command(std::string_view message, unsigned long long game_input_owner_id, unsigned long long observe_client_id, unsigned long long spatial_client_id, GuardedRequests& guarded_requests)
     {
         Command command;
         try { command = parse_command(message); }
@@ -1388,8 +1391,14 @@ private:
             if (command.guarded && (command.type == "poll_action" || command.type == "poll_game_input")) {
                 if (command.request_id == 0 || !handlers_.poll_guarded_result)
                     return error_response(command.id, "invalid_request");
+                const auto key = std::pair(command.type == "poll_action", command.request_id);
+                const auto original = guarded_requests.find(key);
+                if (original == guarded_requests.end()) return key.first ? ok_response(command.id, "null") : error_response(command.id, "invalid_request");
+                if (command.expected_revision != original->second.revision || command.expected_session_epoch != original->second.epoch ||
+                    command.expected_profile != original->second.profile) return error_response(command.id, "stale_guard");
                 const auto result = handlers_.poll_guarded_result(command.type == "poll_action", game_input_owner_id,
                     command.request_id, command.expected_session_epoch, command.expected_profile);
+                if (result.ok && (key.first ? result.json != "null" : result.json.starts_with("{\"completed\":true"))) guarded_requests.erase(original);
                 return result.ok ? ok_response(command.id, result.json) : error_response(command.id, result.error);
             }
             if (command.guarded && command.type != "click_node" && command.type != "focus_node" &&
@@ -1596,6 +1605,7 @@ private:
                 command.type == "set_gamepad_axis" || command.type == "reset_gamepad" ||
                 command.type == "text_input";
             if (game_input_command) {
+                if (command.guarded && guarded_requests.size() >= 256) return error_response(command.id, "guarded_request_limit");
                 if (game_input_owner_id == 0 || !handlers_.enqueue_game_input)
                     return error_response(command.id, "unsupported");
                 const bool gamepad_command = command.type == "gamepad_button_down" ||
@@ -1628,16 +1638,21 @@ private:
                     command.type, std::move(target), std::move(value_json), x, y, command.lease_ms,
                     command.device_index, command.sensitive, command.confirmed, command.guarded,
                     command.expected_session_epoch, command.expected_revision, command.expected_profile });
+                if (command.guarded && request_id > 0) guarded_requests.emplace(std::pair(false, static_cast<unsigned long long>(request_id)),
+                    DispatchGuard {command.expected_session_epoch, command.expected_revision, command.expected_profile});
                 return request_id > 0
                     ? ok_response(command.id, "{\"requestId\":" + std::to_string(request_id) + "}")
                     : error_response(command.id, "Gua game input rejected: " + std::string(game_input_error_name(request_id)));
             }
             if (handlers_.enqueue_action && (command.type == "click_node" || command.type == "focus_node" || command.type == "press_key" ||
                 command.type == "set_value" || command.type == "set_checked" || command.type == "select" || command.type == "scroll")) {
+                if (command.guarded && guarded_requests.size() >= 256) return error_response(command.id, "guarded_request_limit");
                 const long long request_id = handlers_.enqueue_action(gua::ws::ActionCommand {
                     command.type, command.node_id, command.value, command.delta_x, command.delta_y, command.bool_value,
                     command.key, command.modifiers, command.sensitive, command.scroll_unit, command.guarded,
                     game_input_owner_id, command.expected_session_epoch, command.expected_revision, command.expected_profile });
+                if (command.guarded && request_id > 0) guarded_requests.emplace(std::pair(true, static_cast<unsigned long long>(request_id)),
+                    DispatchGuard {command.expected_session_epoch, command.expected_revision, command.expected_profile});
                 return request_id > 0
                     ? ok_response(command.id, "{\"requestId\":" + std::to_string(request_id) + "}")
                     : error_response(command.id, "Gua action rejected: " + std::string(action_error_name(request_id)));

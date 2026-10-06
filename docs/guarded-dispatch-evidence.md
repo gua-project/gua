@@ -23,6 +23,9 @@ This PR does not merge, tag, or publish a package.
 | Pointer/gamepad marshalling | Real native absolute/delta pointer, wheel and indexed axis requests retain X/Y/device/value and correlated completion; delta omits coordinateSpace and absolute defaults to viewport_pixels |
 | Schema composition | Existing AJV command consumers register the additive schema; guarded/legacy examples and missing/unauthorized/lifecycle negatives validate without broadening legacy verbs |
 | Required guarded UI payloads | `GuardedUiRequiresTypedVerbPayloadBeforeEnqueue`: twelve missing/wrong-type root payloads reject with invalid_request and no host request; explicit checked:false enqueues, consumes and completes. Schema negatives derive required fields from legacy definitions |
+| Original poll guard must not destroy mis-correlated results | `PollRequiresOriginalRevisionAndKeepsResultForCorrectGuard`: UI, Semantic and Raw real-native completions reject a wrong expectedRevision, then return the original completion to a correct poll on the same owning connection |
+| Same counters cannot bind observations to another host | `SameCounterDifferentHostCannotReceiveObservedUiOrInput`: two real runtimes have identical epoch/UI/map counters but distinct Observe sourceIds. A per-connection routing proxy switches the dedicated connection to B; session creation rejects A's source. Foreign UI/input guards dispatch zero requests to B; correctly bound B dispatch completes |
+| Input schema parity | Differential schema examples cover all fifteen supported input verbs and eighteen invalid required-field, enum, numeric-bound and forbidden-field cases against legacy commands; managed marshalling now emits only the verb's allowed fields |
 
 ## Local execution
 
@@ -46,6 +49,10 @@ GUA_BUILD_EXAMPLES=OFF, GUA_BUILD_IMGUI_EXAMPLE=OFF; build/guarded-msvc.
 - `bun run --filter gua-value-tools test`: 209/209 passed after GitHub review
   fixes; schema test log artifacts/guarded-schema-review-tests.log.
   `bun run --filter gua-value-tools check` also passed.
+- After source/poll/schema feedback: focused guarded suite 27/27 and full managed
+  suite 453/453 passed, no skips; artifacts/guarded-source-poll-full-final retains
+  the TRX. Native CTest remains 18/18; Value/schema suite is 210/210 and tsc passes.
+  Final netstandard2.1 build passed with no warnings/errors.
 - `dotnet build bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release
   -f netstandard2.1 --no-restore`: passed without warnings/errors.
 - Native output and result logs: build/guarded-msvc/Testing/Temporary;
@@ -68,11 +75,25 @@ or wrong-type verb fields before enqueue and the schema requires the same UI
 fields/types. The new regression passes against the rebuilt runtime, including
 explicit checked:false completion.
 
-macOS x64 CI on both prior heads timed out the new direct wire helper at its
-three-second deadline during a one-shot receive; the real proxy/managed tests
-passed. Its deadline now includes 15 seconds for handshake/snapshot delivery on
-that slower runner, retaining one send and all assertions. Final-head CI must
-confirm that correction; no retry or expectation weakening was added.
+Actual Codex review of aec3cb5 found two further P2s: input schema constraints
+must match legacy verbs, and polling must compare the original revision before
+one-shot result consumption. Both now have the differential schema and real
+native polling tests above. The connection-owned guard table is bounded to 256
+outstanding UI/input records combined and destroyed on owner disconnect.
+Playtest integration feedback on PR comment 6012771144 prompted the source
+binding and real two-host regression above. SourceId is the existing Observe
+context identity; Raw ActionMap guard semantics are unchanged.
+
+macOS x64 CI on prior heads timed out the malformed-UInt64 direct wire case.
+Increasing its deadline from three to fifteen seconds did not resolve it and
+is not counted as a fix. Guard metadata no longer runs redundant legacy stoull
+conversions before strict parsing, and request correlation is captured before
+metadata rejection. The one-shot helper now asserts any ID-bearing reply's
+correlation immediately instead of waiting past an uncorrelated error. Final
+macOS CI must verify this correction; no resend or assertion weakening was added.
+Source-binding development tests also caught the transport envelope's document
+shape and the old proxy fixture's single-connection limit; both were corrected
+before the successful focused/full runs above.
 
 The first broad managed run had 14 environment failures (Trace viewer/MCP artifacts
 not yet built). After the CI-prescribed locked Bun restore, gui-mcp build and

@@ -21,11 +21,13 @@ public sealed class GuardedDispatchTests
     }
     private static void Map(GuaRuntime r, string description = "Jump") => r.PublishGameInputActions("play", [new("jump", description, GuaGameInputValueType.Button)]);
     private static GuaDispatchGuard UiGuard(GuaWebSocketContext c, GuaObservationProfile p = GuaObservationProfile.Debug) {
-        var s = c.GetContextStatus(); return new(s.SessionEpoch, p, s.Revision);
+        using var d = JsonDocument.Parse(c.GetObserveSnapshotJson()); var observed = d.RootElement.GetProperty("document");
+        return new(observed.GetProperty("sessionEpoch").GetUInt64(), p, observed.GetProperty("uiRevision").GetUInt64(), observed.GetProperty("sourceId").GetString()!);
     }
     private static GuaDispatchGuard InputGuard(GuaRuntime r, GuaObservationProfile p = GuaObservationProfile.Debug) {
         using var d = JsonDocument.Parse(r.GetGameInputActionsJsonV2(p)); var j = d.RootElement;
-        return new(j.GetProperty("sessionEpoch").GetUInt64(), p, j.GetProperty("revision").GetUInt64());
+        using var source = JsonDocument.Parse(r.GetObserveSnapshotJson(p));
+        return new(j.GetProperty("sessionEpoch").GetUInt64(), p, j.GetProperty("revision").GetUInt64(), source.RootElement.GetProperty("sourceId").GetString()!);
     }
     private static GuaWebSocketContext Bridge(GuaRuntime r) { var port = Port(); Assert.That(r.StartInspectorBridge(port), Is.True); return new($"ws://127.0.0.1:{port}"); }
     [Test]
@@ -48,7 +50,8 @@ public sealed class GuardedDispatchTests
             "\"value\":{\"expectedSessionEpoch\":1,\"expectedRevision\":1,\"expectedProfile\":0}"
         }) {
             var reply = await Wire(r.InspectorBridgeUrl, "{\"id\":1,\"type\":\"guarded_click_node\",\"nodeId\":\"buy\"," + metadata + "}");
-            Assert.That(reply.GetProperty("ok").GetBoolean(), Is.False);
+            Assert.That(reply.GetProperty("ok").GetBoolean(), Is.False, metadata);
+            Assert.That(reply.GetProperty("error").GetString(), Is.EqualTo("invalid_guard"), metadata);
             Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out _), Is.False);
         }
         var a = s.SendUi(g, new(GuaActionType.Click, "buy"));
@@ -97,10 +100,65 @@ public sealed class GuardedDispatchTests
         // This is a bounded one-shot exchange, never a resend after timeout.
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); using var s = new ClientWebSocket();
         await s.ConnectAsync(new(url), timeout.Token); await s.SendAsync(Encoding.UTF8.GetBytes(command).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+        return await ReadReply(s, command, timeout.Token);
+    }
+    private static async Task<JsonElement> ReadReply(ClientWebSocket s, string command, CancellationToken token) {
         while (true) {
-            using var d = JsonDocument.Parse(await FaultProxy.Read(s, timeout.Token));
-            if (d.RootElement.TryGetProperty("id", out var id) && id.GetInt32() == 1) return d.RootElement.Clone();
+            using var d = JsonDocument.Parse(await FaultProxy.Read(s, token));
+            if (d.RootElement.TryGetProperty("id", out var id)) {
+                Assert.That(id.GetInt32(), Is.EqualTo(1), $"Uncorrelated reply for {command}: {d.RootElement}");
+                return d.RootElement.Clone();
+            }
         }
+    }
+    [TestCase(false, false)] [TestCase(true, false)] [TestCase(true, true)]
+    public async Task PollRequiresOriginalRevisionAndKeepsResultForCorrectGuard(bool input, bool raw) {
+        using var r = new GuaRuntime(); Frame(r); r.EnableGameInput(GuaGameInputCapabilities.Semantic | GuaGameInputCapabilities.Keyboard, () => {}); Map(r);
+        using var c = Bridge(r); var g = input ? InputGuard(r) : UiGuard(c); if (raw) g = g with { Revision = 999 };
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new(r.InspectorBridgeUrl), timeout.Token);
+        async Task<JsonElement> Exchange(object message) {
+            var json = JsonSerializer.Serialize(message); await socket.SendAsync(Encoding.UTF8.GetBytes(json).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+            return await ReadReply(socket, json, timeout.Token);
+        }
+        var command = new Dictionary<string, object?> { ["id"] = 1, ["type"] = input ? raw ? "guarded_press_physical_key" : "guarded_press_game_input_action" : "guarded_click_node",
+            ["expectedSessionEpoch"] = g.SessionEpoch, ["expectedProfile"] = 0, ["expectedRevision"] = g.Revision };
+        command[input ? raw ? "code" : "actionId" : "nodeId"] = input ? raw ? "Space" : "jump" : "buy";
+        var receipt = await Exchange(command); Assert.That(receipt.GetProperty("ok").GetBoolean(), Is.True);
+        var requestId = receipt.GetProperty("result").GetProperty("requestId").GetUInt64();
+        if (input) { Assert.That(r.TryConsumeGameInput(out var q), Is.True); r.CompleteGameInput(q, true); }
+        else { Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out var q), Is.True); r.EmitActionResult(q, true); }
+        command.Clear(); command["id"] = 1; command["type"] = input ? "guarded_poll_game_input" : "guarded_poll_action";
+        command["requestId"] = requestId; command["expectedSessionEpoch"] = g.SessionEpoch; command["expectedProfile"] = 0; command["expectedRevision"] = g.Revision + 1;
+        var wrong = await Exchange(command); Assert.That(wrong.GetProperty("ok").GetBoolean(), Is.False);
+        Assert.That(wrong.GetProperty("error").GetString(), Is.EqualTo("stale_guard"));
+        command["expectedRevision"] = g.Revision;
+        var correct = await Exchange(command); Assert.That(correct.GetProperty("ok").GetBoolean(), Is.True);
+        Assert.That(correct.GetProperty("result").GetProperty("requestId").GetUInt64(), Is.EqualTo(requestId));
+        Assert.That(correct.GetProperty("result").GetProperty("succeeded").GetBoolean(), Is.True);
+    }
+    [Test]
+    public void SameCounterDifferentHostCannotReceiveObservedUiOrInput() {
+        using var a = new GuaRuntime(); using var b = new GuaRuntime(); Frame(a); Frame(b);
+        a.EnableGameInput(GuaGameInputCapabilities.Semantic, () => {}); b.EnableGameInput(GuaGameInputCapabilities.Semantic, () => {}); Map(a); Map(b);
+        using var directA = Bridge(a); using var directB = Bridge(b);
+        var observed = UiGuard(directA); var foreignInput = InputGuard(a); var targetGuard = UiGuard(directB);
+        Assert.That(targetGuard.SessionEpoch, Is.EqualTo(observed.SessionEpoch)); Assert.That(targetGuard.Revision, Is.EqualTo(observed.Revision));
+        Assert.That(InputGuard(b).Revision, Is.EqualTo(foreignInput.Revision)); Assert.That(targetGuard.SourceId, Is.Not.EqualTo(observed.SourceId));
+        string target = a.InspectorBridgeUrl;
+        using var proxy = new FaultProxy(target, (_, _) => false, route: () => target);
+        using var original = new GuaWebSocketContext(proxy.Url); Assert.That(UiGuard(original).SourceId, Is.EqualTo(observed.SourceId));
+        target = b.InspectorBridgeUrl;
+        Assert.That(Assert.Throws<InvalidOperationException>(() => original.CreateGuardedDispatchSession(observed.SourceId))!.Message, Is.EqualTo("source-mismatch"));
+        using var changed = new GuaWebSocketContext(proxy.Url); using var session = changed.CreateGuardedDispatchSession(targetGuard.SourceId);
+        Assert.That(session.SendUi(observed, new(GuaActionType.Click, "buy")).Error, Is.EqualTo("source-mismatch"));
+        Assert.That(session.SendGameInput(foreignInput, new("press_game_input_action", "jump")).Error, Is.EqualTo("source-mismatch"));
+        Assert.That(proxy.Dispatches, Is.Zero); Assert.That(b.TryConsumeAction(GuaActionType.Click, "buy", out _), Is.False); Assert.That(b.TryConsumeGameInput(out _), Is.False);
+        var accepted = session.SendUi(targetGuard, new(GuaActionType.Click, "buy"));
+        Assert.That(accepted.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued));
+        Assert.That(b.TryConsumeAction(GuaActionType.Click, "buy", out var valid), Is.True); b.EmitActionResult(valid, true);
+        Assert.That(session.Poll(accepted).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+        Assert.That(proxy.Dispatches, Is.EqualTo(1));
     }
     [Test]
     public void MissingCapabilityRejectsNewManagedSessionWithoutDispatch() {
@@ -183,7 +241,7 @@ public sealed class GuardedDispatchTests
     [Test]
     public void PointerAndGamepadValuesUseTheExistingNativeContract() {
         using var r = new GuaRuntime(); r.EnableGameInput(GuaGameInputCapabilities.Pointer | GuaGameInputCapabilities.Gamepad, () => {});
-        using var c = Bridge(r); using var s = c.CreateGuardedDispatchSession(); var g = new GuaDispatchGuard(c.GetContextStatus().SessionEpoch, GuaObservationProfile.Debug, 0);
+        using var c = Bridge(r); using var s = c.CreateGuardedDispatchSession(); var g = UiGuard(c) with { Revision = 0 };
         foreach (var input in new[] {new GuaRemoteGameInputRequest("pointer_move", "absolute", X: 20, Y: 30),
             new("pointer_move", "delta", X: 2, Y: -3), new("pointer_wheel", "lines", X: 1, Y: -2),
             new("set_gamepad_axis", "left_stick_x", Value: 0.5, DeviceIndex: 2)}) {
@@ -221,7 +279,7 @@ public sealed class GuardedDispatchTests
     public void RawInputOwnerCleanupDoesNotReleaseAnotherOwnerAndCapabilityLossRejectsConsume() {
         using var r = new GuaRuntime(); r.EnableGameInput(GuaGameInputCapabilities.Keyboard, () => {});
         using var c = Bridge(r); using var first = c.CreateGuardedDispatchSession(); using var second = c.CreateGuardedDispatchSession();
-        var g = new GuaDispatchGuard(c.GetContextStatus().SessionEpoch, GuaObservationProfile.Debug, 999);
+        var g = UiGuard(c) with { Revision = 999 };
         var a = first.SendGameInput(g, new("key_down", "KeyA")); Assert.That(a.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued));
         Assert.That(r.TryConsumeGameInput(out var one), Is.True); r.CompleteGameInput(one, true); Assert.That(first.Poll(a).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
         var b = second.SendGameInput(g, new("key_down", "KeyB")); Assert.That(r.TryConsumeGameInput(out var two), Is.True); r.CompleteGameInput(two, true);
@@ -256,28 +314,36 @@ public sealed class GuardedDispatchTests
         Assert.That(r.TryConsumeGameInput(out _), Is.False);
     }
     private sealed class FaultProxy : IDisposable {
-        private readonly HttpListener listener = new(); private readonly CancellationTokenSource cancel = new(TimeSpan.FromSeconds(15)); private readonly Task host;
+        private readonly HttpListener listener = new(); private readonly CancellationTokenSource cancel = new(TimeSpan.FromSeconds(30)); private readonly Task host;
         public string Url {get;} public int Dropped, Dispatches, Polls;
-        public FaultProxy(string upstream, Func<string, string, bool> drop, Func<string, string, string>? rewrite = null) {
+        public FaultProxy(string upstream, Func<string, string, bool> drop, Func<string, string, string>? rewrite = null, Func<string>? route = null) {
             var port = Port(); Url = $"ws://127.0.0.1:{port}/"; listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
             host = Task.Run(async () => {
-                try { var incoming = await listener.GetContextAsync(); using var downstream = (await incoming.AcceptWebSocketAsync(null)).WebSocket;
-                    using var remote = new ClientWebSocket(); await remote.ConnectAsync(new(upstream), cancel.Token);
+                var clients = new List<Task>();
+                try { while (!cancel.IsCancellationRequested) {
+                    var incoming = await listener.GetContextAsync(); var target = route?.Invoke() ?? upstream;
+                    clients.Add(Task.Run(async () => {
+                    try { using var downstream = (await incoming.AcceptWebSocketAsync(null)).WebSocket;
+                    using var remote = new ClientWebSocket(); await remote.ConnectAsync(new(target), cancel.Token);
                     while (!cancel.IsCancellationRequested) {
                         var bytes = await Read(downstream, cancel.Token); using var d = JsonDocument.Parse(bytes); var type = d.RootElement.GetProperty("type").GetString()!;
-                        if (type == "guarded_click_node" || type == "guarded_press_game_input_action") Dispatches++;
-                        if (type == "guarded_poll_action" || type == "guarded_poll_game_input") Polls++;
+                        if (type == "guarded_click_node" || type == "guarded_press_game_input_action") Interlocked.Increment(ref Dispatches);
+                        if (type == "guarded_poll_action" || type == "guarded_poll_game_input") Interlocked.Increment(ref Polls);
                         await remote.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, cancel.Token);
                         byte[] response;
                         while (true) {
                             response = await Read(remote, cancel.Token); using var envelope = JsonDocument.Parse(response);
                             if (envelope.RootElement.TryGetProperty("id", out var id) && id.GetInt32() == d.RootElement.GetProperty("id").GetInt32()) break;
                         }
-                        if (drop(type, Encoding.UTF8.GetString(response))) { Dropped++; downstream.Abort(); break; }
+                        if (drop(type, Encoding.UTF8.GetString(response))) { Interlocked.Increment(ref Dropped); downstream.Abort(); break; }
                         if (rewrite != null) response = Encoding.UTF8.GetBytes(rewrite(type, Encoding.UTF8.GetString(response)));
                         await downstream.SendAsync(response.AsMemory(), WebSocketMessageType.Text, true, cancel.Token);
                     }
+                    } catch (Exception e) when (e is WebSocketException or OperationCanceledException or HttpListenerException or ObjectDisposedException) { }
+                    }));
+                }
                 } catch (Exception e) when (e is WebSocketException or OperationCanceledException or HttpListenerException or ObjectDisposedException) { }
+                finally { await Task.WhenAll(clients); }
             });
         }
         public static async Task<byte[]> Read(WebSocket s, CancellationToken token) {
