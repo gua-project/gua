@@ -78,6 +78,10 @@ struct Command {
     bool world_selector_valid = true;
     bool game_input_selector_valid = true;
     bool game_input_metadata_get_valid = true;
+    bool guarded = false;
+    bool guard_valid = false;
+    unsigned long long expected_revision = 0;
+    int expected_profile = -1;
 };
 
 struct ClientConnection {
@@ -847,6 +851,43 @@ Command parse_command(std::string_view json)
 {
     Command command;
     command.type = json_string_field(json, "type").value_or("");
+    command.guarded = command.type.starts_with("guarded_");
+    if (command.guarded) {
+        command.type.erase(0, 8);
+        command.expected_revision = json_uint64_field(json, "expectedRevision").value_or(0);
+        command.expected_profile = json_int_field(json, "expectedProfile").value_or(-1);
+        command.guard_valid = json_uint64_field(json, "expectedSessionEpoch").value_or(0) != 0 &&
+            json_uint64_field(json, "expectedRevision").has_value() &&
+            (command.expected_profile == 0 || command.expected_profile == 1);
+        // Read guards from the root object: nested payload fields cannot impersonate metadata.
+        try {
+            const auto root = gua_value_detail::parser(json).parse();
+            constexpr std::array fields { std::string_view("id"), std::string_view("type"), std::string_view("expectedSessionEpoch"),
+                std::string_view("expectedProfile"), std::string_view("expectedRevision"), std::string_view("requestId"),
+                std::string_view("nodeId"), std::string_view("value"), std::string_view("key"), std::string_view("checked"),
+                std::string_view("deltaX"), std::string_view("deltaY"), std::string_view("modifiers"), std::string_view("scrollUnit"),
+                std::string_view("sensitive"), std::string_view("confirmed"), std::string_view("actionId"), std::string_view("code"),
+                std::string_view("button"), std::string_view("axis"), std::string_view("text"), std::string_view("mode"),
+                std::string_view("coordinateSpace"), std::string_view("wheelUnit"), std::string_view("leaseMs"),
+                std::string_view("x"), std::string_view("y"), std::string_view("gamepadIndex") };
+            for (const auto& [key, value] : root.fields)
+                if (std::find(fields.begin(), fields.end(), key) == fields.end()) throw std::runtime_error("invalid_guard");
+            auto number = [&](const char* name) -> unsigned long long {
+                const auto& value = root.at(name);
+                unsigned long long result = 0;
+                const auto parsed = std::from_chars(value.text.data(), value.text.data() + value.text.size(), result);
+                if (value.type != gua_value_detail::json::number || parsed.ec != std::errc() ||
+                    parsed.ptr != value.text.data() + value.text.size()) throw std::runtime_error("invalid_guard");
+                return result;
+            };
+            command.expected_revision = number("expectedRevision");
+            const auto profile = number("expectedProfile");
+            command.expected_profile = profile <= 1 ? static_cast<int>(profile) : -1;
+            command.expected_session_epoch = number("expectedSessionEpoch");
+            command.guard_valid = command.expected_session_epoch != 0 && profile <= 1;
+        }
+        catch (...) { command.guard_valid = false; }
+    }
     // Observe validates the full request and its safe-width ID in handle_command.
     // Do not first narrow it through the legacy std::stoi parser.
     if (command.type == "get_observe_snapshot" || command.type == "subscribe_observations" ||
@@ -958,7 +999,7 @@ Command parse_command(std::string_view json)
     command.confirmed = json_bool_field(json, "confirmed");
     command.scroll_unit = json_int_field(json, "scrollUnit").value_or(0);
     command.request_id = json_uint64_field(json, "requestId").value_or(0);
-    command.expected_session_epoch = json_uint64_field(json, "expectedSessionEpoch").value_or(0);
+    if (!command.guarded) command.expected_session_epoch = json_uint64_field(json, "expectedSessionEpoch").value_or(0);
     command.after_frame_sequence = json_uint64_field(json, "afterFrameSequence").value_or(0);
     command.timeout_ms = static_cast<unsigned int>(std::clamp(json_int_field(json, "timeoutMs").value_or(10000), 1, 300000));
     const bool reset_flags_present = json_has_field(json, "flags");
@@ -1020,6 +1061,7 @@ std::string_view action_error_name(long long code)
     case -4: return "disabled";
     case -5: return "unsupported";
     case -6: return "invalid_value";
+    case -7: return "stale_guard";
     default: return "unknown";
     }
 }
@@ -1315,8 +1357,30 @@ private:
 
     [[nodiscard]] std::string handle_command(std::string_view message, unsigned long long game_input_owner_id, unsigned long long observe_client_id, unsigned long long spatial_client_id)
     {
-        const Command command = parse_command(message);
+        Command command;
+        try { command = parse_command(message); }
+        catch (...) { return error_response(0, "invalid_request"); }
         try {
+            if (command.guarded && (!command.guard_valid || game_input_owner_id == 0))
+                return error_response(command.id, "invalid_guard");
+            if (command.guarded && (!handlers_.guarded_dispatch_supported || !handlers_.guarded_dispatch_supported()))
+                return error_response(command.id, "unsupported");
+            if (command.guarded && (command.type == "poll_action" || command.type == "poll_game_input")) {
+                if (command.request_id == 0 || !handlers_.poll_guarded_result)
+                    return error_response(command.id, "invalid_request");
+                const auto result = handlers_.poll_guarded_result(command.type == "poll_action", game_input_owner_id,
+                    command.request_id, command.expected_session_epoch, command.expected_profile);
+                return result.ok ? ok_response(command.id, result.json) : error_response(command.id, result.error);
+            }
+            if (command.guarded && command.type != "click_node" && command.type != "focus_node" &&
+                command.type != "set_value" && command.type != "set_checked" && command.type != "select" &&
+                command.type != "scroll" && command.type != "press_key" &&
+                command.type != "press_game_input_action" && command.type != "set_game_input_action" &&
+                command.type != "release_game_input_action" && command.type != "key_down" && command.type != "key_up" &&
+                command.type != "press_physical_key" && command.type != "pointer_move" && command.type != "pointer_wheel" &&
+                command.type != "pointer_button_down" && command.type != "pointer_button_up" &&
+                command.type != "gamepad_button_down" && command.type != "gamepad_button_up" &&
+                command.type != "set_gamepad_axis" && command.type != "text_input") return error_response(command.id, "unsupported");
             if(command.type=="get_spatial_info" || command.type=="query_spatial_batch" || command.type=="poll_spatial_batch" || command.type=="cancel_spatial_batch") {
                 int operation=command.type=="get_spatial_info" ? 1 : command.type=="query_spatial_batch" ? 2 : command.type=="poll_spatial_batch" ? 3 : 4;
                 int response_id=0; uint64_t batch_id=0; std::string batch;
@@ -1542,7 +1606,8 @@ private:
                 } else if (command.type == "release_all_game_inputs") target = "all";
                 const long long request_id = handlers_.enqueue_game_input(game_input_owner_id, gua::ws::GameInputCommand {
                     command.type, std::move(target), std::move(value_json), x, y, command.lease_ms,
-                    command.device_index, command.sensitive, command.confirmed });
+                    command.device_index, command.sensitive, command.confirmed, command.guarded,
+                    command.expected_session_epoch, command.expected_revision, command.expected_profile });
                 return request_id > 0
                     ? ok_response(command.id, "{\"requestId\":" + std::to_string(request_id) + "}")
                     : error_response(command.id, "Gua game input rejected: " + std::string(game_input_error_name(request_id)));
@@ -1551,11 +1616,13 @@ private:
                 command.type == "set_value" || command.type == "set_checked" || command.type == "select" || command.type == "scroll")) {
                 const long long request_id = handlers_.enqueue_action(gua::ws::ActionCommand {
                     command.type, command.node_id, command.value, command.delta_x, command.delta_y, command.bool_value,
-                    command.key, command.modifiers, command.sensitive, command.scroll_unit });
+                    command.key, command.modifiers, command.sensitive, command.scroll_unit, command.guarded,
+                    game_input_owner_id, command.expected_session_epoch, command.expected_revision, command.expected_profile });
                 return request_id > 0
                     ? ok_response(command.id, "{\"requestId\":" + std::to_string(request_id) + "}")
                     : error_response(command.id, "Gua action rejected: " + std::string(action_error_name(request_id)));
             }
+            if (command.guarded) return error_response(command.id, "unsupported");
             if (command.type == "click_node") {
                 return handlers_.click_node(command.node_id)
                     ? ok_null_response(command.id)

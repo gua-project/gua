@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/guarded-dispatch-v1.schema.json",
+  "title": "Guarded remote dispatch v1",
+  "type": "object",
+  "required": ["type", "expectedSessionEpoch", "expectedProfile", "expectedRevision"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type":"integer"},
+    "type": {"enum":["guarded_click_node","guarded_focus_node","guarded_set_value","guarded_set_checked","guarded_select","guarded_scroll","guarded_press_key","guarded_press_game_input_action","guarded_set_game_input_action","guarded_release_game_input_action","guarded_key_down","guarded_key_up","guarded_press_physical_key","guarded_pointer_move","guarded_pointer_button_down","guarded_pointer_button_up","guarded_pointer_wheel","guarded_gamepad_button_down","guarded_gamepad_button_up","guarded_set_gamepad_axis","guarded_text_input","guarded_poll_action","guarded_poll_game_input"]},
+    "expectedSessionEpoch": {"type":"integer","minimum":1,"maximum":18446744073709551615},
+    "expectedProfile": {"enum":[0,1]},
+    "expectedRevision": {"type":"integer","minimum":0,"maximum":18446744073709551615},
+    "requestId": {"type":"integer","minimum":1},
+    "nodeId": {"type":["string","null"]}, "value": {},
+    "key": {"type":["string","null"]}, "checked": {"type":"boolean"},
+    "deltaX": {"type":"number"}, "deltaY": {"type":"number"},
+    "modifiers": {"type":"integer","minimum":0}, "scrollUnit": {"enum":[0,1]},
+    "sensitive": {"type":"boolean"}, "confirmed": {"type":"boolean"},
+    "actionId": {"type":"string"}, "code": {"type":"string"},
+    "button": {"type":"string"}, "axis": {"type":"string"},
+    "text": {"type":"string"}, "mode": {"type":"string"},
+    "coordinateSpace": {"type":"string"}, "wheelUnit": {"type":"string"},
+    "leaseMs": {"type":"integer","minimum":0,"maximum":60000},
+    "x": {"type":"number"}, "y": {"type":"number"},
+    "gamepadIndex": {"type":"integer","minimum":0}
+  },
+  "allOf": [
+    {"if":{"properties":{"type":{"enum":["guarded_poll_action","guarded_poll_game_input"]}}},"then":{"required":["requestId"]}},
+    {"if":{"properties":{"type":{"enum":["guarded_click_node","guarded_focus_node","guarded_set_value","guarded_set_checked","guarded_select","guarded_scroll"]}}},"then":{"required":["nodeId"],"properties":{"nodeId":{"type":"string","minLength":1}}}},
+    {"if":{"properties":{"type":{"const":"guarded_press_key"}}},"then":{"required":["key"]}},
+    {"if":{"properties":{"type":{"enum":["guarded_press_game_input_action","guarded_set_game_input_action","guarded_release_game_input_action"]}}},"then":{"required":["actionId"]}},
+    {"if":{"properties":{"type":{"enum":["guarded_key_down","guarded_key_up","guarded_press_physical_key"]}}},"then":{"required":["code"]}},
+    {"if":{"properties":{"type":{"enum":["guarded_pointer_button_down","guarded_pointer_button_up","guarded_gamepad_button_down","guarded_gamepad_button_up"]}}},"then":{"required":["button"]}},
+    {"if":{"properties":{"type":{"const":"guarded_set_gamepad_axis"}}},"then":{"required":["axis"]}},
+    {"if":{"properties":{"type":{"const":"guarded_pointer_move"}}},"then":{"required":["mode","coordinateSpace","x","y"]}},
+    {"if":{"properties":{"type":{"const":"guarded_text_input"}}},"then":{"required":["text"]}}
+  ]
+}

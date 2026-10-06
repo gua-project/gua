@@ -1,5 +1,8 @@
 # Gua Protocol Draft
 
+[Guarded remote dispatch v1](guarded-dispatch-v1.md) adds capability-negotiated,
+connection-owned UI and game-input dispatch with atomic enqueue/consume guards.
+
 ## Spatial-r1 contracts
 
 [Spatial-r1](spatial-r1.md) defines independent versioned 3D query, result and
