@@ -69,7 +69,9 @@ public sealed class GuaRemoteGuardedSession : IDisposable
             case "gamepad_button_down": case "gamepad_button_up": fields["button"] = request.Target; break;
             case "set_gamepad_axis": fields["axis"] = request.Target; break;
             case "pointer_wheel": fields["wheelUnit"] = request.Target; break;
-            case "pointer_move": fields["mode"] = request.Target; fields["coordinateSpace"] = request.CoordinateSpace; break;
+            case "pointer_move": fields["mode"] = request.Target;
+                if (request.Target != "delta") fields["coordinateSpace"] = request.CoordinateSpace;
+                break;
             case "text_input": fields["text"] = request.Target; break;
             default: throw new ArgumentException("Unsupported guarded input verb.", nameof(request));
         }
@@ -114,11 +116,24 @@ public sealed class GuaRemoteGuardedSession : IDisposable
                     expectedSessionEpoch = attempt.Guard.SessionEpoch, expectedProfile = (int)attempt.Guard.Profile,
                     expectedRevision = attempt.Guard.Revision }, generation));
                 var root = reply.RootElement;
-                if (root.ValueKind == JsonValueKind.Null || (!attempt.IsUi && !root.GetProperty("completed").GetBoolean())) return attempt;
+                if (root.ValueKind == JsonValueKind.Null) {
+                    if (!attempt.IsUi) throw new JsonException();
+                    return attempt;
+                }
+                if (root.GetProperty("sessionEpoch").GetUInt64() != attempt.Guard.SessionEpoch) throw new JsonException();
+                if (!attempt.IsUi && !root.GetProperty("completed").GetBoolean()) return attempt;
                 if (root.GetProperty("requestId").GetUInt64() != attempt.RequestId ||
                     root.GetProperty("sessionEpoch").GetUInt64() != attempt.Guard.SessionEpoch ||
                     (attempt.IsUi && (root.GetProperty("nodeId").GetString() != (attempt.NodeId ?? "") ||
                         root.GetProperty("action").GetInt32() != (int)attempt.UiAction!))) throw new JsonException();
+                _ = root.GetProperty("succeeded").GetBoolean();
+                _ = root.GetProperty(attempt.IsUi ? "error" : "errorCode").GetInt32();
+                if (attempt.IsUi) {
+                    _ = root.GetProperty("frameSequence").GetUInt64();
+                    _ = root.GetProperty("revision").GetUInt64();
+                    _ = root.GetProperty("sensitive").GetBoolean();
+                    if (root.GetProperty("value").ValueKind != JsonValueKind.String) throw new JsonException();
+                }
                 attempt.Completion = root.Clone(); attempt.State = GuaRemoteDispatchState.Completed;
             } catch (GuaRemoteDispatchRejectedException error) {
                 // Rejection after enqueue does not prove nonexecution.
@@ -135,7 +150,7 @@ public sealed class GuaRemoteGuardedSession : IDisposable
 
 public sealed record GuaRemoteGameInputRequest(string Command, string Target, object? Value = null,
     uint LeaseMs = 5000, double X = 0, double Y = 0, int DeviceIndex = 0, bool Sensitive = false,
-    bool Confirmed = false, string CoordinateSpace = "viewport");
+    bool Confirmed = false, string CoordinateSpace = "viewport_pixels");
 internal sealed class GuaRemoteDispatchRejectedException(string? message) : InvalidOperationException(message);
 
 public sealed partial class GuaWebSocketContext

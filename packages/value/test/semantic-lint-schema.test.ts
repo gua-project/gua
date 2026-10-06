@@ -5,9 +5,11 @@ import ui from "../../../protocol/schema/ui-tree.schema.json";
 import world from "../../../protocol/schema/world-object-tree.schema.json";
 import commands from "../../../protocol/schema/commands.schema.json";
 import spatialHost from "../../../protocol/schema/spatial-host-r1.schema.json";
+import guardedDispatch from "../../../protocol/schema/guarded-dispatch-v1.schema.json";
 import fixture from "../../../protocol/fixtures/semantic-lint-v1.json";
 const ajv = new Ajv({ strict: false });
 ajv.addSchema(spatialHost);
+ajv.addSchema(guardedDispatch);
 const report = ajv.compile(lint), uiTree = ajv.compile(ui), worldTree = ajv.compile(world), command = ajv.compile(commands);
 test("published lint fixtures retain valid source shapes", () => {
   for (const item of fixture.cases) { expect(uiTree(item.uiTree)).toBe(true); expect(worldTree(item.worldObjectTree)).toBe(true); }

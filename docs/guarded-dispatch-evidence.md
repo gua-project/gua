@@ -19,6 +19,9 @@ This PR does not merge, tag, or publish a package.
 | Old client wire behavior and unsupported capability | Legacy UI enqueue/consume/poll succeeds in managed/native tests; capability-stripped actual host version rejects new managed session before dispatch. Existing remote transport/selector tests remain unchanged |
 | Client pre-dispatch guard | Callback throws after marshalling: Rejected/pre-dispatch-rejected, no request ID, no native host request |
 | Invalid common metadata | Actual WebSocket tests reject zero/missing epoch, fractional/overflow revision, invalid profile and duplicate keys; nested payload cannot supply guard metadata |
+| Malformed completion must not establish completion | Eight actual native proxy tests remove succeeded, error/errorCode, frameSequence, revision, requestId or epoch after real host completion: terminal Uncertain, no completion evidence, session poisoned, faults=1 and polls=1 |
+| Pointer/gamepad marshalling | Real native absolute/delta pointer, wheel and indexed axis requests retain X/Y/device/value and correlated completion; delta omits coordinateSpace and absolute defaults to viewport_pixels |
+| Schema composition | Existing AJV command consumers register the additive schema; guarded/legacy examples and missing/unauthorized/lifecycle negatives validate without broadening legacy verbs |
 
 ## Local execution
 
@@ -32,11 +35,23 @@ GUA_BUILD_EXAMPLES=OFF, GUA_BUILD_IMGUI_EXAMPLE=OFF; build/guarded-msvc.
 - `dotnet test bindings/dotnet/tests/Gua.Selector.Tests/Gua.Selector.Tests.csproj
   -c Release --no-restore --logger trx --results-directory artifacts/guarded-final`:
   438/438 passed before the final additional private-input test; no skips.
-- Focused GuardedDispatchTests: 13 cases (including four dropped-response paths).
+- Focused GuardedDispatchTests after audit fixes: 22/22 passed (including four
+  dropped-response and eight malformed-completion paths).
+- Final full managed suite after audit fixes: 448/448 passed, no skips;
+  artifacts/guarded-reviewed retains the TRX.
+- `bun run --filter gua-value-tools test`: 208/208 passed; schema test log
+  artifacts/guarded-schema-tests.log.
 - `dotnet build bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release
   -f netstandard2.1 --no-restore`: passed without warnings/errors.
 - Native output and result logs: build/guarded-msvc/Testing/Temporary;
   managed TRX files: artifacts/guarded-final and artifacts/guarded-focus.
+
+The initial independent gua_auditor reproduced a missing-required-outcome defect
+on both real native UI/input polls: missing succeeded was accepted as Completed.
+The parent added complete typed result validation and the eight proxy negatives
+above. Parent inspection also corrected pointer coordinate marshalling. First PR
+CI TypeScript failed because the new schema reference lacked registration in two
+existing AJV consumers; both are now updated and all 208 tests pass locally.
 
 The first broad managed run had 14 environment failures (Trace viewer/MCP artifacts
 not yet built). After the CI-prescribed locked Bun restore, gui-mcp build and

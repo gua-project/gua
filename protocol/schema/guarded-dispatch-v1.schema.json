@@ -33,7 +33,7 @@
     {"if":{"properties":{"type":{"enum":["guarded_key_down","guarded_key_up","guarded_press_physical_key"]}}},"then":{"required":["code"]}},
     {"if":{"properties":{"type":{"enum":["guarded_pointer_button_down","guarded_pointer_button_up","guarded_gamepad_button_down","guarded_gamepad_button_up"]}}},"then":{"required":["button"]}},
     {"if":{"properties":{"type":{"const":"guarded_set_gamepad_axis"}}},"then":{"required":["axis"]}},
-    {"if":{"properties":{"type":{"const":"guarded_pointer_move"}}},"then":{"required":["mode","coordinateSpace","x","y"]}},
+    {"if":{"properties":{"type":{"const":"guarded_pointer_move"}}},"then":{"required":["mode","x","y"],"allOf":[{"if":{"properties":{"mode":{"const":"absolute"}}},"then":{"required":["coordinateSpace"]},"else":{"not":{"required":["coordinateSpace"]}}}]}},
     {"if":{"properties":{"type":{"const":"guarded_text_input"}}},"then":{"required":["text"]}}
   ]
 }

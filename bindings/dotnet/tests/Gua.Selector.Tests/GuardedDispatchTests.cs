@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Gua.Core;
 using Gua.Runtime;
 using Gua.Testing;
@@ -142,6 +143,43 @@ public sealed class GuardedDispatchTests
         Assert.That(s.Poll(pending).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
         Assert.That(pending.Completion!.Value.GetProperty("succeeded").GetBoolean(), Is.False);
         Assert.That(pending.Completion.Value.GetProperty("errorCode").GetInt32(), Is.EqualTo(-1));
+    }
+    [Test]
+    public void PointerAndGamepadValuesUseTheExistingNativeContract() {
+        using var r = new GuaRuntime(); r.EnableGameInput(GuaGameInputCapabilities.Pointer | GuaGameInputCapabilities.Gamepad, () => {});
+        using var c = Bridge(r); using var s = c.CreateGuardedDispatchSession(); var g = new GuaDispatchGuard(c.GetContextStatus().SessionEpoch, GuaObservationProfile.Debug, 0);
+        foreach (var input in new[] {new GuaRemoteGameInputRequest("pointer_move", "absolute", X: 20, Y: 30),
+            new("pointer_move", "delta", X: 2, Y: -3), new("pointer_wheel", "lines", X: 1, Y: -2),
+            new("set_gamepad_axis", "left_stick_x", Value: 0.5, DeviceIndex: 2)}) {
+            var a = s.SendGameInput(g, input); Assert.That(a.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued), a.Error);
+            Assert.That(r.TryConsumeGameInput(out var q), Is.True);
+            Assert.That(q.X, Is.EqualTo(input.X)); Assert.That(q.Y, Is.EqualTo(input.Y)); Assert.That(q.DeviceIndex, Is.EqualTo(input.DeviceIndex));
+            if (input.Command == "set_gamepad_axis") Assert.That(q.ValueJson, Is.EqualTo("0.5"));
+            r.CompleteGameInput(q, true); Assert.That(s.Poll(a).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+        }
+    }
+    [TestCase(false, "succeeded")] [TestCase(true, "succeeded")]
+    [TestCase(false, "error")] [TestCase(true, "errorCode")]
+    [TestCase(false, "frameSequence")] [TestCase(false, "revision")]
+    [TestCase(false, "requestId")] [TestCase(true, "sessionEpoch")]
+    public void MalformedRealCompletionPoisonsSessionWithoutRepoll(bool input, string field) {
+        using var r = new GuaRuntime(); Frame(r); r.EnableGameInput(GuaGameInputCapabilities.Semantic, () => {}); Map(r); using var direct = Bridge(r);
+        int faults = 0;
+        using var proxy = new FaultProxy(r.InspectorBridgeUrl, (type, _) => {
+            if (type == "guarded_click_node") { Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out var q), Is.True); r.EmitActionResult(q, true); }
+            if (type == "guarded_press_game_input_action") { Assert.That(r.TryConsumeGameInput(out var q), Is.True); r.CompleteGameInput(q, true); }
+            return false;
+        }, (type, reply) => {
+            if (type != "guarded_poll_action" && type != "guarded_poll_game_input") return reply;
+            var root = JsonNode.Parse(reply)!; Assert.That(root["ok"]!.GetValue<bool>(), Is.True);
+            Assert.That(root["result"]!.AsObject().Remove(field), Is.True); faults++; return root.ToJsonString();
+        });
+        using var c = new GuaWebSocketContext(proxy.Url); using var s = c.CreateGuardedDispatchSession();
+        var a = input ? s.SendGameInput(InputGuard(r), new("press_game_input_action", "jump")) : s.SendUi(UiGuard(direct), new(GuaActionType.Click, "buy"));
+        Assert.That(a.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued)); s.Poll(a);
+        Assert.That(a.State, Is.EqualTo(GuaRemoteDispatchState.Uncertain)); Assert.That(a.Completion, Is.Null); s.Poll(a);
+        Assert.Throws<ObjectDisposedException>(() => s.SendUi(UiGuard(direct), new(GuaActionType.Click, "buy")));
+        Assert.That(faults, Is.EqualTo(1)); Assert.That(proxy.Dispatches, Is.EqualTo(1)); Assert.That(proxy.Polls, Is.EqualTo(1));
     }
     [Test]
     public void RawInputOwnerCleanupDoesNotReleaseAnotherOwnerAndCapabilityLossRejectsConsume() {
