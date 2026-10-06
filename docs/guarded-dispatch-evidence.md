@@ -30,6 +30,7 @@ This PR does not merge, tag, or publish a package.
 | Required guarded input payloads | `GuardedInputRequiredFieldsCannotDefaultIntoHostInput`: twenty-two malformed actual-wire payloads across all fifteen input verbs reject before enqueue; absent/null/string coordinates cannot become pointer movement |
 | Aggregate retention across disconnected owners | Native owner test retains a consumed request after disconnect, fills the remaining 255 slots through another owner, rejects a third owner, and frees capacity only after late host completion |
 | Legacy input poll cannot bypass guards | Original-revision regression first attempts legacy polling of both Semantic and Raw guarded completions; guarded_poll_required preserves each result for the correct guarded poll |
+| Explicit empty text preserves legacy parity | `EmptyTextRetainsLegacyWireAndManagedGuardedCompletion`: legacy and guarded actual-wire requests consume identical empty JSON string values and return correlated completions; the managed guarded session also completes the same payload |
 
 ## Local execution
 
@@ -68,6 +69,11 @@ GUA_BUILD_EXAMPLES=OFF, GUA_BUILD_IMGUI_EXAMPLE=OFF; build/guarded-msvc.
   The complete suite with `-- NUnit.NumberOfTestWorkers=1` passed 456/456 with
   no skips; artifacts/guarded-strict-full-serial retains the TRX. CI must still
   verify the default runner configuration on the final HEAD.
+- After the readiness-review empty-text fix: native CTest 18/18, guarded tests
+  31/31, full managed 457/457 with `-- NUnit.NumberOfTestWorkers=1`, and
+  Value/schema 210/210 (1054 assertions) plus tsc all pass. Results are retained
+  in artifacts/guarded-empty-text-focus, guarded-empty-text-full and
+  guarded-empty-text-schema.log. Final HEAD CI/review are tracked on the PR.
 - `dotnet build bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release
   -f netstandard2.1 --no-restore`: passed without warnings/errors.
 - Native output and result logs: build/guarded-msvc/Testing/Temporary;
@@ -116,6 +122,15 @@ The native payload gate, aggregate core limit, strict correlation IDs and legacy
 poll isolation above address them with deterministic regressions. Legacy command
 parsing remains unchanged. Playtest's source-binding review accepted the existing
 immutable Observe identity contract in PR comment 6013661942.
+
+After the user approved merging, marking 0cae57d ready triggered another actual
+Codex review. Its P2 discussion 4201094538 reproduced explicit empty text being
+rejected only by the guarded bridge despite legacy/core/schema acceptance.
+The new regression first completed legacy empty text, then failed with
+invalid_request at the guarded receipt on the old runtime; the TRX is retained
+in artifacts/guarded-empty-text-before. The bridge now allows explicit empty
+strings without broadening required-field, UTF-8 or length checks. The schema
+differential test also includes empty text; no existing schema changed.
 
 The first broad managed run had 14 environment failures (Trace viewer/MCP artifacts
 not yet built). After the CI-prescribed locked Bun restore, gui-mcp build and

@@ -952,7 +952,7 @@ Command parse_command(std::string_view json)
                     if (present("wheelUnit")) { require("wheelUnit",json::string,true); const auto& unit = root.at("wheelUnit").text; if (unit != "pixels" && unit != "lines") throw std::runtime_error("invalid_request"); }
                 } else if (verb == "gamepad_button_down" || verb == "gamepad_button_up") { allow({"button","gamepadIndex","leaseMs"}); require("button",json::string,true); }
                 else if (verb == "set_gamepad_axis") { allow({"axis","value","gamepadIndex","leaseMs"}); require("axis",json::string,true); const double value = numeric("value"); if (value < -1 || value > 1) throw std::runtime_error("invalid_request"); }
-                else if (verb == "text_input") { allow({"text","sensitive"}); require("text",json::string); if (!valid_game_input_text(root.at("text").text,40)) throw std::runtime_error("invalid_request"); }
+                else if (verb == "text_input") { allow({"text","sensitive"}); require("text",json::string); const auto& text = root.at("text").text; if (!text.empty() && !valid_game_input_text(text,40)) throw std::runtime_error("invalid_request"); }
                 else if (verb == "poll_action" || verb == "poll_game_input") allow({"requestId"});
                 for (auto field : {"checked","sensitive","confirmed"}) if (present(field)) require(field,json::boolean);
                 if (present("leaseMs")) { const auto lease = number("leaseMs"); if (lease < 1 || lease > 60000) throw std::runtime_error("invalid_request"); }

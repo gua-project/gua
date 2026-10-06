@@ -62,6 +62,7 @@ test("guarded input payloads preserve legacy required fields, enums, bounds and 
     {type:"pointer_wheel", deltaY:1, wheelUnit:"lines"},
     ...["gamepad_button_down","gamepad_button_up"].map(type => ({type, button:"south", gamepadIndex:3})),
     {type:"set_gamepad_axis", axis:"left_stick_x", value:-1, gamepadIndex:0}, {type:"text_input", text:"Hello"},
+    {type:"text_input", text:""},
   ];
   const invalid = [
     {type:"set_gamepad_axis", axis:"left_stick_x"}, {type:"set_gamepad_axis", axis:"left_stick_x", value:1.1},

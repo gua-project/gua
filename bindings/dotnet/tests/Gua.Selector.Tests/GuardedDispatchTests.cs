@@ -142,6 +142,33 @@ public sealed class GuardedDispatchTests
             Assert.That(r.TryConsumeGameInput(out _), Is.False, payload);
         }
     }
+    [Test]
+    public async Task EmptyTextRetainsLegacyWireAndManagedGuardedCompletion() {
+        using var r = new GuaRuntime(); r.EnableGameInput(GuaGameInputCapabilities.Text, () => {});
+        using var c = Bridge(r); var g = UiGuard(c) with { Revision = 999 };
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new(r.InspectorBridgeUrl), timeout.Token);
+        async Task<JsonElement> Exchange(Dictionary<string, object?> fields) {
+            var json = JsonSerializer.Serialize(fields); await socket.SendAsync(Encoding.UTF8.GetBytes(json).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
+            return await ReadReply(socket, json, timeout.Token);
+        }
+        foreach (var guarded in new[] {false, true}) {
+            var fields = new Dictionary<string, object?> { ["id"] = 1, ["type"] = guarded ? "guarded_text_input" : "text_input", ["text"] = "" };
+            if (guarded) { fields["expectedSessionEpoch"] = g.SessionEpoch; fields["expectedProfile"] = 0; fields["expectedRevision"] = g.Revision; }
+            var receipt = await Exchange(fields); Assert.That(receipt.GetProperty("ok").GetBoolean(), Is.True, receipt.ToString());
+            var id = receipt.GetProperty("result").GetProperty("requestId").GetUInt64();
+            Assert.That(r.TryConsumeGameInput(out var request), Is.True); Assert.That(request.RequestId, Is.EqualTo(id));
+            Assert.That(request.ValueJson, Is.EqualTo("\"\"")); r.CompleteGameInput(request, true);
+            fields.Remove("text"); fields["requestId"] = id; fields["type"] = guarded ? "guarded_poll_game_input" : "poll_game_input";
+            var result = (await Exchange(fields)).GetProperty("result");
+            Assert.That(result.GetProperty("requestId").GetUInt64(), Is.EqualTo(id));
+            Assert.That(result.GetProperty("completed").GetBoolean(), Is.True); Assert.That(result.GetProperty("succeeded").GetBoolean(), Is.True);
+        }
+        using var session = c.CreateGuardedDispatchSession();
+        var attempt = session.SendGameInput(g, new("text_input", "")); Assert.That(attempt.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued), attempt.Error);
+        Assert.That(r.TryConsumeGameInput(out var managed), Is.True); Assert.That(managed.ValueJson, Is.EqualTo("\"\""));
+        r.CompleteGameInput(managed, true); Assert.That(session.Poll(attempt).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+    }
     private static async Task<JsonElement> Wire(string url, string command, int expectedId = 1) {
         // Include handshake and snapshot delivery on slower macOS x64 CI runners.
         // This is a bounded one-shot exchange, never a resend after timeout.

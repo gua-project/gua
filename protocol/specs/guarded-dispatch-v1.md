@@ -16,6 +16,8 @@ Every guarded command also requires a positive Int32 transport `id` so its reply
 can be correlated. Missing, fractional, string or out-of-range IDs reject before
 enqueue. Required payload fields, types, bounds and verb-specific allowed fields
 are checked before dispatch; absent fields never become default host inputs.
+As in the legacy text-input schema and core, an explicit empty `text` string is
+valid; a missing or non-string field still rejects before enqueue.
 
 Epoch/revision counters do not identify a host. A wire client observing through
 another connection must capture Observe sourceId with the observation, verify
