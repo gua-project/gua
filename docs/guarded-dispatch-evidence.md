@@ -65,6 +65,9 @@ GUA_BUILD_EXAMPLES=OFF, GUA_BUILD_IMGUI_EXAMPLE=OFF; build/guarded-msvc.
   one-second scheduling deadline; its isolated run passed 1/1 in 97 ms.
   These failed full runs are retained in artifacts/guarded-strict-full and
   guarded-strict-full-repeat and are not counted as passing full validation.
+  The complete suite with `-- NUnit.NumberOfTestWorkers=1` passed 456/456 with
+  no skips; artifacts/guarded-strict-full-serial retains the TRX. CI must still
+  verify the default runner configuration on the final HEAD.
 - `dotnet build bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release
   -f netstandard2.1 --no-restore`: passed without warnings/errors.
 - Native output and result logs: build/guarded-msvc/Testing/Temporary;
