@@ -7,7 +7,7 @@ import spatial from "../../../protocol/schema/spatial-host-r1.schema.json";
 const ajv = new Ajv({ strict: false });
 ajv.addSchema(guarded); ajv.addSchema(spatial);
 const validate = ajv.compile(commands);
-const guard = { expectedSessionEpoch: 1, expectedProfile: 1, expectedRevision: 3 };
+const guard = { id: 1, expectedSessionEpoch: 1, expectedProfile: 1, expectedRevision: 3 };
 test("guarded commands compose with existing protocol without widening legacy verbs", () => {
   for (const payload of [
     { type: "guarded_click_node", nodeId: "buy" },
@@ -85,6 +85,7 @@ test("guarded input payloads preserve legacy required fields, enums, bounds and 
 test("guarded schema rejects missing and unauthorized metadata or lifecycle verbs", () => {
   const click = { ...guard, type: "guarded_click_node", nodeId: "buy" };
   for (const invalid of [
+    {...click,id:undefined}, {...click,id:0}, {...click,id:-1}, {...click,id:1.5}, {...click,id:"1"}, {...click,id:2147483648},
     { ...click, expectedSessionEpoch: 0 }, { ...click, expectedProfile: 2 },
     { ...click, expectedRevision: 1.5 }, { ...click, profile: "debug" },
     { type: "guarded_click_node", nodeId: "buy" },

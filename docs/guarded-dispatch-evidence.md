@@ -26,6 +26,10 @@ This PR does not merge, tag, or publish a package.
 | Original poll guard must not destroy mis-correlated results | `PollRequiresOriginalRevisionAndKeepsResultForCorrectGuard`: UI, Semantic and Raw real-native completions reject a wrong expectedRevision, then return the original completion to a correct poll on the same owning connection |
 | Same counters cannot bind observations to another host | `SameCounterDifferentHostCannotReceiveObservedUiOrInput`: two real runtimes have identical epoch/UI/map counters but distinct Observe sourceIds. A per-connection routing proxy switches the dedicated connection to B; session creation rejects A's source. Foreign UI/input guards dispatch zero requests to B; correctly bound B dispatch completes |
 | Input schema parity | Differential schema examples cover all fifteen supported input verbs and eighteen invalid required-field, enum, numeric-bound and forbidden-field cases against legacy commands; managed marshalling now emits only the verb's allowed fields |
+| Correlatable transport IDs | `GuardedTransportIdMustBeCorrelatableBeforeDispatch`: UI/input reject seven missing, null, string, fractional, nonpositive and Int32-overflow IDs before any host request; schema rejects the same transport forms |
+| Required guarded input payloads | `GuardedInputRequiredFieldsCannotDefaultIntoHostInput`: twenty-two malformed actual-wire payloads across all fifteen input verbs reject before enqueue; absent/null/string coordinates cannot become pointer movement |
+| Aggregate retention across disconnected owners | Native owner test retains a consumed request after disconnect, fills the remaining 255 slots through another owner, rejects a third owner, and frees capacity only after late host completion |
+| Legacy input poll cannot bypass guards | Original-revision regression first attempts legacy polling of both Semantic and Raw guarded completions; guarded_poll_required preserves each result for the correct guarded poll |
 
 ## Local execution
 
@@ -53,6 +57,14 @@ GUA_BUILD_EXAMPLES=OFF, GUA_BUILD_IMGUI_EXAMPLE=OFF; build/guarded-msvc.
   suite 453/453 passed, no skips; artifacts/guarded-source-poll-full-final retains
   the TRX. Native CTest remains 18/18; Value/schema suite is 210/210 and tsc passes.
   Final netstandard2.1 build passed with no warnings/errors.
+- After the four further GitHub review fixes: native CTest 18/18, focused guarded
+  suite 30/30, Value/schema 210/210 (1052 assertions) and tsc pass;
+  artifacts/guarded-strict-focus and guarded-strict-schema-tests.log retain results.
+  Two default-parallel full runs each passed 455/456, failing only the unchanged
+  TraceLifecycleTests.SlowDiagnosticsCannotBlockFinalizationOrAppendAfterItsStopDeadline
+  one-second scheduling deadline; its isolated run passed 1/1 in 97 ms.
+  These failed full runs are retained in artifacts/guarded-strict-full and
+  guarded-strict-full-repeat and are not counted as passing full validation.
 - `dotnet build bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj -c Release
   -f netstandard2.1 --no-restore`: passed without warnings/errors.
 - Native output and result logs: build/guarded-msvc/Testing/Temporary;
@@ -94,6 +106,13 @@ macOS CI must verify this correction; no resend or assertion weakening was added
 Source-binding development tests also caught the transport envelope's document
 shape and the old proxy fixture's single-connection limit; both were corrected
 before the successful focused/full runs above.
+
+Actual Codex review of 7993b22 identified four P2s: malformed input defaults,
+aggregate retained UI capacity, invalid transport IDs and unguarded input polling.
+The native payload gate, aggregate core limit, strict correlation IDs and legacy
+poll isolation above address them with deterministic regressions. Legacy command
+parsing remains unchanged. Playtest's source-binding review accepted the existing
+immutable Observe identity contract in PR comment 6013661942.
 
 The first broad managed run had 14 environment failures (Trace viewer/MCP artifacts
 not yet built). After the CI-prescribed locked Bun restore, gui-mcp build and

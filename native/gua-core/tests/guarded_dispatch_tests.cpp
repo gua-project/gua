@@ -56,5 +56,23 @@ int main() {
     assert(gua_release_game_input_owner(ctx, other));
     assert(gua_get_context_status(ctx, &status));
     assert(status.pending_request_count == 0);
+    // Aggregate retention remains bounded when consumed requests outlive owners.
+    const auto gone = gua_create_game_input_owner(ctx);
+    assert(gua_enqueue_action_guarded_v1(ctx, &action, gone, 0, status.session_epoch, status.revision, &id) == 1);
+    assert(gua_consume_action_request(ctx, GUA_ACTION_CLICK, "buy", &request));
+    const auto in_flight = id;
+    assert(gua_release_game_input_owner(ctx, gone));
+    const auto live = gua_create_game_input_owner(ctx);
+    for (int i = 0; i < 255; ++i)
+        assert(gua_enqueue_action_guarded_v1(ctx, &action, live, 0, status.session_epoch, status.revision, &id) == 1);
+    const auto third = gua_create_game_input_owner(ctx);
+    assert(gua_enqueue_action_guarded_v1(ctx, &action, third, 0, status.session_epoch, status.revision, &overflow) == GUA_ACTION_ERROR_INVALID_ARGUMENT);
+    assert(overflow == 0);
+    result.request_id = in_flight;
+    assert(gua_emit_action_result(ctx, &result)); // late host completion frees its slot
+    assert(gua_enqueue_action_guarded_v1(ctx, &action, third, 0, status.session_epoch, status.revision, &id) == 1);
+    assert(gua_release_game_input_owner(ctx, live));
+    assert(gua_release_game_input_owner(ctx, third));
+    assert(gua_get_context_status(ctx, &status) && status.pending_request_count == 0);
     gua_destroy_context(ctx);
 }

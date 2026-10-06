@@ -3,11 +3,12 @@
   "$id": "https://gua.dev/schema/guarded-dispatch-v1.schema.json",
   "title": "Guarded remote dispatch v1",
   "type": "object",
-  "required": ["type","expectedSessionEpoch","expectedProfile","expectedRevision"],
+  "required": ["id","type","expectedSessionEpoch","expectedProfile","expectedRevision"],
   "$defs": {
     "revision": {"type":"integer","minimum":0,"maximum":18446744073709551615},
     "profile": {"enum":[0,1]},
-    "sessionEpoch": {"type":"integer","minimum":1,"maximum":18446744073709551615}
+    "sessionEpoch": {"type":"integer","minimum":1,"maximum":18446744073709551615},
+    "transportId": {"type":"integer","minimum":1,"maximum":2147483647}
   },
   "oneOf": [
     {
@@ -18,7 +19,7 @@
         "type": {"enum":["guarded_click_node","guarded_focus_node"]},
         "nodeId": {"type":"string","minLength":1},
         "requestId": {"type":"integer","minimum":1},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -35,7 +36,7 @@
         "nodeId": {"type":"string","minLength":1},
         "modifiers": {"type":"integer","minimum":0},
         "requestId": {"type":"integer","minimum":1},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -52,7 +53,7 @@
         "value": {"type":"string"},
         "sensitive": {"type":"boolean","default":false},
         "requestId": {"type":"integer","minimum":1},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -68,7 +69,7 @@
         "nodeId": {"type":"string","minLength":1},
         "checked": {"type":"boolean"},
         "requestId": {"type":"integer","minimum":1},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -84,7 +85,7 @@
         "nodeId": {"type":"string","minLength":1},
         "value": {"type":"string","minLength":1},
         "requestId": {"type":"integer","minimum":1},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -102,7 +103,7 @@
         "deltaY": {"type":"number"},
         "scrollUnit": {"type":"integer","enum":[0,1]},
         "requestId": {"type":"integer","minimum":1},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -126,7 +127,7 @@
         "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
         "confirmed": {"type":"boolean","default":false},
         "sensitive": {"type":"boolean","default":false},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -164,7 +165,7 @@
         "type": {"enum":["guarded_key_down","guarded_key_up","guarded_press_physical_key"]},
         "code": {"$ref":"commands.schema.json#/$defs/keyboardCode"},
         "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -193,7 +194,7 @@
         "deltaY": {"type":"number"},
         "wheelUnit": {"enum":["pixels","lines"]},
         "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -301,7 +302,7 @@
         "axis": {"enum":["left_stick_x","left_stick_y","right_stick_x","right_stick_y"]},
         "value": {"type":"number","minimum":-1,"maximum":1},
         "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -337,7 +338,7 @@
         "type": {"const":"guarded_text_input"},
         "text": {"type":"string","maxLength":40},
         "sensitive": {"type":"boolean","default":false},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"}
@@ -348,7 +349,7 @@
       "type": "object",
       "properties": {
         "type": {"enum":["guarded_poll_action","guarded_poll_game_input"]},
-        "id": {"type":"integer"},
+        "id": {"$ref":"#/$defs/transportId"},
         "expectedProfile": {"$ref":"#/$defs/profile"},
         "expectedRevision": {"$ref":"#/$defs/revision"},
         "requestId": {"minimum":1,"type":"integer"},

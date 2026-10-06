@@ -12,6 +12,10 @@ not strings, fractions, exponent notation, or nested payload metadata. Duplicate
 keys are invalid. The connection/host profile remains authoritative: an expected
 profile is a comparison, never an authorization grant. The native runtime holds
 its context lock across profile/capability verification and core guarded enqueue.
+Every guarded command also requires a positive Int32 transport `id` so its reply
+can be correlated. Missing, fractional, string or out-of-range IDs reject before
+enqueue. Required payload fields, types, bounds and verb-specific allowed fields
+are checked before dispatch; absent fields never become default host inputs.
 
 Epoch/revision counters do not identify a host. A wire client observing through
 another connection must capture Observe sourceId with the observation, verify
@@ -50,9 +54,12 @@ sessionEpoch; UI also retains nodeId, action, frameSequence, revision, succeeded
 and error, input retains succeeded and errorCode. A stale poll is an uncertain
 completion, not evidence of nonexecution. A different owner cannot poll another
 owner's result; legacy UI poll paths cannot consume guarded UI results.
+Legacy input polling on the same connection rejects a guarded request with
+`guarded_poll_required`, preserving its result for the original guarded poll.
 
 The connection guard table is bounded to 256 outstanding UI/input requests/results
-combined per owner; UI core retention is also bounded to 256. Overflow
+combined per owner; UI core retention is bounded to 256 across all owners,
+including consumed requests awaiting host completion after disconnect. Overflow
 rejects without enqueue. Disconnect removes that owner's pending UI requests and
 results and invokes existing held-input cleanup. Already-consumed UI requests
 retain a host completion path; a later completion is discarded after owner loss.

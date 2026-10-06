@@ -95,18 +95,65 @@ public sealed class GuardedDispatchTests
         Assert.That(checkedRequest.BoolValue, Is.False); r.EmitActionResult(checkedRequest, true);
         Assert.That(session.Poll(valid).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
     }
-    private static async Task<JsonElement> Wire(string url, string command) {
+    [TestCase(false)] [TestCase(true)]
+    public async Task GuardedTransportIdMustBeCorrelatableBeforeDispatch(bool input) {
+        using var r = new GuaRuntime(); Frame(r); r.EnableGameInput(GuaGameInputCapabilities.Semantic, () => {}); Map(r);
+        using var c = Bridge(r); var g = input ? InputGuard(r) : UiGuard(c);
+        foreach (var id in new[] {"", "\"id\":null,", "\"id\":\"1\",", "\"id\":1.5,", "\"id\":0,", "\"id\":-1,", "\"id\":2147483648,"}) {
+            var payload = input ? "\"type\":\"guarded_press_game_input_action\",\"actionId\":\"jump\"" : "\"type\":\"guarded_click_node\",\"nodeId\":\"buy\"";
+            var reply = await Wire(r.InspectorBridgeUrl, "{" + id + payload +
+                $",\"expectedSessionEpoch\":{g.SessionEpoch},\"expectedProfile\":0,\"expectedRevision\":{g.Revision}" + "}", 0);
+            Assert.That(reply.GetProperty("ok").GetBoolean(), Is.False, id);
+            Assert.That(reply.GetProperty("error").GetString(), Is.EqualTo("invalid_request"), id);
+            Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out _), Is.False);
+            Assert.That(r.TryConsumeGameInput(out _), Is.False);
+        }
+    }
+    [Test]
+    public async Task GuardedInputRequiredFieldsCannotDefaultIntoHostInput() {
+        using var r = new GuaRuntime(); Frame(r); r.EnableGameInput(GuaGameInputCapabilities.Semantic | GuaGameInputCapabilities.Keyboard |
+            GuaGameInputCapabilities.Pointer | GuaGameInputCapabilities.Gamepad | GuaGameInputCapabilities.Text, () => {}); Map(r);
+        using var c = Bridge(r); var g = InputGuard(r);
+        var payloads = new[] {
+            "{\"type\":\"guarded_press_game_input_action\",\"actionId\":null}",
+            "{\"type\":\"guarded_set_game_input_action\",\"actionId\":\"jump\",\"value\":null}",
+            "{\"type\":\"guarded_release_game_input_action\",\"actionId\":null}",
+            "{\"type\":\"guarded_key_down\",\"code\":null}", "{\"type\":\"guarded_key_up\",\"code\":null}",
+            "{\"type\":\"guarded_press_physical_key\",\"code\":null}",
+            "{\"type\":\"guarded_pointer_move\",\"mode\":\"absolute\",\"coordinateSpace\":\"viewport_pixels\",\"x\":null,\"y\":10}",
+            "{\"type\":\"guarded_pointer_move\",\"mode\":\"absolute\",\"coordinateSpace\":\"viewport_pixels\",\"x\":\"20\",\"y\":10}",
+            "{\"type\":\"guarded_pointer_move\",\"mode\":\"delta\",\"x\":2}",
+            "{\"type\":\"guarded_pointer_button_down\",\"button\":null}", "{\"type\":\"guarded_pointer_button_up\",\"button\":null}",
+            "{\"type\":\"guarded_pointer_wheel\",\"deltaY\":null}", "{\"type\":\"guarded_pointer_wheel\"}",
+            "{\"type\":\"guarded_gamepad_button_down\",\"button\":null}", "{\"type\":\"guarded_gamepad_button_up\",\"button\":null}",
+            "{\"type\":\"guarded_set_gamepad_axis\",\"axis\":\"left_stick_x\"}", "{\"type\":\"guarded_set_gamepad_axis\",\"axis\":\"left_stick_x\",\"value\":\"0\"}",
+            "{\"type\":\"guarded_text_input\",\"text\":null}",
+            "{\"type\":\"guarded_key_down\",\"code\":\"Space\",\"leaseMs\":null}",
+            "{\"type\":\"guarded_gamepad_button_down\",\"button\":\"south\",\"gamepadIndex\":null}",
+            "{\"type\":\"guarded_set_game_input_action\",\"actionId\":\"jump\",\"value\":true,\"confirmed\":\"true\"}",
+            "{\"type\":\"guarded_text_input\",\"text\":\"a\",\"sensitive\":null}"
+        };
+        foreach (var payload in payloads) {
+            var fields = JsonNode.Parse(payload)!.AsObject(); fields["id"] = 1; fields["expectedSessionEpoch"] = g.SessionEpoch;
+            fields["expectedProfile"] = 0; fields["expectedRevision"] = g.Revision;
+            var reply = await Wire(r.InspectorBridgeUrl, fields.ToJsonString());
+            Assert.That(reply.GetProperty("ok").GetBoolean(), Is.False, payload);
+            Assert.That(reply.GetProperty("error").GetString(), Is.EqualTo("invalid_request"), payload);
+            Assert.That(r.TryConsumeGameInput(out _), Is.False, payload);
+        }
+    }
+    private static async Task<JsonElement> Wire(string url, string command, int expectedId = 1) {
         // Include handshake and snapshot delivery on slower macOS x64 CI runners.
         // This is a bounded one-shot exchange, never a resend after timeout.
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); using var s = new ClientWebSocket();
         await s.ConnectAsync(new(url), timeout.Token); await s.SendAsync(Encoding.UTF8.GetBytes(command).AsMemory(), WebSocketMessageType.Text, true, timeout.Token);
-        return await ReadReply(s, command, timeout.Token);
+        return await ReadReply(s, command, timeout.Token, expectedId);
     }
-    private static async Task<JsonElement> ReadReply(ClientWebSocket s, string command, CancellationToken token) {
+    private static async Task<JsonElement> ReadReply(ClientWebSocket s, string command, CancellationToken token, int expectedId = 1) {
         while (true) {
             using var d = JsonDocument.Parse(await FaultProxy.Read(s, token));
             if (d.RootElement.TryGetProperty("id", out var id)) {
-                Assert.That(id.GetInt32(), Is.EqualTo(1), $"Uncorrelated reply for {command}: {d.RootElement}");
+                Assert.That(id.GetInt32(), Is.EqualTo(expectedId), $"Uncorrelated reply for {command}: {d.RootElement}");
                 return d.RootElement.Clone();
             }
         }
@@ -128,6 +175,11 @@ public sealed class GuardedDispatchTests
         var requestId = receipt.GetProperty("result").GetProperty("requestId").GetUInt64();
         if (input) { Assert.That(r.TryConsumeGameInput(out var q), Is.True); r.CompleteGameInput(q, true); }
         else { Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out var q), Is.True); r.EmitActionResult(q, true); }
+        if (input) {
+            var legacy = await Exchange(new {id=1,type="poll_game_input",requestId});
+            Assert.That(legacy.GetProperty("ok").GetBoolean(), Is.False);
+            Assert.That(legacy.GetProperty("error").GetString(), Is.EqualTo("guarded_poll_required"));
+        }
         command.Clear(); command["id"] = 1; command["type"] = input ? "guarded_poll_game_input" : "guarded_poll_action";
         command["requestId"] = requestId; command["expectedSessionEpoch"] = g.SessionEpoch; command["expectedProfile"] = 0; command["expectedRevision"] = g.Revision + 1;
         var wrong = await Exchange(command); Assert.That(wrong.GetProperty("ok").GetBoolean(), Is.False);

@@ -3073,8 +3073,9 @@ static int enqueue_action(gua_context_t* ctx, const gua_action_request_descripto
         if (epoch == 0 || epoch != ctx->session_epoch || revision !=
             (observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_revision : ctx->revision))
             return GUA_ACTION_ERROR_STALE_GUARD;
-        if (std::count_if(ctx->owned_action_requests.begin(), ctx->owned_action_requests.end(),
-            [&](const auto& item) { return item.second == owner_id; }) >= 256) return GUA_ACTION_ERROR_INVALID_ARGUMENT;
+        // Consumed requests remain correlated until host completion even after
+        // owner loss. Bound retention across all owners, including those records.
+        if (ctx->owned_action_requests.size() >= 256) return GUA_ACTION_ERROR_INVALID_ARGUMENT;
     }
     if (!node_id.empty() && descriptor->action == GUA_ACTION_SELECT && value.empty()) {
         const auto authorized = project_nodes(ctx->nodes, observation_profile);

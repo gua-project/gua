@@ -82,6 +82,7 @@ struct Command {
     bool guarded = false;
     bool guard_valid = false;
     bool guard_payload_valid = true;
+    bool guard_transport_valid = false;
     unsigned long long expected_revision = 0;
     int expected_profile = -1;
 };
@@ -862,6 +863,7 @@ Command parse_command(std::string_view json)
         // Capture correlation before rejecting malformed metadata. Parse guards
         // only once with from_chars; the legacy stoull path is unnecessary here.
         command.id = json_int_field(json, "id").value_or(0);
+        command.guard_transport_valid = command.id > 0;
         // Read guards from the root object: nested payload fields cannot impersonate metadata.
         try {
             const auto root = gua_value_detail::parser(json).parse();
@@ -883,27 +885,81 @@ Command parse_command(std::string_view json)
                     parsed.ptr != value.text.data() + value.text.size()) throw std::runtime_error("invalid_guard");
                 return result;
             };
+            const auto transport_id = number("id");
+            command.guard_transport_valid = transport_id > 0 && transport_id <= static_cast<unsigned long long>(std::numeric_limits<int>::max());
+            if (!command.guard_transport_valid) throw std::runtime_error("invalid_request");
+            command.id = static_cast<int>(transport_id);
             command.expected_revision = number("expectedRevision");
             const auto profile = number("expectedProfile");
             command.expected_profile = profile <= 1 ? static_cast<int>(profile) : -1;
             command.expected_session_epoch = number("expectedSessionEpoch");
             command.guard_valid = command.expected_session_epoch != 0 && profile <= 1;
-            // Guarded UI must not inherit the legacy parser's absent-field defaults.
+            // Guarded verbs must not inherit the legacy parser's absent-field defaults.
             // Validate required payload fields at the root before any host enqueue.
             try {
+                const auto payload_json = json;
                 using gua_value_detail::json;
                 auto require = [&](const char* name, json::kind type, bool nonempty = false) {
                     const auto& value = root.at(name);
                     if (value.type != type || (nonempty && value.text.empty()))
                         throw std::runtime_error("invalid_request");
                 };
-                const bool ui = command.type == "click_node" || command.type == "focus_node" ||
-                    command.type == "set_value" || command.type == "set_checked" || command.type == "select" || command.type == "scroll";
-                if (ui) require("nodeId", json::string, true);
-                if (command.type == "set_value" || command.type == "select") require("value", json::string, command.type == "select");
-                if (command.type == "set_checked") require("checked", json::boolean);
-                if (command.type == "scroll") { require("deltaX", json::number); require("deltaY", json::number); }
-                if (command.type == "press_key") require("key", json::string, true);
+                auto present = [&](const char* name) { return root.fields.contains(name); };
+                auto numeric = [&](const char* name) {
+                    require(name, json::number); const auto value = json_number_field(payload_json, name);
+                    if (!value || !std::isfinite(*value)) throw std::runtime_error("invalid_request");
+                    return *value;
+                };
+                auto allow = [&](std::initializer_list<std::string_view> payload) {
+                    for (const auto& [name, value] : root.fields) {
+                        if (name == "id" || name == "type" || name == "expectedSessionEpoch" || name == "expectedProfile" || name == "expectedRevision") continue;
+                        if (std::find(payload.begin(), payload.end(), name) == payload.end()) throw std::runtime_error("invalid_request");
+                    }
+                };
+                const auto& verb = command.type;
+                if (verb == "click_node" || verb == "focus_node") { allow({"nodeId","requestId"}); require("nodeId",json::string,true); }
+                else if (verb == "set_value" || verb == "select") {
+                    if (verb == "set_value") allow({"nodeId","value","sensitive","requestId"}); else allow({"nodeId","value","requestId"});
+                    require("nodeId",json::string,true); require("value",json::string,verb == "select");
+                } else if (verb == "set_checked") { allow({"nodeId","checked","requestId"}); require("nodeId",json::string,true); require("checked",json::boolean); }
+                else if (verb == "scroll") { allow({"nodeId","deltaX","deltaY","scrollUnit","requestId"}); require("nodeId",json::string,true); numeric("deltaX"); numeric("deltaY"); }
+                else if (verb == "press_key") { allow({"nodeId","key","modifiers","requestId"}); require("key",json::string,true); if (present("nodeId")) require("nodeId",json::string,true); }
+                else if (verb == "press_game_input_action" || verb == "set_game_input_action" || verb == "release_game_input_action") {
+                    if (verb == "press_game_input_action") allow({"actionId","confirmed"});
+                    else if (verb == "set_game_input_action") allow({"actionId","value","leaseMs","confirmed","sensitive"});
+                    else allow({"actionId"});
+                    require("actionId",json::string,true);
+                    if (!valid_game_input_identifier(root.at("actionId").text)) throw std::runtime_error("invalid_request");
+                    if (verb == "set_game_input_action") {
+                        const auto& value = root.at("value");
+                        if (value.type != json::boolean && value.type != json::number && value.type != json::string && value.type != json::object) throw std::runtime_error("invalid_request");
+                        if (value.type == json::number) numeric("value");
+                        if (value.type == json::string && !value.text.empty() && !valid_game_input_text(value.text,40)) throw std::runtime_error("invalid_request");
+                    }
+                } else if (verb == "key_down" || verb == "key_up" || verb == "press_physical_key") { allow({"code","leaseMs"}); require("code",json::string,true); }
+                else if (verb == "pointer_move") {
+                    allow({"mode","coordinateSpace","x","y"}); require("mode",json::string,true); const auto& mode = root.at("mode").text;
+                    const double x = numeric("x"), y = numeric("y");
+                    if (mode == "absolute") {
+                        require("coordinateSpace",json::string,true); const auto& space = root.at("coordinateSpace").text;
+                        if (space != "viewport_pixels" && space != "viewport_normalized") throw std::runtime_error("invalid_request");
+                        if (space == "viewport_normalized" && (x < 0 || x > 1 || y < 0 || y > 1)) throw std::runtime_error("invalid_request");
+                    } else if (mode != "delta" || present("coordinateSpace")) throw std::runtime_error("invalid_request");
+                } else if (verb == "pointer_button_down" || verb == "pointer_button_up") { allow({"button","leaseMs"}); require("button",json::string,true); }
+                else if (verb == "pointer_wheel") {
+                    allow({"deltaX","deltaY","wheelUnit"}); if (!present("deltaX") && !present("deltaY")) throw std::runtime_error("invalid_request");
+                    if (present("deltaX")) numeric("deltaX"); if (present("deltaY")) numeric("deltaY");
+                    if (present("wheelUnit")) { require("wheelUnit",json::string,true); const auto& unit = root.at("wheelUnit").text; if (unit != "pixels" && unit != "lines") throw std::runtime_error("invalid_request"); }
+                } else if (verb == "gamepad_button_down" || verb == "gamepad_button_up") { allow({"button","gamepadIndex","leaseMs"}); require("button",json::string,true); }
+                else if (verb == "set_gamepad_axis") { allow({"axis","value","gamepadIndex","leaseMs"}); require("axis",json::string,true); const double value = numeric("value"); if (value < -1 || value > 1) throw std::runtime_error("invalid_request"); }
+                else if (verb == "text_input") { allow({"text","sensitive"}); require("text",json::string); if (!valid_game_input_text(root.at("text").text,40)) throw std::runtime_error("invalid_request"); }
+                else if (verb == "poll_action" || verb == "poll_game_input") allow({"requestId"});
+                for (auto field : {"checked","sensitive","confirmed"}) if (present(field)) require(field,json::boolean);
+                if (present("leaseMs")) { const auto lease = number("leaseMs"); if (lease < 1 || lease > 60000) throw std::runtime_error("invalid_request"); }
+                if (present("gamepadIndex") && number("gamepadIndex") > 3) throw std::runtime_error("invalid_request");
+                if (present("scrollUnit") && number("scrollUnit") > 1) throw std::runtime_error("invalid_request");
+                if (present("modifiers") && number("modifiers") > static_cast<unsigned long long>(std::numeric_limits<int>::max())) throw std::runtime_error("invalid_request");
+                if (present("requestId") && number("requestId") == 0) throw std::runtime_error("invalid_request");
             } catch (...) { command.guard_payload_valid = false; }
         }
         catch (...) { command.guard_valid = false; }
@@ -1382,6 +1438,7 @@ private:
         try { command = parse_command(message); }
         catch (...) { return error_response(0, "invalid_request"); }
         try {
+            if (command.guarded && !command.guard_transport_valid) return error_response(0, "invalid_request");
             if (command.guarded && (!command.guard_valid || game_input_owner_id == 0))
                 return error_response(command.id, "invalid_guard");
             if (command.guarded && !command.guard_payload_valid)
@@ -1590,6 +1647,7 @@ private:
                     : error_response(command.id, "unsupported");
             }
             if (command.type == "poll_game_input") {
+                if (guarded_requests.contains(std::pair(false, command.request_id))) return error_response(command.id, "guarded_poll_required");
                 if (command.request_id == 0) return error_response(command.id, "poll_game_input requires requestId");
                 return game_input_owner_id != 0 && handlers_.poll_game_input_result_json
                     ? ok_response(command.id, handlers_.poll_game_input_result_json(game_input_owner_id, command.request_id))
