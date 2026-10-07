@@ -1,5 +1,12 @@
 # Guarded dispatch validation evidence
 
+> このファイルは実装時の検証証拠・レビュー履歴です。仕組みの目的、処理の流れ、
+> 読むべきソースとローカル確認手順は
+> [Guarded dispatch 開発者ガイド](guarded-dispatch-guide.ja.md)を参照してください。
+> 以下の件数・環境・成果物参照は過去の記録であり、現在のHEADの実行結果として
+> 読み替えないでください。規範仕様は
+> [Guarded remote dispatch v1](../protocol/specs/guarded-dispatch-v1.md)です。
+
 Base main and verified `gua-v1.1.1`: `88f5dca4aa97c5d5187ab66ea4416377f3affc96`.
 Implementation/test scope is the additive guarded remote route described in
 `protocol/specs/guarded-dispatch-v1.md`. Playtest #7 acceptance is not revised.
