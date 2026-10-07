@@ -7,7 +7,10 @@ guarded verbs; it must never fall back to a legacy enqueue.
 
 Prefix the existing UI or input verb with `guarded_`, and supply all three root
 metadata fields: `expectedSessionEpoch` (nonzero), `expectedProfile` (0 Debug,
-1 Player), and `expectedRevision`. Integers are unsigned decimal wire integers,
+1 Player), and `expectedRevision`. Epoch is 1..9007199254740991 and revision is
+0..9007199254740991 (JavaScript-safe integers), validated by schema, native bridge
+and managed sends before dispatch. Legacy/local uint64 counters and APIs are
+unchanged; unrepresentable remote guards fail closed. Integers are unsigned decimal wire integers,
 not strings, fractions, exponent notation, or nested payload metadata. Duplicate
 keys are invalid. The connection/host profile remains authoritative: an expected
 profile is a comparison, never an authorization grant. The native runtime holds
@@ -40,7 +43,11 @@ and capability checks; its expectedRevision is not compared to the unrelated
 semantic Action Map. All guards and current visibility, permissions, confirmation
 and capabilities are rechecked before the host receives a consumed request. UI
 stale guards return `stale_guard` (-7 at the C ABI/completion); existing native
-game-input stale guards retain `invalid_argument` (-1). No side effect is inferred
+game-input stale guards retain `invalid_argument` (-1).
+Direct C/C++ hosts must consume owned guarded UI requests through the explicit
+profile-aware API with their authoritative current profile. Generic consumption
+without that authority fails the guarded request with `stale_guard`; legacy
+unowned consumption retains its behavior. C++ exposes an additive profile overload. No side effect is inferred
 from an enqueue receipt or successful host input completion.
 
 Supported UI verbs: click_node, focus_node, set_value, set_checked, select, scroll,
@@ -72,6 +79,11 @@ including consumed requests awaiting host completion after disconnect. Overflow
 rejects without enqueue. Disconnect removes that owner's pending UI requests and
 results and invokes existing held-input cleanup. Already-consumed UI requests
 retain a host completion path; a later completion is discarded after owner loss.
+Host cancellation of an owned UI request still in the queue removes the request
+from host consumption and retains an owner-only, one-shot failed terminal result
+with error `Cancelled` (-8). Polling that result frees native and connection
+retention; owner cleanup also frees it. In-flight cancellation remains InFlight
+and preserves the host completion path. Legacy unowned cancellation is unchanged.
 Other owners and the host runtime remain alive. Existing input lease/reset
 cleanup semantics remain authoritative.
 

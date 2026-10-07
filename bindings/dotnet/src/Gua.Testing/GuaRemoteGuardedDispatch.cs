@@ -88,8 +88,9 @@ public sealed class GuaRemoteGuardedSession : IDisposable
     }
     private GuaRemoteDispatchAttempt Send(GuaDispatchGuard guard, bool ui, string? nodeId, Dictionary<string, object?> fields, Action? beforeDispatch)
     {
-        if (guard is null || guard.SessionEpoch == 0 || (guard.Profile != GuaObservationProfile.Debug && guard.Profile != GuaObservationProfile.Player))
-            throw new ArgumentException("A nonzero epoch and valid authoritative profile are required.", nameof(guard));
+        if (guard is null || guard.SessionEpoch == 0 || guard.SessionEpoch > 9007199254740991UL ||
+            guard.Revision > 9007199254740991UL || (guard.Profile != GuaObservationProfile.Debug && guard.Profile != GuaObservationProfile.Player))
+            throw new ArgumentException("JS-safe epoch/revision integers and a valid authoritative profile are required.", nameof(guard));
         fields["expectedSessionEpoch"] = guard.SessionEpoch; fields["expectedProfile"] = (int)guard.Profile;
         fields["expectedRevision"] = guard.Revision;
         // Serialize before dispatch: local marshalling errors cannot be uncertain host execution.

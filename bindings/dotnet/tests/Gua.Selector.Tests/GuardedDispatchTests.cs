@@ -31,6 +31,68 @@ public sealed class GuardedDispatchTests
     }
     private static GuaWebSocketContext Bridge(GuaRuntime r) { var port = Port(); Assert.That(r.StartInspectorBridge(port), Is.True); return new($"ws://127.0.0.1:{port}"); }
     [Test]
+    public void QueuedCancellationCompletesOwnedUiAndReclaimsTransportCapacity() {
+        using var r = new GuaRuntime(); Frame(r); using var c = Bridge(r); using var s = c.CreateGuardedDispatchSession();
+        var guard = UiGuard(c);
+        for (var i = 0; i < 300; ++i) {
+            var attempt = s.SendUi(guard, new(GuaActionType.Click, "buy"));
+            Assert.That(attempt.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued), $"enqueue {i}");
+            Assert.That(r.CancelAction(attempt.RequestId!.Value), Is.EqualTo(GuaActionCancelResult.Cancelled));
+            Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out _), Is.False);
+            Assert.That(r.TryPollActionEvent(attempt.RequestId.Value, out _), Is.False);
+            Assert.That(s.Poll(attempt).State, Is.EqualTo(GuaRemoteDispatchState.Completed), $"poll {i}");
+            var completion = attempt.Completion!.Value;
+            Assert.That(completion.GetProperty("requestId").GetUInt64(), Is.EqualTo(attempt.RequestId));
+            Assert.That(completion.GetProperty("succeeded").GetBoolean(), Is.False);
+            Assert.That(completion.GetProperty("error").GetInt32(), Is.EqualTo(-8));
+        }
+        var inFlight = s.SendUi(guard, new(GuaActionType.Click, "buy"));
+        Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out var consumed), Is.True);
+        Assert.That(r.CancelAction(inFlight.RequestId!.Value), Is.EqualTo(GuaActionCancelResult.InFlight));
+        Assert.That(s.Poll(inFlight).State, Is.EqualTo(GuaRemoteDispatchState.Enqueued));
+        r.EmitActionResult(consumed, true);
+        Assert.That(s.Poll(inFlight).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+    }
+    [TestCase(false)] [TestCase(true)]
+    public async Task GuardsUseJsSafeIntegersConsistentlyBeforeAnyEnqueue(bool input) {
+        using var r = new GuaRuntime(); Frame(r); r.EnableGameInput(GuaGameInputCapabilities.Text, () => {});
+        using var c = Bridge(r); using var s = c.CreateGuardedDispatchSession(); var guard = UiGuard(c);
+        foreach (var field in new[] {"expectedSessionEpoch", "expectedRevision"}) {
+            foreach (var value in new[] {"9007199254740992", "18446744073709551615", "18446744073709551616"}) {
+                var fields = JsonNode.Parse(JsonSerializer.Serialize(new { id = 1, type = input ? "guarded_text_input" : "guarded_click_node",
+                    expectedSessionEpoch = guard.SessionEpoch, expectedProfile = 0, expectedRevision = guard.Revision }))!.AsObject();
+                if (input) fields["text"] = "fixture"; else fields["nodeId"] = "buy";
+                fields[field] = JsonNode.Parse(value);
+                var reply = await Wire(r.InspectorBridgeUrl, fields.ToJsonString());
+                Assert.That(reply.GetProperty("ok").GetBoolean(), Is.False);
+                Assert.That(reply.GetProperty("error").GetString(), Is.EqualTo("invalid_guard"), field + value);
+                Assert.That(r.TryConsumeGameInput(out _), Is.False);
+                Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out _), Is.False);
+            }
+        }
+        var maxEpoch = await Wire(r.InspectorBridgeUrl, JsonSerializer.Serialize(new {id = 1, type = "guarded_text_input", text = "fixture",
+            expectedSessionEpoch = 9007199254740991UL, expectedProfile = 0, expectedRevision = 0}));
+        Assert.That(maxEpoch.GetProperty("ok").GetBoolean(), Is.False);
+        Assert.That(maxEpoch.GetProperty("error").GetString(), Is.EqualTo("Gua game input rejected: invalid_argument"));
+        Assert.That(r.TryConsumeGameInput(out _), Is.False);
+        foreach (var invalid in new[] {guard with {SessionEpoch = 9007199254740992}, guard with {Revision = 9007199254740992},
+            guard with {SessionEpoch = ulong.MaxValue}, guard with {Revision = ulong.MaxValue}}) {
+            var called = false;
+            Assert.Throws<ArgumentException>(() => {
+                if (input) s.SendGameInput(invalid, new("text_input", "fixture"), () => called = true);
+                else s.SendUi(invalid, new(GuaActionType.Click, "buy"), () => called = true);
+            });
+            Assert.That(called, Is.False);
+            Assert.That(r.TryConsumeGameInput(out _), Is.False);
+            Assert.That(r.TryConsumeAction(GuaActionType.Click, "buy", out _), Is.False);
+        }
+        // Raw input deliberately does not compare the semantic revision, including the largest safe value.
+        var boundary = s.SendGameInput(guard with {Revision = 9007199254740991}, new("text_input", "fixture"));
+        Assert.That(boundary.State, Is.EqualTo(GuaRemoteDispatchState.Enqueued));
+        Assert.That(r.TryConsumeGameInput(out var request), Is.True); r.CompleteGameInput(request, true);
+        Assert.That(s.Poll(boundary).State, Is.EqualTo(GuaRemoteDispatchState.Completed));
+    }
+    [Test]
     public void ClientDeadlineGuardRejectsAfterMarshallingBeforeDispatch() {
         using var r = new GuaRuntime(); Frame(r); using var c = Bridge(r); using var s = c.CreateGuardedDispatchSession();
         var a = s.SendUi(UiGuard(c), new(GuaActionType.Click, "buy"), () => throw new OperationCanceledException());

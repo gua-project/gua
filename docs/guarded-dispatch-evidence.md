@@ -3,7 +3,8 @@
 Base main and verified `gua-v1.1.1`: `88f5dca4aa97c5d5187ab66ea4416377f3affc96`.
 Implementation/test scope is the additive guarded remote route described in
 `protocol/specs/guarded-dispatch-v1.md`. Playtest #7 acceptance is not revised.
-This PR does not merge, tag, or publish a package.
+Source merge has separate explicit user authorization. Tags and package
+publication remain outside the authorized scope.
 
 ## Contract mapping
 
@@ -34,6 +35,10 @@ This PR does not merge, tag, or publish a package.
 | Escaped NUL text preserves JSON values | Two actual-wire and managed cases retain `a\\u0000b` for Raw text and Semantic Text Set, matching legacy native consumption and correlated completion |
 | Full native modifier range | Two managed guarded UI cases consume exact 2147483648 and 4294967295 modifier masks; schema accepts those masks and rejects values beyond uint32 |
 | Opaque replay reference compatibility | Legacy/guarded wire and managed text requests accept a nonempty secretKey reference and consume only the supplied fixture text; invalid reference types/empty strings reject before enqueue, with no secret resolution |
+
+| Profile-agnostic native consumers must fail closed | Native C ABI -1/invalid-profile and generic C++ consumers fail guarded requests with -7 and owner-only completion; explicit authoritative-profile C++ overload consumes a valid guard; legacy generic consumption still succeeds |
+| Numeric guards must agree across JavaScript schema/native/managed boundaries | AJV accepts MAX_SAFE_INTEGER and rejects original JSON tokens 2^53, uint64 max and uint64 max+1; actual UI/input wire rejects these at invalid_guard before enqueue; managed UI/input throws before pre-dispatch callback; Raw revision MAX_SAFE_INTEGER completes |
+| Queued owned cancellation must terminate and free retention | Native and real managed bridge perform 300 enqueue/cancel/poll cycles with correlated Failed/-8 completion, no host consumption or legacy result; native checks live different-owner isolation, one-shot polling and disconnected-owner cleanup; in-flight cancellation retains eventual host completion |
 
 ## Local execution
 
@@ -168,16 +173,43 @@ Inspector build:trace, the unmodified full suite passed. Initial mutation ctest
 regex selected no tests; corrected explicit test selection supplies detection
 evidence below. Neither incomplete run is counted as success.
 
+Actual Codex review of 558c1e6 identified discussions 4201311276, 4201311284
+and 4201311290. The combined fix fails guarded consumption without explicit
+current authority, limits new wire guards to JS-safe numeric ranges consistently,
+and retains cancellation results under their original ownership until polling.
+Legacy/local uint64 APIs and legacy unowned cancellation remain unchanged.
+Before correction, the added native test fails at the intended generic-profile
+assertion (artifacts/review-three-native-before.log); the real managed bridge
+fails three new cases, including cancellation still Enqueued at poll 0
+(artifacts/review-three-before). AJV fails the new rounded-uint64 schema test
+(artifacts/review-three-schema-before.log). An initial test compile error used
+the wrong host CompleteGameInput signature; it was corrected before these
+failure demonstrations and is not counted as detection evidence.
+After correction, native CTest 18/18, guarded transport 39/39, full managed
+465/465 (NUnit.NumberOfTestWorkers=1, no skips), schema 212/212 (1079 assertions),
+tsc and netstandard2.1 build (zero warnings/errors) pass. The native test was
+rerun after adding live-owner cancellation isolation/cleanup; the full managed
+run includes the final UI/input guard cases and upper boundary checks.
+Artifacts: review-three-fixed-focus, review-three-fixed-full,
+review-three-schema-fixed.log. These are Windows/MSVC checks on the working
+tree based on 558c1e6; final submitted HEAD CI/review is recorded in the PR.
+No further independent repository audits were run: the two-pass audit gate
+was already completed; these are primary-agent fixes of actual GitHub findings.
+
 ## Selected violation detection
 
-An isolated copy of native/ and root CMakeLists lives in ignored
+Historical revision-race detection on the earlier reviewed implementation:
+an isolated copy of native/ and root CMakeLists lives in ignored
 build/guard-mutation; submitted source is unchanged. The copy replaces
 `value.guard_revision != (` with `false && value.guard_revision != (` to bypass
 the UI revision comparison at consume. The mutated guarded-dispatch target
 builds successfully. `ctest --test-dir build/guard-mutation-build -R
 gua-guarded-dispatch-tests --output-on-failure` fails at the intended assertion
 `!gua_consume_action_request(ctx, GUA_ACTION_CLICK, "buy", &request)` in
-guarded_dispatch_tests.cpp:34, exit 0xc0000409. The unmutated target passes.
+guarded_dispatch_tests.cpp:34, exit 0xc0000409. The unmutated target passes. The final regression now calls the explicit
+profile-aware consumer (current profile 0), so a generic fail-closed check cannot
+mask the required revision-race assertion. The historical mutant is not claimed
+as a rerun of the final submitted HEAD.
 The fault proxy additionally verifies firing/counts for all real response losses.
 
 ## Limits

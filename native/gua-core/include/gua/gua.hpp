@@ -503,6 +503,17 @@ public:
         return true;
     }
 
+    // Hosts of guarded requests must pass their authoritative current profile.
+    [[nodiscard]] bool consume_action(ActionType action, std::string_view node_id, ObservationProfile current_profile, ActionRequest& out)
+    {
+        id_buffer_.assign(node_id);
+        gua_action_request_t request { sizeof(gua_action_request_t) };
+        if (gua_consume_action_request_for_profile(context_, static_cast<int>(action), id_buffer_.c_str(), static_cast<int>(current_profile), &request) == 0) return false;
+        out = ActionRequest { request.request_id, static_cast<ActionType>(request.action), request.node_id, request.value,
+            request.delta_x, request.delta_y, request.bool_value != 0, request.key, request.modifiers, request.sensitive != 0, request.scroll_unit };
+        return true;
+    }
+
     [[nodiscard]] bool emit_action_result(const ActionEvent& event)
     {
         id_buffer_.assign(event.node_id);

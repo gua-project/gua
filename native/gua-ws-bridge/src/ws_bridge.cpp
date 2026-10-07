@@ -893,7 +893,9 @@ Command parse_command(std::string_view json)
             const auto profile = number("expectedProfile");
             command.expected_profile = profile <= 1 ? static_cast<int>(profile) : -1;
             command.expected_session_epoch = number("expectedSessionEpoch");
-            command.guard_valid = command.expected_session_epoch != 0 && profile <= 1;
+            command.guard_valid = command.expected_session_epoch != 0 &&
+                command.expected_session_epoch <= 9007199254740991ULL &&
+                command.expected_revision <= 9007199254740991ULL && profile <= 1;
             // Guarded verbs must not inherit the legacy parser's absent-field defaults.
             // Validate required payload fields at the root before any host enqueue.
             try {

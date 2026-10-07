@@ -105,3 +105,12 @@ test("guarded schema rejects missing and unauthorized metadata or lifecycle verb
     { ...guard, type: "guarded_pointer_move", mode: "delta", coordinateSpace: "viewport_pixels", x: 1, y: 2 },
   ]) expect(validate(invalid)).toBe(false);
 });
+
+test("guard metadata excludes numbers rounded by JavaScript uint64 parsing", () => {
+  const click = {...guard,type:"guarded_click_node",nodeId:"buy"};
+  for (const field of ["expectedSessionEpoch", "expectedRevision"]) {
+    expect(validate({...click,[field]:Number.MAX_SAFE_INTEGER})).toBe(true);
+    for (const text of ["9007199254740992", "18446744073709551615", "18446744073709551616"])
+      expect(validate(JSON.parse(JSON.stringify(click).replace(`"${field}":${click[field as keyof typeof click]}`, `"${field}":${text}`)))).toBe(false);
+  }
+});

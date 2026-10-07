@@ -3139,8 +3139,22 @@ extern "C" int gua_cancel_action_request(gua_context_t* ctx, uint64_t request_id
         [&](const ActionRequest& request) { return request.request_id == request_id; });
     if (pending != ctx->action_requests.end()) {
         trace_phase(*ctx, "ui", 0, pending->request_id, pending->trace_epoch, "cancelled");
+        if (pending->owner_id != 0) {
+            // Retain ownership until one-shot polling (or owner cleanup) releases
+            // both this bounded native slot and the connection's guard entry.
+            const auto& value = *pending;
+            ctx->events.push_back(Event { value.action, value.node_id, value.request_id, GUA_ACTION_STATUS_FAILED,
+                GUA_ACTION_ERROR_CANCELLED, "", value.sensitive, ctx->session_epoch, ctx->frame_sequence,
+                value.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_revision : ctx->revision,
+                value.observation_profile, ctx->player_revision, false });
+            append_history(*ctx, ctx->event_history, "observed", value.request_id, value.action,
+                value.node_id, GUA_ACTION_STATUS_FAILED, GUA_ACTION_ERROR_CANCELLED, "", value.sensitive,
+                value.delta_x, value.delta_y, value.bool_value, value.key, value.modifiers,
+                value.scroll_unit, value.observation_profile, &value.agent_policy, value.role);
+        } else {
+            ctx->owned_action_requests.erase(request_id);
+        }
         ctx->action_requests.erase(pending);
-        ctx->owned_action_requests.erase(request_id);
         return GUA_ACTION_CANCELLED;
     }
     const auto in_flight = std::find_if(ctx->consumed_requests.begin(), ctx->consumed_requests.end(),
@@ -3175,7 +3189,7 @@ extern "C" int gua_consume_action_request_for_profile(gua_context_t* ctx, int ac
         const bool stale = value.owner_id != 0 && (!ctx->game_input_owners.contains(value.owner_id) ||
             value.trace_epoch != ctx->session_epoch ||
             value.guard_revision != (value.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_revision : ctx->revision) ||
-            (current_profile != -1 && current_profile != value.observation_profile));
+            (current_profile != value.observation_profile));
         const int error_code = stale ? GUA_ACTION_ERROR_STALE_GUARD : action_authorization_error(
             ctx->nodes, value.node_id, value.action, value.observation_profile);
         if (error_code != GUA_ACTION_ACCEPTED) {
