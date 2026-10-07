@@ -198,14 +198,16 @@ skipは、guardの動作を確認した結果には数えません。
 
 | コマンド | 確認する内容 |
 | --- | --- |
-| `ctest --test-dir build/guarded-guide -R "^(gua-guarded-dispatch-tests\|gua-runtime-guarded-profile-tests)$" --output-on-failure` | native coreのrevision/profile競合・owner/cancel/容量と、runtimeのprofile変更時拒否。選択された二つのtest名と実行を確認します。 |
+| `ctest --test-dir build/guarded-guide -R "^gua-guarded-dispatch-tests$" --output-on-failure` | native coreのrevision/profile競合・owner/cancel/容量。`gua-guarded-dispatch-tests` が1件選択され実行されることを確認します。 |
+| `ctest --test-dir build/guarded-guide -R "^gua-runtime-guarded-profile-tests$" --output-on-failure` | runtimeのprofile変更時拒否。`gua-runtime-guarded-profile-tests` が1件選択され実行されることを確認します。 |
 | `dotnet test bindings/dotnet/tests/Gua.Selector.Tests/Gua.Selector.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~Gua.Selector.Tests.GuardedDispatchTests --logger trx --results-directory artifacts/guarded-guide` | native runtimeを実WebSocketで通るmanaged guarded経路。競合、wire検査、別host、返信損失、不正完了、cleanupなど。 |
 | `bun run --filter gua-value-tools test` | 既存Value suite内のguarded schema例とlegacyとのpayload差分検証。gameやWebSocketは実行しません。 |
 | `bun run --filter gua-value-tools check` | Value packageのTypeScript型検査。runtime動作の証明ではありません。 |
 
 ### 期待する結果と結果の読み方
 
-CTestは対象二つが選択され、両方成功することを確認します。
+CTestは各コマンドで対象が1件ずつ選択され、両方成功することを確認します。
+0件の実行は成功として数えません。
 managed testはguarded fixtureの各ケースが成功し、skipがないことを確認します。
 TRXは `artifacts/guarded-guide` に出力します。
 Valueのtest/checkは終了コード0であることを確認します。
