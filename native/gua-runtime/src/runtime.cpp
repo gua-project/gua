@@ -181,6 +181,10 @@ std::string core_version_json()
 
 std::string decorate_version_json(gua_runtime_t* runtime, std::string json,std::optional<uint64_t> spatial_client=std::nullopt)
 {
+#if GUA_RUNTIME_WITH_WS
+    const auto guarded_at = json.find("\"capabilities\":[");
+    if (guarded_at != std::string::npos) json.insert(guarded_at + 16, "\"guarded_dispatch_v1\",");
+#endif
     const auto spatial=spatial_advertisement_unlocked(runtime,spatial_client);
     if (!spatial.empty()) {
         const auto at=json.find("\"capabilities\":[");
@@ -1440,7 +1444,9 @@ extern "C" int gua_runtime_consume_click_request(gua_runtime_t* runtime, const c
     }
 
     const std::lock_guard lock(runtime->context_mutex);
-    return gua_consume_click_request(runtime->context, node_id);
+    gua_action_request_t request { sizeof(request) };
+    return gua_consume_action_request_for_profile(runtime->context, GUA_ACTION_CLICK, node_id,
+        runtime->observation_profile, &request);
 }
 
 extern "C" int gua_runtime_emit_click(gua_runtime_t* runtime, const char* node_id)
@@ -1526,7 +1532,7 @@ extern "C" int gua_runtime_consume_action_request(gua_runtime_t* runtime, int ac
 {
     if (!valid_runtime(runtime)) return 0;
     const std::lock_guard lock(runtime->context_mutex);
-    return gua_consume_action_request(runtime->context, action, node_id, out_request);
+    return gua_consume_action_request_for_profile(runtime->context, action, node_id, runtime->observation_profile, out_request);
 }
 
 extern "C" int gua_runtime_emit_action_result(gua_runtime_t* runtime, const gua_action_result_t* result)
@@ -1940,7 +1946,11 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
             };
             std::uint64_t request_id = 0;
             const std::lock_guard lock(runtime->context_mutex);
-            const int result = gua_enqueue_action_for_profile(runtime->context, &descriptor, runtime->observation_profile, &request_id);
+            if (command.guarded && command.expected_profile != runtime->observation_profile)
+                return GUA_ACTION_ERROR_STALE_GUARD;
+            const int result = command.guarded ? gua_enqueue_action_guarded_v1(runtime->context, &descriptor,
+                command.owner_id, runtime->observation_profile, command.expected_epoch, command.expected_revision, &request_id) :
+                gua_enqueue_action_for_profile(runtime->context, &descriptor, runtime->observation_profile, &request_id);
             return result == GUA_ACTION_ACCEPTED ? static_cast<long long>(request_id) : static_cast<long long>(result);
         },
         .poll_action_event_json = [runtime](unsigned long long request_id) {
@@ -2080,10 +2090,13 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
                 command.target.c_str(), command.value_json.c_str(), command.x, command.y, command.lease_ms,
                 command.device_index, command.sensitive ? 1 : 0, command.confirmed ? 1 : 0 };
             std::uint64_t request_id = 0;
-            const int result = gua_enqueue_game_input_for_profile_v2(runtime->context, &descriptor,
-                runtime->observation_profile, &request_id);
+            if (command.guarded && command.expected_profile != runtime->observation_profile)
+                return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
+            const int result = command.guarded ? gua_enqueue_game_input_guarded_v2(runtime->context, &descriptor,
+                runtime->observation_profile, command.expected_epoch, command.expected_revision, &request_id) :
+                gua_enqueue_game_input_for_profile_v2(runtime->context, &descriptor, runtime->observation_profile, &request_id);
             if (result == GUA_GAME_INPUT_OK)
-                runtime->game_input_request_profiles[request_id] = { runtime->observation_profile, owner_id, false };
+                runtime->game_input_request_profiles[request_id] = { runtime->observation_profile, owner_id, false, command.guarded };
             return result == GUA_GAME_INPUT_OK ? static_cast<long long>(request_id) : static_cast<long long>(result);
         },
         .poll_game_input_result_json = [runtime](unsigned long long owner_id, unsigned long long request_id) {
@@ -2094,6 +2107,36 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
             copy_game_input_result_unlocked(runtime, owner_id, request_id, json.data(), size);
             json.resize(static_cast<std::size_t>(size - 1));
             return json;
+        },
+        .guarded_dispatch_supported = [] { return true; },
+        .poll_guarded_result = [runtime](bool ui, unsigned long long owner_id, unsigned long long request_id,
+            unsigned long long epoch, int profile) -> gua::ws::CommandResult {
+            gua_event_v3_t event { sizeof(gua_event_v3_t), { sizeof(gua_event_v2_t) } };
+            const std::lock_guard lock(runtime->context_mutex);
+            gua_context_status_t status { sizeof(status) };
+            gua_get_context_status(runtime->context, &status);
+            if (epoch != status.session_epoch || profile != runtime->observation_profile)
+                return { false, "", "stale_guard" };
+            if (!ui) {
+                const int size = copy_game_input_result_unlocked(runtime, owner_id, request_id, nullptr, 0);
+                if (size <= 0) return { false, "", "invalid_request" };
+                std::string json(static_cast<std::size_t>(size), '\0');
+                copy_game_input_result_unlocked(runtime, owner_id, request_id, json.data(), size);
+                json.resize(static_cast<std::size_t>(size - 1));
+                json.insert(json.size() - 1, ",\"sessionEpoch\":" + std::to_string(epoch));
+                return { true, json, "" };
+            }
+            if (!gua_poll_owned_action_event_v1(runtime->context, owner_id, request_id, &event)) return { true, "null", "" };
+            return { true, std::string("{\"requestId\":") + std::to_string(event.base.request_id) +
+                ",\"action\":" + std::to_string(event.base.action) +
+                ",\"succeeded\":" + (event.base.status == GUA_ACTION_STATUS_SUCCEEDED ? "true" : "false") +
+                ",\"error\":" + std::to_string(event.base.error_code) +
+                ",\"nodeId\":\"" + escape_json(event.base.node_id) + "\"" +
+                ",\"value\":\"" + escape_json(event.base.value) + "\"" +
+                ",\"sensitive\":" + (event.base.sensitive != 0 ? "true" : "false") +
+                ",\"sessionEpoch\":" + std::to_string(event.session_epoch) +
+                ",\"frameSequence\":" + std::to_string(event.frame_sequence) +
+                ",\"revision\":" + std::to_string(event.revision) + "}", "" };
         },
     };
 

@@ -20,6 +20,8 @@ public enum GuaActionError
     Disabled = -4,
     Unsupported = -5,
     InvalidValue = -6,
+    StaleGuard = -7,
+    Cancelled = -8,
 }
 
 public enum GuaActionCancelResult

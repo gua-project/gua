@@ -200,7 +200,9 @@ enum {
     GUA_ACTION_ERROR_HIDDEN = -3,
     GUA_ACTION_ERROR_DISABLED = -4,
     GUA_ACTION_ERROR_UNSUPPORTED = -5,
-    GUA_ACTION_ERROR_INVALID_VALUE = -6
+    GUA_ACTION_ERROR_INVALID_VALUE = -6,
+    GUA_ACTION_ERROR_STALE_GUARD = -7,
+    GUA_ACTION_ERROR_CANCELLED = -8
 };
 
 enum {
@@ -671,7 +673,17 @@ int gua_emit_click(gua_context_t* ctx, const char* node_id);
 int gua_poll_event(gua_context_t* ctx, gua_event_t* out_event);
 int gua_enqueue_action(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor, uint64_t* out_request_id);
 int gua_enqueue_action_for_profile(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor, int observation_profile, uint64_t* out_request_id);
-/* Cancels only a queued, not-yet-consumed request. Returns GUA_ACTION_CANCEL_* above. */
+/* Additive connection-owned dispatch. Revision is the profile's UI revision.
+ * owner_id must be a live game-input owner. Zero epoch is never a wildcard. */
+int gua_enqueue_action_guarded_v1(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor,
+    uint64_t owner_id, int profile, uint64_t epoch, uint64_t revision, uint64_t* out_request_id);
+/* Guarded requests require the authoritative current Debug/Player profile.
+ * Generic consumption (unknown profile) fails guarded requests with STALE_GUARD. */
+int gua_consume_action_request_for_profile(gua_context_t* ctx, int action, const char* node_id,
+    int current_profile, gua_action_request_t* out_request);
+int gua_poll_owned_action_event_v1(gua_context_t* ctx, uint64_t owner_id, uint64_t request_id, gua_event_v3_t* out_event);
+/* Cancels only a queued, not-yet-consumed request. Returns GUA_ACTION_CANCEL_* above.
+ * Owned guarded requests retain a one-shot FAILED/CANCELLED completion for their owner. */
 int gua_cancel_action_request(gua_context_t* ctx, uint64_t request_id);
 /* Returns the captured GUA_OBSERVATION_PROFILE_* value, or -1 when the request is unknown. */
 int gua_get_action_request_observation_profile(gua_context_t* ctx, uint64_t request_id);

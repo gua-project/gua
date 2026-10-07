@@ -68,6 +68,9 @@ struct ActionCommand {
     unsigned int modifiers = 0;
     bool sensitive = false;
     int scroll_unit = 0;
+    bool guarded = false;
+    unsigned long long owner_id = 0, expected_epoch = 0, expected_revision = 0;
+    int expected_profile = -1;
 };
 
 struct GameInputCommand {
@@ -80,6 +83,9 @@ struct GameInputCommand {
     int device_index = 0;
     bool sensitive = false;
     bool confirmed = false;
+    bool guarded = false;
+    unsigned long long expected_epoch = 0, expected_revision = 0;
+    int expected_profile = -1;
 };
 
 struct CommandResult {
@@ -128,6 +134,8 @@ struct BridgeHandlers {
     std::function<std::string(unsigned long long owner_id)> get_game_input_state_json;
     std::function<long long(unsigned long long owner_id, const GameInputCommand& command)> enqueue_game_input;
     std::function<std::string(unsigned long long owner_id, unsigned long long request_id)> poll_game_input_result_json;
+    std::function<bool()> guarded_dispatch_supported;
+    std::function<CommandResult(bool, unsigned long long, unsigned long long, unsigned long long, int)> poll_guarded_result;
 };
 
 struct BridgeOptions {

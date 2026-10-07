@@ -3,6 +3,7 @@
   "$id": "https://gua.dev/schema/commands.schema.json",
   "title": "Gua Command",
   "oneOf": [
+    { "$ref": "guarded-dispatch-v1.schema.json" },
     { "$ref": "#/$defs/get_spatial_info" },
     { "$ref": "#/$defs/query_spatial_batch" },
     { "$ref": "#/$defs/poll_spatial_batch" },

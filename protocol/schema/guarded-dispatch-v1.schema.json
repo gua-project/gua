@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gua.dev/schema/guarded-dispatch-v1.schema.json",
+  "title": "Guarded remote dispatch v1",
+  "type": "object",
+  "required": ["id","type","expectedSessionEpoch","expectedProfile","expectedRevision"],
+  "$defs": {
+    "revision": {"type":"integer","minimum":0,"maximum":9007199254740991},
+    "profile": {"enum":[0,1]},
+    "sessionEpoch": {"type":"integer","minimum":1,"maximum":9007199254740991},
+    "transportId": {"type":"integer","minimum":1,"maximum":2147483647}
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["type","nodeId"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum":["guarded_click_node","guarded_focus_node"]},
+        "nodeId": {"type":"string","minLength":1},
+        "requestId": {"type":"integer","minimum":1},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/nodeCommand; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","key"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const":"guarded_press_key"},
+        "key": {"type":"string","minLength":1},
+        "nodeId": {"type":"string","minLength":1},
+        "modifiers": {"type":"integer","minimum":0,"maximum":4294967295},
+        "requestId": {"type":"integer","minimum":1},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/pressKey; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","nodeId","value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const":"guarded_set_value"},
+        "nodeId": {"type":"string","minLength":1},
+        "value": {"type":"string"},
+        "sensitive": {"type":"boolean","default":false},
+        "requestId": {"type":"integer","minimum":1},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/valueAction; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","nodeId","checked"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const":"guarded_set_checked"},
+        "nodeId": {"type":"string","minLength":1},
+        "checked": {"type":"boolean"},
+        "requestId": {"type":"integer","minimum":1},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/checkedAction; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","nodeId","value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const":"guarded_select"},
+        "nodeId": {"type":"string","minLength":1},
+        "value": {"type":"string","minLength":1},
+        "requestId": {"type":"integer","minimum":1},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/selectAction; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","nodeId","deltaX","deltaY"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const":"guarded_scroll"},
+        "nodeId": {"type":"string","minLength":1},
+        "deltaX": {"type":"number"},
+        "deltaY": {"type":"number"},
+        "scrollUnit": {"type":"integer","enum":[0,1]},
+        "requestId": {"type":"integer","minimum":1},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/scrollAction; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","actionId"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "guarded_press_game_input_action",
+            "guarded_set_game_input_action",
+            "guarded_release_game_input_action"
+          ]
+        },
+        "actionId": {"type":"string","pattern":"^[a-z][a-z0-9_.-]*$"},
+        "value": {"anyOf":[{"type":"boolean"},{"type":"number"},{"type":"string","maxLength":40},{"type":"object"}]},
+        "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
+        "confirmed": {"type":"boolean","default":false},
+        "sensitive": {"type":"boolean","default":false},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "allOf": [
+        {
+          "if": {"properties":{"type":{"const":"guarded_set_game_input_action"}},"required":["type"]},
+          "then": {"required":["value"]}
+        },
+        {
+          "if": {"properties":{"type":{"const":"guarded_press_game_input_action"}},"required":["type"]},
+          "then": {"not":{"anyOf":[{"required":["value"]},{"required":["leaseMs"]},{"required":["sensitive"]}]}}
+        },
+        {
+          "if": {"properties":{"type":{"const":"guarded_release_game_input_action"}},"required":["type"]},
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required":["value"]},
+                {"required":["leaseMs"]},
+                {"required":["confirmed"]},
+                {"required":["sensitive"]}
+              ]
+            }
+          }
+        }
+      ],
+      "$comment": "Payload constraints from commands.schema.json#/$defs/gameInputAction; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","code"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum":["guarded_key_down","guarded_key_up","guarded_press_physical_key"]},
+        "code": {"$ref":"commands.schema.json#/$defs/keyboardCode"},
+        "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/rawKey; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "guarded_pointer_move",
+            "guarded_pointer_button_down",
+            "guarded_pointer_button_up",
+            "guarded_pointer_wheel"
+          ]
+        },
+        "mode": {"enum":["absolute","delta"]},
+        "coordinateSpace": {"enum":["viewport_normalized","viewport_pixels"]},
+        "x": {"type":"number"},
+        "y": {"type":"number"},
+        "button": {"enum":["primary","secondary","auxiliary","back","forward"]},
+        "deltaX": {"type":"number"},
+        "deltaY": {"type":"number"},
+        "wheelUnit": {"enum":["pixels","lines"]},
+        "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "allOf": [
+        {
+          "if": {"properties":{"type":{"const":"guarded_pointer_move"}},"required":["type"]},
+          "then": {
+            "required": ["mode","x","y"],
+            "not": {
+              "anyOf": [
+                {"required":["button"]},
+                {"required":["deltaX"]},
+                {"required":["deltaY"]},
+                {"required":["wheelUnit"]},
+                {"required":["leaseMs"]}
+              ]
+            },
+            "allOf": [
+              {
+                "if": {"properties":{"mode":{"const":"absolute"}},"required":["mode"]},
+                "then": {
+                  "required": ["coordinateSpace"],
+                  "allOf": [
+                    {
+                      "if": {
+                        "properties": {"coordinateSpace":{"const":"viewport_normalized"}},
+                        "required": ["coordinateSpace"]
+                      },
+                      "then": {"properties":{"x":{"minimum":0,"maximum":1},"y":{"minimum":0,"maximum":1}}}
+                    }
+                  ]
+                },
+                "else": {"not":{"required":["coordinateSpace"]}}
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {"type":{"enum":["guarded_pointer_button_down","guarded_pointer_button_up"]}},
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["button"],
+            "not": {
+              "anyOf": [
+                {"required":["mode"]},
+                {"required":["coordinateSpace"]},
+                {"required":["x"]},
+                {"required":["y"]},
+                {"required":["deltaX"]},
+                {"required":["deltaY"]},
+                {"required":["wheelUnit"]}
+              ]
+            }
+          }
+        },
+        {
+          "if": {"properties":{"type":{"const":"guarded_pointer_wheel"}},"required":["type"]},
+          "then": {
+            "anyOf": [{"required":["deltaX"]},{"required":["deltaY"]}],
+            "not": {
+              "anyOf": [
+                {"required":["mode"]},
+                {"required":["coordinateSpace"]},
+                {"required":["x"]},
+                {"required":["y"]},
+                {"required":["button"]},
+                {"required":["leaseMs"]}
+              ]
+            }
+          }
+        }
+      ],
+      "$comment": "Payload constraints from commands.schema.json#/$defs/pointerInput; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum":["guarded_gamepad_button_down","guarded_gamepad_button_up","guarded_set_gamepad_axis"]},
+        "gamepadIndex": {"type":"integer","minimum":0,"maximum":3,"default":0},
+        "button": {
+          "enum": [
+            "south",
+            "east",
+            "west",
+            "north",
+            "left_shoulder",
+            "right_shoulder",
+            "left_trigger",
+            "right_trigger",
+            "back",
+            "start",
+            "left_stick",
+            "right_stick",
+            "dpad_up",
+            "dpad_down",
+            "dpad_left",
+            "dpad_right"
+          ]
+        },
+        "axis": {"enum":["left_stick_x","left_stick_y","right_stick_x","right_stick_y"]},
+        "value": {"type":"number","minimum":-1,"maximum":1},
+        "leaseMs": {"type":"integer","minimum":1,"maximum":60000},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"type":{"enum":["guarded_gamepad_button_down","guarded_gamepad_button_up"]}},
+            "required": ["type"]
+          },
+          "then": {"required":["button"],"not":{"anyOf":[{"required":["axis"]},{"required":["value"]}]}}
+        },
+        {
+          "if": {"properties":{"type":{"const":"guarded_set_gamepad_axis"}},"required":["type"]},
+          "then": {"required":["axis","value"],"not":{"required":["button"]}}
+        },
+        {
+          "if": {"properties":{"type":{"const":"guarded_reset_gamepad"}},"required":["type"]},
+          "then": {
+            "not": {
+              "anyOf": [{"required":["button"]},{"required":["axis"]},{"required":["value"]},{"required":["leaseMs"]}]
+            }
+          }
+        }
+      ],
+      "$comment": "Payload constraints from commands.schema.json#/$defs/gamepadInput; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "required": ["type","text"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const":"guarded_text_input"},
+        "text": {"type":"string","maxLength":40},
+        "sensitive": {"type":"boolean","default":false},
+        "secretKey": {"type":"string","minLength":1},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"}
+      },
+      "$comment": "Payload constraints from commands.schema.json#/$defs/textInput; guarded verbs are a narrow extension."
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {"enum":["guarded_poll_action","guarded_poll_game_input"]},
+        "id": {"$ref":"#/$defs/transportId"},
+        "expectedProfile": {"$ref":"#/$defs/profile"},
+        "expectedRevision": {"$ref":"#/$defs/revision"},
+        "requestId": {"minimum":1,"type":"integer"},
+        "expectedSessionEpoch": {"$ref":"#/$defs/sessionEpoch"}
+      },
+      "additionalProperties": false,
+      "required": ["type","requestId"]
+    }
+  ]
+}

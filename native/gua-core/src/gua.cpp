@@ -152,6 +152,8 @@ struct ActionRequest {
     AgentPolicy agent_policy;
     std::string role;
     unsigned long long trace_epoch = 0;
+    unsigned long long owner_id = 0;
+    unsigned long long guard_revision = 0;
 };
 
 struct LogEntry {
@@ -1162,6 +1164,7 @@ struct gua_context_t {
     bool staging_valid = true;
     std::deque<ActionRequest> action_requests;
     std::deque<ActionRequest> consumed_requests;
+    std::unordered_map<uint64_t, uint64_t> owned_action_requests;
     std::deque<Event> events;
     std::vector<LogEntry> logs;
     Screenshot screenshot;
@@ -3026,8 +3029,9 @@ extern "C" int gua_poll_event(gua_context_t* ctx, gua_event_t* out_event)
 
     const std::lock_guard lock(ctx->mutex);
     while (true) {
-        const auto legacy_event = std::find_if(ctx->events.begin(), ctx->events.end(), [](const Event& event) {
-            return event.action == GUA_ACTION_CLICK || event.action == GUA_ACTION_FOCUS;
+        const auto legacy_event = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
+            return !ctx->owned_action_requests.contains(event.request_id) &&
+                (event.action == GUA_ACTION_CLICK || event.action == GUA_ACTION_FOCUS);
         });
         if (legacy_event == ctx->events.end()) {
             return 0;
@@ -3045,8 +3049,8 @@ extern "C" int gua_poll_event(gua_context_t* ctx, gua_event_t* out_event)
     }
 }
 
-extern "C" int gua_enqueue_action_for_profile(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor,
-    int observation_profile, uint64_t* out_request_id)
+static int enqueue_action(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor,
+    int observation_profile, uint64_t* out_request_id, uint64_t owner_id = 0, uint64_t epoch = 0, uint64_t revision = 0)
 {
     if (ctx == nullptr || descriptor == nullptr || descriptor->struct_size < sizeof(gua_action_request_descriptor_t) ||
         descriptor->action < GUA_ACTION_CLICK || descriptor->action > GUA_ACTION_PRESS_KEY ||
@@ -3064,6 +3068,15 @@ extern "C" int gua_enqueue_action_for_profile(gua_context_t* ctx, const gua_acti
     }
 
     const std::lock_guard lock(ctx->mutex);
+    if (owner_id != 0) {
+        if (!ctx->game_input_owners.contains(owner_id)) return GUA_ACTION_ERROR_INVALID_ARGUMENT;
+        if (epoch == 0 || epoch != ctx->session_epoch || revision !=
+            (observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_revision : ctx->revision))
+            return GUA_ACTION_ERROR_STALE_GUARD;
+        // Consumed requests remain correlated until host completion even after
+        // owner loss. Bound retention across all owners, including those records.
+        if (ctx->owned_action_requests.size() >= 256) return GUA_ACTION_ERROR_INVALID_ARGUMENT;
+    }
     if (!node_id.empty() && descriptor->action == GUA_ACTION_SELECT && value.empty()) {
         const auto authorized = project_nodes(ctx->nodes, observation_profile);
         const auto node = std::find_if(authorized.begin(), authorized.end(),
@@ -3089,8 +3102,9 @@ extern "C" int gua_enqueue_action_for_profile(gua_context_t* ctx, const gua_acti
     ctx->action_requests.push_back(ActionRequest {
         request_id, descriptor->action, node_id, value, descriptor->delta_x, descriptor->delta_y,
         descriptor->bool_value, key, descriptor->modifiers, descriptor->sensitive != 0, descriptor->scroll_unit,
-        observation_profile, request_policy, request_role, ctx->session_epoch
+        observation_profile, request_policy, request_role, ctx->session_epoch, owner_id, revision
     });
+    if (owner_id != 0) ctx->owned_action_requests.emplace(request_id, owner_id);
     trace_phase(*ctx, "ui", 0, request_id, ctx->session_epoch, "enqueue",
         "{\"action\":\"" + std::string(action_name(descriptor->action)) + "\",\"resolvedId\":\"" + escape_json(node_id) + "\"}");
     append_history(*ctx, ctx->operation_history, "enqueued", request_id, descriptor->action, node_id,
@@ -3106,6 +3120,17 @@ extern "C" int gua_enqueue_action(gua_context_t* ctx, const gua_action_request_d
     return gua_enqueue_action_for_profile(ctx, descriptor, GUA_OBSERVATION_PROFILE_DEBUG, out_request_id);
 }
 
+extern "C" int gua_enqueue_action_for_profile(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor,
+    int profile, uint64_t* out_request_id)
+{ return enqueue_action(ctx, descriptor, profile, out_request_id); }
+
+extern "C" int gua_enqueue_action_guarded_v1(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor,
+    uint64_t owner_id, int profile, uint64_t epoch, uint64_t revision, uint64_t* out_request_id)
+{
+    if (owner_id == 0) return GUA_ACTION_ERROR_INVALID_ARGUMENT;
+    return enqueue_action(ctx, descriptor, profile, out_request_id, owner_id, epoch, revision);
+}
+
 extern "C" int gua_cancel_action_request(gua_context_t* ctx, uint64_t request_id)
 {
     if (ctx == nullptr || request_id == 0) return GUA_ACTION_CANCEL_NOT_FOUND;
@@ -3114,6 +3139,21 @@ extern "C" int gua_cancel_action_request(gua_context_t* ctx, uint64_t request_id
         [&](const ActionRequest& request) { return request.request_id == request_id; });
     if (pending != ctx->action_requests.end()) {
         trace_phase(*ctx, "ui", 0, pending->request_id, pending->trace_epoch, "cancelled");
+        if (pending->owner_id != 0) {
+            // Retain ownership until one-shot polling (or owner cleanup) releases
+            // both this bounded native slot and the connection's guard entry.
+            const auto& value = *pending;
+            ctx->events.push_back(Event { value.action, value.node_id, value.request_id, GUA_ACTION_STATUS_FAILED,
+                GUA_ACTION_ERROR_CANCELLED, "", value.sensitive, ctx->session_epoch, ctx->frame_sequence,
+                value.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_revision : ctx->revision,
+                value.observation_profile, ctx->player_revision, false });
+            append_history(*ctx, ctx->event_history, "observed", value.request_id, value.action,
+                value.node_id, GUA_ACTION_STATUS_FAILED, GUA_ACTION_ERROR_CANCELLED, "", value.sensitive,
+                value.delta_x, value.delta_y, value.bool_value, value.key, value.modifiers,
+                value.scroll_unit, value.observation_profile, &value.agent_policy, value.role);
+        } else {
+            ctx->owned_action_requests.erase(request_id);
+        }
         ctx->action_requests.erase(pending);
         return GUA_ACTION_CANCELLED;
     }
@@ -3134,7 +3174,8 @@ extern "C" int gua_get_action_request_observation_profile(gua_context_t* ctx, ui
     return consumed == ctx->consumed_requests.end() ? -1 : consumed->observation_profile;
 }
 
-extern "C" int gua_consume_action_request(gua_context_t* ctx, int action, const char* node_id, gua_action_request_t* out_request)
+extern "C" int gua_consume_action_request_for_profile(gua_context_t* ctx, int action, const char* node_id,
+    int current_profile, gua_action_request_t* out_request)
 {
     if (ctx == nullptr || out_request == nullptr || out_request->struct_size < sizeof(gua_action_request_t)) return 0;
     const std::string target = node_id != nullptr ? node_id : "";
@@ -3144,8 +3185,12 @@ extern "C" int gua_consume_action_request(gua_context_t* ctx, int action, const 
     });
     if (request == ctx->action_requests.end()) return 0;
     const ActionRequest value = *request;
-    if (!value.node_id.empty() || value.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER) {
-        const int error_code = action_authorization_error(
+    if (value.owner_id != 0 || !value.node_id.empty() || value.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER) {
+        const bool stale = value.owner_id != 0 && (!ctx->game_input_owners.contains(value.owner_id) ||
+            value.trace_epoch != ctx->session_epoch ||
+            value.guard_revision != (value.observation_profile == GUA_OBSERVATION_PROFILE_PLAYER ? ctx->player_revision : ctx->revision) ||
+            (current_profile != value.observation_profile));
+        const int error_code = stale ? GUA_ACTION_ERROR_STALE_GUARD : action_authorization_error(
             ctx->nodes, value.node_id, value.action, value.observation_profile);
         if (error_code != GUA_ACTION_ACCEPTED) {
             trace_phase(*ctx, "ui", 0, value.request_id, value.trace_epoch, "completion",
@@ -3182,6 +3227,9 @@ extern "C" int gua_consume_action_request(gua_context_t* ctx, int action, const 
     out_request->scroll_unit = value.scroll_unit;
     return 1;
 }
+
+extern "C" int gua_consume_action_request(gua_context_t* ctx, int action, const char* node_id, gua_action_request_t* out_request)
+{ return gua_consume_action_request_for_profile(ctx, action, node_id, -1, out_request); }
 
 extern "C" int gua_emit_action_result(gua_context_t* ctx, const gua_action_result_t* result)
 {
@@ -3237,6 +3285,11 @@ extern "C" int gua_emit_action_result(gua_context_t* ctx, const gua_action_resul
         }
     }
     ctx->events.push_back(std::move(event));
+    if (consumed != ctx->consumed_requests.end() && consumed->owner_id != 0 &&
+        !ctx->game_input_owners.contains(consumed->owner_id)) {
+        ctx->events.pop_back();
+        ctx->owned_action_requests.erase(result->request_id);
+    }
     append_history(*ctx, ctx->event_history, "observed", result->request_id, result->action,
         result->node_id != nullptr ? result->node_id : "", result->status, result->error_code,
         result->value != nullptr ? result->value : "", event_sensitive,
@@ -3261,9 +3314,11 @@ extern "C" int gua_poll_event_v2(gua_context_t* ctx, gua_event_v2_t* out_event)
 {
     if (ctx == nullptr || out_event == nullptr || out_event->struct_size < sizeof(gua_event_v2_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
-    if (ctx->events.empty()) return 0;
-    const Event event = ctx->events.front();
-    ctx->events.pop_front();
+    const auto found = std::find_if(ctx->events.begin(), ctx->events.end(),
+        [&](const Event& event) { return !ctx->owned_action_requests.contains(event.request_id); });
+    if (found == ctx->events.end()) return 0;
+    const Event event = *found;
+    ctx->events.erase(found);
     out_event->request_id = event.request_id;
     out_event->action = event.action;
     out_event->status = event.status;
@@ -3281,7 +3336,7 @@ extern "C" int gua_poll_event_v2_for_profile(gua_context_t* ctx, int observation
         out_event == nullptr || out_event->struct_size < sizeof(gua_event_v2_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
     const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
-        return event_matches_profile(event, observation_profile) && event_observable_for_profile(ctx->nodes, event, observation_profile);
+        return !ctx->owned_action_requests.contains(event.request_id) && event_matches_profile(event, observation_profile) && event_observable_for_profile(ctx->nodes, event, observation_profile);
     });
     if (found == ctx->events.end()) return 0; const Event event = *found; ctx->events.erase(found); copy_event_v2(event, out_event, observation_profile); return 1;
 }
@@ -3293,7 +3348,7 @@ extern "C" int gua_poll_event_v2_for_request_and_profile(gua_context_t* ctx, uin
         out_event == nullptr || out_event->struct_size < sizeof(gua_event_v2_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
     const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
-        return event.request_id == request_id && event.observation_profile == observation_profile;
+        return !ctx->owned_action_requests.contains(event.request_id) && event.request_id == request_id && event.observation_profile == observation_profile;
     });
     if (found == ctx->events.end()) return 0; const Event event = *found; ctx->events.erase(found); copy_event_v2(event, out_event); return 1;
 }
@@ -3302,7 +3357,8 @@ extern "C" int gua_poll_event_v2_for_request(gua_context_t* ctx, uint64_t reques
 {
     if (ctx == nullptr || request_id == 0 || out_event == nullptr || out_event->struct_size < sizeof(gua_event_v2_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
-    const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) { return event.request_id == request_id; });
+    const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
+        return !ctx->owned_action_requests.contains(event.request_id) && event.request_id == request_id; });
     if (found == ctx->events.end()) return 0;
     const Event event = *found;
     ctx->events.erase(found);
@@ -3320,8 +3376,10 @@ extern "C" int gua_poll_event_v3(gua_context_t* ctx, gua_event_v3_t* out_event)
 {
     if (ctx == nullptr || out_event == nullptr || out_event->struct_size < sizeof(gua_event_v3_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
-    if (ctx->events.empty()) return 0;
-    const Event event = ctx->events.front(); ctx->events.pop_front();
+    const auto found = std::find_if(ctx->events.begin(), ctx->events.end(),
+        [&](const Event& event) { return !ctx->owned_action_requests.contains(event.request_id); });
+    if (found == ctx->events.end()) return 0;
+    const Event event = *found; ctx->events.erase(found);
     out_event->base.struct_size = sizeof(gua_event_v2_t);
     out_event->base.request_id = event.request_id; out_event->base.action = event.action; out_event->base.status = event.status; out_event->base.error_code = event.error_code;
     std::snprintf(out_event->base.node_id, sizeof(out_event->base.node_id), "%s", event.node_id.c_str());
@@ -3334,7 +3392,8 @@ extern "C" int gua_poll_event_v3_for_request(gua_context_t* ctx, uint64_t reques
 {
     if (ctx == nullptr || request_id == 0 || out_event == nullptr || out_event->struct_size < sizeof(gua_event_v3_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
-    const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) { return event.request_id == request_id; });
+    const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
+        return !ctx->owned_action_requests.contains(event.request_id) && event.request_id == request_id; });
     if (found == ctx->events.end()) return 0;
     const Event event = *found; ctx->events.erase(found);
     out_event->base.struct_size = sizeof(gua_event_v2_t);
@@ -3352,7 +3411,7 @@ extern "C" int gua_poll_event_v3_for_profile(gua_context_t* ctx, int observation
         out_event == nullptr || out_event->struct_size < sizeof(gua_event_v3_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
     const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
-        return event_matches_profile(event, observation_profile) && event_observable_for_profile(ctx->nodes, event, observation_profile);
+        return !ctx->owned_action_requests.contains(event.request_id) && event_matches_profile(event, observation_profile) && event_observable_for_profile(ctx->nodes, event, observation_profile);
     });
     if (found == ctx->events.end()) return 0; const Event event = *found; ctx->events.erase(found);
     out_event->base.struct_size = sizeof(gua_event_v2_t); copy_event_v2(event, &out_event->base, observation_profile);
@@ -3367,7 +3426,7 @@ extern "C" int gua_poll_event_v3_for_request_and_profile(gua_context_t* ctx, uin
         out_event == nullptr || out_event->struct_size < sizeof(gua_event_v3_t)) return 0;
     const std::lock_guard lock(ctx->mutex);
     const auto found = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
-        return event.request_id == request_id && event.observation_profile == observation_profile;
+        return !ctx->owned_action_requests.contains(event.request_id) && event.request_id == request_id && event.observation_profile == observation_profile;
     });
     if (found == ctx->events.end()) return 0; const Event event = *found; ctx->events.erase(found);
     out_event->base.struct_size = sizeof(gua_event_v2_t); copy_event_v2(event, &out_event->base);
@@ -3405,6 +3464,27 @@ extern "C" int gua_get_context_status(gua_context_t* ctx, gua_context_status_t* 
         out_status->world_revision = ctx->world_revision;
         out_status->world_object_count = static_cast<uint32_t>(ctx->world_objects.size());
     }
+    return 1;
+}
+
+extern "C" int gua_poll_owned_action_event_v1(gua_context_t* ctx, uint64_t owner_id, uint64_t request_id, gua_event_v3_t* out_event)
+{
+    if (ctx == nullptr || owner_id == 0 || request_id == 0 || out_event == nullptr ||
+        out_event->struct_size < sizeof(*out_event)) return 0;
+    const std::lock_guard lock(ctx->mutex);
+    const auto owned = ctx->owned_action_requests.find(request_id);
+    if (owned == ctx->owned_action_requests.end() || owned->second != owner_id ||
+        !ctx->game_input_owners.contains(owner_id)) return 0;
+    const auto found = std::find_if(ctx->events.begin(), ctx->events.end(),
+        [&](const auto& event) { return event.request_id == request_id; });
+    if (found == ctx->events.end()) return 0;
+    out_event->base.struct_size = sizeof(gua_event_v2_t);
+    copy_event_v2(*found, &out_event->base);
+    out_event->session_epoch = found->session_epoch;
+    out_event->frame_sequence = found->frame_sequence;
+    out_event->revision = found->revision;
+    ctx->events.erase(found);
+    ctx->owned_action_requests.erase(owned);
     return 1;
 }
 
@@ -3546,6 +3626,11 @@ extern "C" int gua_reset_context(gua_context_t* ctx, const gua_reset_options_t* 
     ctx->world_json_cache_player.clear();
     observe_reset(*ctx);
     ++ctx->session_epoch;
+    std::erase_if(ctx->owned_action_requests, [&](const auto& item) {
+        return std::none_of(ctx->action_requests.begin(), ctx->action_requests.end(), [&](const auto& r) { return r.request_id == item.first; }) &&
+            std::none_of(ctx->consumed_requests.begin(), ctx->consumed_requests.end(), [&](const auto& r) { return r.request_id == item.first; }) &&
+            std::none_of(ctx->events.begin(), ctx->events.end(), [&](const auto& e) { return e.request_id == item.first; });
+    });
     out_report->session_epoch = ctx->session_epoch;
     out_report->result = GUA_RESET_SUCCEEDED;
     return out_report->result;
@@ -3760,6 +3845,16 @@ extern "C" int gua_release_game_input_owner(gua_context_t* ctx, uint64_t owner_i
     if (ctx == nullptr || owner_id == 0) return 0;
     const std::lock_guard lock(ctx->mutex);
     if (ctx->game_input_owners.erase(owner_id) == 0) return 0;
+    ctx->action_requests.erase(std::remove_if(ctx->action_requests.begin(), ctx->action_requests.end(),
+        [&](const auto& request) { return request.owner_id == owner_id; }), ctx->action_requests.end());
+    ctx->events.erase(std::remove_if(ctx->events.begin(), ctx->events.end(), [&](const auto& event) {
+        const auto owned = ctx->owned_action_requests.find(event.request_id);
+        return owned != ctx->owned_action_requests.end() && owned->second == owner_id;
+    }), ctx->events.end());
+    std::erase_if(ctx->owned_action_requests, [&](const auto& item) {
+        return item.second == owner_id && std::none_of(ctx->consumed_requests.begin(), ctx->consumed_requests.end(),
+            [&](const auto& request) { return request.request_id == item.first; });
+    });
     ctx->expired_game_input_owners.erase(owner_id);
     trace_phase(*ctx, "input", owner_id, 0, ctx->session_epoch, "owner-disconnected");
     const bool cleanup_required = owner_requires_game_input_cleanup(*ctx, owner_id);
