@@ -1,5 +1,24 @@
 # Spatial-r1 contracts (Spatial-01 / #131)
 
+## 空間照会の要求と結果を同じ意味で扱うために
+
+「この線分に壁があるか」「この形が重なるか」を異なる言語・engineから扱うための
+データ契約です。raycastは線分、overlapはその場の重なり、sweepは向きを固定した形の
+有限な平行移動を問い合わせます。`r1`は契約の識別子で、製品release番号ではありません。
+
+要求documentを作って検証し、hostのproviderへ渡し、戻った結果のID・空間・世代を
+対応付けて検証します。providerは実際に物理照会するhost側の実装です。
+spaceEpochはscene再生成や原点変更の境界、coverageはhostが確認した領域とpolicy内の
+証拠範囲です。noHitやclearをゲーム全体の安全や移動成功に読み替えてはいけません。
+
+[GuaSpatialDocument](../../bindings/dotnet/src/Gua.Core/GuaSpatial.cs)と
+[native document検証](../../native/gua-core/src/spatial.cpp)はoffline読取・照合の入口です。
+[SpatialTests](../../bindings/dotnet/tests/Gua.Selector.Tests/SpatialTests.cs)は契約fixtureの確認箇所で、
+物理実行には[host契約](spatial-host-r1.md)と
+[engine側読取](../../docs/spatial-engine-r1.md)を続けて読みます。
+[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)のSelector suiteはoffline条件を含みますが、engine精度や性能の測定ではありません。
+以下の幾何・結果・ABI条件と既存evidenceを保持します。
+
 `spatial-r1` is a contract identifier, not a product release. The source of truth
 is `spatial-r1.schema.json` plus the semantic rules below. These are offline
 documents, validation and type mappings. #132 implements provider registration,

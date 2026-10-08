@@ -1,5 +1,13 @@
 # Guarded remote dispatch v1
 
+## この仕様を読む前に
+
+観測した購入画面が変わった後に、古い前提のクリックをgameへ渡さないための契約です。
+具体例、観測からconsume/完了確認までの流れ、epoch・revision・ownerの役割は
+[Guarded dispatch開発者ガイド](../../docs/guarded-dispatch-guide.ja.md)から読めます。
+以下はwire・所有権・再検査・結果の規範本文で、ガイドはその代替仕様ではありません。
+他機能との関係と共通確認の準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)を参照してください。
+
 `guarded_dispatch_v1` is additive. Clients must negotiate the capability before
 sending `guarded_` verbs. Existing commands, clients, and local guarded game-input
 APIs retain their behavior. A bridge without the new handlers must reject the

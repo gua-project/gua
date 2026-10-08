@@ -1,5 +1,25 @@
 # Distribution contract for external consumers
 
+## 外部consumerが同じ成果物を使えるようにする
+
+Gua checkoutのない別projectで、native library・schema・offline Viewerを使うための契約です。
+packageがrestoreできても、engine起動や操作まで成功したとは判断できません。
+まず版・source commit・hashを固定し、packageだけのconsumerでload/validation/reportを確認し、
+必要なengineを起動・接続して実際の操作の完了を確かめます。
+RIDはOS/CPU別の資産を選ぶ識別子です。
+
+[GuaDistribution.ReadSchema / ValidateJson](../bindings/dotnet/src/Gua.Testing/GuaDistribution.cs)は埋込resourceの入口、
+[verify-distribution-consumer.ps1](../scripts/verify-distribution-consumer.ps1)は
+隔離したfeed/cache・archive・Toolの確認を担当します。
+下の実行例には、事前に作った正確なpackage feedとfull commitが必要です。
+確認準備と確認の段階は[開発者ガイド](developer-reading-guide.ja.md)、
+native buildは[toolchain文書](native-toolchains.md)を参照してください。
+今回このconsumerコマンドは未実行・未検証です。
+
+以下のacceptance表・hash・過去のroute記録は検証証拠です。
+それぞれの対象commit・環境・機能の範囲で読み、現在の全engine対応や公開済み版の保証へ広げません。
+公開・version選択はacceptanceと別の操作です。
+
 This contract supports a separate consumer through packages and artifacts. Gua
 does not reference Playtest or build its product. A consumer must pin the package
 version, full source commit and artifact hashes; runtime startup never retrieves

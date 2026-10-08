@@ -1,5 +1,23 @@
 # Observe / World Property v1
 
+## ゲームの追加状態を観測するために
+
+UIに表示されない敵のphaseやWorld全体の進行状態をテストへ渡す機能です。
+ゲーム側が公開する値を明示登録し、呼び出し側が現在値とその変化を読みます。
+`Owner`は登録をUI/Object/Worldの寿命に結び付ける所有者、登録tokenは一つの値の
+公開を保持するものです。標準の位置情報はWorld treeから読み、追加値だけ登録します。
+
+「公開済みObjectへOwner作成 → getter登録 → frame末の評価、またはNotifyで公開 →
+Snapshot読取/変更poll」という順です。Snapshotは最新の公開値、Changeは公開された変化です。
+ゲーム内部の全代入を監視する機能ではありません。
+購読cursorはどこまで通知を読んだか、epochはresetの世代を表します。
+`gap`は履歴の欠落、`stale_session`は古い世代であり、「変化なし」ではありません。
+
+[CreateObserveOwner / Observe / Notify / SubscribeObservations](../../bindings/dotnet/src/Gua.Core/GuaObserve.cs)から寿命とgetter評価を追い、
+[ObserveTests](../../bindings/dotnet/tests/Gua.Selector.Tests/ObserveTests.cs)で失敗・復旧・resetを確認します。
+手順は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)、接続をまたぐ購読は
+[Observe transport](observe-transport-v1.md)です。以下の契約と過去の実行記録は保持しています。
+
 Issue #119 / G-02。構造の正本は `observe-v1.schema.json`、値は既存の
 [Value v1](value-v1.md)。OPEN-03、およびG-02が担当するOPEN-04を本書で確定する。
 Scenarioのselector解決や条件評価はここでは定義しない。

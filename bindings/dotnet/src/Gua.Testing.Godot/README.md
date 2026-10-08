@@ -1,5 +1,21 @@
 # Gua.Testing.Godot
 
+## Godotを外部テストから起動して確認する
+
+Godot project/sceneを起動し、ゲーム側addonが公開するUIへ接続するtest hostです。
+C#のテストがあるからゲーム側もC# adapterを使う必要がある、という意味ではありません。
+推奨runtime addonとテスト側hostの役割を分けて選びます。
+
+「projectとGodot実行ファイルを準備 → scene起動 → bridgeに接続 →
+Gua.Testingで操作・完了・新しい状態を確認 → teardown」の流れです。
+描画の必要なPNG確認はrendered起動とhost側のcapture許可が別途必要です。
+processの起動成功だけではaddon登録やテストの成功になりません。
+
+[GodotSceneTestHost.Load / LoadRendered](GodotSceneTestHost.cs)が起動と接続、
+[GDScript sample](../../../../examples/godot-gdscript/README.md)がゲーム側の準備の入口です。
+下の設定例・form testを読み、共通suiteと実engineの区別は[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)を参照してください。
+今回Godot起動コマンドは未実行・未検証です。
+
 `Gua.Testing.Godot` provides a small Godot process test host over `Gua.Core` and
 `Gua.Testing`. It starts a Godot project, connects to the Gua WebSocket bridge,
 and lets tests assert against the live semantic UI tree.

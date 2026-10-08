@@ -1,5 +1,21 @@
 # gua-world-tools
 
+## game世界の公開情報を読む
+
+例えば「playerから12単位以内のenemyを探す」ための型・検証・読取toolを共有します。
+providerはengine側が用意するデータ取得先で、公開対象objectを明示登録してから利用します。
+UI操作やgame inputとは別の読取機能であり、任意のscene走査・world操作は提供しません。
+
+[parseWorldObjectTree / selectorFromArguments / registerWorldWebMcpTools](src/index.ts)から
+応答検証とbrowser tool登録を追えます。近傍検索は一つのPlayer公開snapshotで評価します。
+epochはreset世代、frameは公開回、revisionは内容の変更を識別し、distanceの単位はhostのworld単位です。
+非公開・不明・座標を公開しない基準objectの空結果を、周囲に何もない証拠にしません。
+
+下の使用例と[共通準備とWorld test/check](../../docs/developer-reading-guide.ja.md)で
+型・selector・tool処理を確認します。spatial tool schemaの共有も、
+browserへTesting/Debugの物理読取権限を与えるものではありません。
+ローカル手順は今回未実行・未検証です。
+
 Browser-safe World Object Tree v1 types, payload validators, MCP tool definitions,
 and provider adapters shared by `gui-mcp` and browser WebMCP integrations.
 

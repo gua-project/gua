@@ -1,5 +1,21 @@
 # Gua.Testing.Visual
 
+## 見た目の回帰を確認する
+
+文字が切れる、controlがずれる、意図しないoverlayが重なる、といった問題を
+PNGのbaselineと比較します。baselineは承認した期待画像で、OS/rendererの差を
+`BaselineVariant`という別の組合せ名で管理します。
+
+「許可されたhostからPNG取得 → 指定variantのbaseline読取 → mask/thresholdを適用して比較 →
+actual/diff/manifest保存」の順です。baselineがない場合も通常は失敗にします。
+maskは比較から除外する領域で、秘密を自動検出する機能ではありません。
+画像比較の成功は操作の完了やゲーム状態の正しさを代わりに証明しません。
+
+[GuaVisualAssertions.ExpectScreenshotAsync](GuaScreenshotComparison.cs)と
+[VisualTests](../../tests/Gua.Visual.Tests/VisualTests.cs)で、mask・寸法違い・差分成果物を追えます。
+下のoptions例を読み、[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)のVisual suiteで比較処理を確認します。
+実engineの描画確認は、そのengineと同じrendererの別の確認です。今回ローカルでは未実行です。
+
 `Gua.Testing.Visual` adds opt-in PNG baseline comparison to ordinary .NET tests.
 The package targets both `net10.0` and `netstandard2.1`.
 Semantic assertions should remain the primary test path; visual comparison covers

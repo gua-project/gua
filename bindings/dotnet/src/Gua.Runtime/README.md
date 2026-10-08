@@ -1,5 +1,23 @@
 # Gua.Runtime
 
+## engine adapterのための役割
+
+ゲーム側が「現在の画面を公開し、外部から来た操作を実行する」ためのwrapperです。
+例えば設定画面をadapterがframeとして公開すると、外部テストはチェックボックスを見つけられます。
+テスト用locatorではなく、host側の公開・consume・完了報告・bridgeを担当します。
+
+「BeginFrame → node登録 → EndFrameで公開 → TryConsumeAction → engineの実処理 →
+EmitActionResult」の順で追ってください。game inputも受理と適用を分け、
+adapterがhost threadで注入してCompleteGameInputを報告します。
+Action Mapは操作の一覧、capabilityは初期化済みの機能の宣言です。
+Debugの入力経路を初期化してもPlayerへ同じ権限が自動付与されるわけではありません。
+GuaClockも、明示的に利用したゲーム処理だけを制御します。
+
+[GuaRuntime](GuaRuntime.cs)はUI/bridgeの入口、
+[game-input API](GuaGameInput.cs)は保持・lease・cleanupの入口です。
+[ObserveTransportTests](../../tests/Gua.Selector.Tests/ObserveTransportTests.cs)等のruntime経路と
+[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)を参照してください。下のAPI条件を保持し、受理結果からゲーム上の成功を推定しません。
+
 Semantic Game Action descriptor v2 exposes `Category`, `Aliases`, `Tags`, and
 `AgentExposure`. Use `FindGameInputActions` with a `GuaGameInputActionSelector`
 for bounded, profile-aware discovery; its result revision must be treated as a

@@ -1,5 +1,24 @@
 # Spatial-03 adapters and real geometry evidence
 
+## engineの物理世界を読む担当
+
+「この形を前方へ動かした範囲に壁があるか」を、Unity/Godotの実際の物理APIへ照会するadapterです。
+clientは要求を作り、native hostが許可と待ち行列を扱い、engine readerが安全な読取境界で実行します。
+spaceEpochはsceneや原点を作り直した空間の世代で、古い空間への結果を識別します。
+leaseは一つの読取境界で有限batchを実行する権利で、終了時にEndで返します。
+
+[Unity GuaUnitySpatial](../bindings/unity/Runtime/GuaUnitySpatial.cs)と
+[Godot spatial_host.cpp](../native/gua-godot/src/spatial_host.cpp)が
+準備した形・物理照会・完了報告の入口です。
+許可とscheduleは[host契約](../protocol/specs/spatial-host-r1.md)、
+外部からの接続は[transport案内](spatial-transport-r1.md)を読みます。
+空結果でもcoverageが不明・結果がtruncatedなら、完全な空間や移動成功の証拠にはなりません。
+
+下のReproductionにはengine path・固定fixture・backendが必要です。
+[共通準備と実engine確認の区別](developer-reading-guide.ja.md)を読み、
+幾何・性能・許可取消の既存結果は対象patch/OS/backendと合わせて確認してください。
+以下の測定値・件数・成果物記録は保持していますが、今回fixture runnerは未実行・未検証です。
+
 `GuaUnitySpatial` reads its explicitly registered `PhysicsScene`;
 `GuaSpatialReader` reads its explicitly registered `World3D` direct state.
 Both are opt-in trusted host integrations over the native spatial-host-r1

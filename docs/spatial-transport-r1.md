@@ -1,5 +1,25 @@
 # Spatial transport r1 / 空間照会の client・transport
 
+## 空間照会を別プロセスから依頼する
+
+実行中gameの物理世界を、.NET/WebSocket/Native MCPから読みたいときの接続案内です。
+ここでclientが物理計算を再実装するわけではありません。
+hostがscene・provider・Testing/Debugの有限grantを登録してbindし、
+clientが公開能力を確認してbatchを送り、同じownerで結果をpollします。
+ownerは要求と結果の接続上の所有者、spaceEpochは空間再生成の世代です。
+
+[GuaRuntime.BindSpatial](../bindings/dotnet/src/Gua.Runtime/GuaRuntime.Spatial.cs)はhost側設定、
+[MCP tool実装](../packages/mcp/src/index.ts)は外部要求と完了待機の入口です。
+下のOperation mappingを使って同じ段階のAPIを選び、
+[host契約](../protocol/specs/spatial-host-r1.md)と
+[engine reader](spatial-engine-r1.md)へ進んでください。
+通信断で結果を得られなかった要求を、新しい接続から勝手に再開・再送しません。
+結果のunknown/partialや保存不能も成功へ読み替えません。
+
+共通の環境準備とfixture/unit testの区別は[開発者ガイド](developer-reading-guide.ja.md)にあります。
+下記の生成・fixture・consumerコマンドは今回未実行・未検証です。
+実測対応表と過去のacceptance記録を保持し、browserのPlayer portに権限があるとは推定しません。
+
 Issue #134 connects the #131 contracts, #132 native scheduler and #133 real-engine
 readers. No physics is implemented in a client. World radius DTOs remain unchanged.
 Only explicit host-authorized `Testing` / `Debug` grants work. The runtime's

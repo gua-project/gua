@@ -1,5 +1,25 @@
 # Gua.Testing
 
+## まず通常のテストで何をするか
+
+NUnit等のテストから、実行中のゲームのUIをID/role/nameで探し、操作と結果を確認するpackageです。
+例えば「Playをクリックするとloadingが見える」は、
+「UIを読む → 一つの操作可能な対象を解決 → 要求を送信 → 完了を待つ → 結果を再観測」
+というテストになります。ゲームを動かしframeを公開するadapter/hostは別に必要です。
+
+locatorは対象を探す条件で、遅延解決は操作時点の最新状態で探し直すことです。
+auto-waitは有限な期限内で条件と操作可能性を待つ仕組みで、失敗操作の無条件な再送ではありません。
+下の最初のClickAsync例から始め、
+[GuaLocatorQuery.ClickAsync / ResolveAsync](GuaLocatorActions.cs)と
+[LocatorAutoWaitTests](../../tests/Gua.Selector.Tests/LocatorAutoWaitTests.cs)を読むと境界を追えます。
+
+比較は[semantic snapshot](../Gua.Testing.Snapshots/README.md)か
+[PNG Visual](../Gua.Testing.Visual/README.md)、再現は
+[Recording](../Gua.Testing.Recording/README.md)、失敗後の事実の保存は
+[Trace](../../../../protocol/specs/trace-v1.md)へ進みます。
+確認の準備と各suiteで確かめる内容は[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)に分けています。
+local API、WebSocket、実engineの確認は同じ証拠ではありません。
+
 ## Locator の遅延解決と auto-wait
 
 `GuaAssertions.Query(context)` の locator は、操作時に最新の strict single match を

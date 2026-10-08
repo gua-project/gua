@@ -1,5 +1,22 @@
 # Gua for Unity
 
+## Unity側で公開・操作を担当するpackage
+
+Play Modeやdesktop Mono PlayerでUIを公開し、外部テストの要求をUnityの操作へ適用するruntime adapterです。
+例えばボタンのrole/name/stateをframeにまとめて公開し、bridgeから来た要求をgame側でconsumeし、
+request IDに対応する完了を報告します。呼出し側はその後の画面変化も確認します。
+
+[GuaUnityRuntime](../Runtime/GuaUnityRuntime.cs)が自動起動・UI収集・操作処理の入口です。
+外部processの起動とassertionは
+[Gua.Testing.Unity](../../dotnet/src/Gua.Testing.Unity/README.md)が担当します。
+UIは自動収集しますが、World objectとgame inputは下の明示登録・opt-inが別途必要です。
+Playerは公開範囲と入力許可を制限するprofileで、Debug初期化だけではbrowserへ権限を与えません。
+
+以下の対象platformとengine準備を読み、
+[共通の確認準備と実engine確認の区別](../../../docs/developer-reading-guide.ja.md)へ進みます。
+click成功はdispatchした入力の報告なので、applicationの期待状態もassertしてください。
+今回はUnity起動・build・browser確認を実行していません。既存の対応範囲は以下の記述を保持しています。
+
 The package automatically starts the Gua runtime in Play Mode and desktop Mono
 players on Windows x64, Linux x64, Intel macOS, and Apple Silicon macOS. It
 reflects UI Toolkit, uGUI, and TextMeshPro runtime controls and listens on

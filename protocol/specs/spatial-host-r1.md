@@ -1,5 +1,24 @@
 # Spatial host r1 (#132)
 
+## 物理照会を安全なhost境界で実行するために
+
+外部要求を受けた通信スレッドから、そのままengineの物理APIを呼ぶことはできません。
+このhostは、許可済みの空間照会を有限なbatchとして待たせ、engineが安全に読める
+タイミングで一件ずつ渡すschedulerです。
+
+hostがproviderとpolicy（host側の照会条件）を登録し、owner（要求と結果の所有者）へ
+明示grantを与えます。clientのenqueue後、engineは読取境界で
+`Begin → Take → 物理照会 → Complete`を順に行い、最後に`End`します。
+leaseはその読取境界の間だけ有効な実行権です。Debugという名前だけで許可は得られず、
+consumeと結果公開の時点でもgrantを確認します。
+
+[GuaSpatialHost.Begin / Take / Complete / End](../../bindings/dotnet/src/Gua.Core/GuaSpatialHost.cs)と
+[SpatialHostTests](../../bindings/dotnet/tests/Gua.Selector.Tests/SpatialHostTests.cs)を読むと、
+取消・権限取消・遅い完了が結果公開へどう影響するかを追えます。
+確認準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)、実物理の担当は
+[engine adapter文書](../../docs/spatial-engine-r1.md)です。
+fake providerの成功は実engineの幾何・precisionの保証ではありません。以下が詳細契約です。
+
 This additive contract is `spatial-host-r1`. It does not modify the strict
 `spatial-r1` documents from #131, enable existing Debug sessions automatically,
 or expose a transport. Engine adapters (#133) and transports (#134) must opt in
