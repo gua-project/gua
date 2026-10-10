@@ -1,17 +1,6 @@
 # Gua
 
-## 実装を読み始める開発者へ
-
-ゲーム側adapterが画面を公開し、外部テストやツールが対象を探して操作を送り、
-adapterが適用して完了を報告し、呼び出し側が結果を観測する、という流れが中心です。
-操作を受理しただけではgame上の成功を確認したことにはなりません。
-UIの意味データ、追加状態、物理読取、記録、配布では確認できる内容が異なります。
-
-[開発者向けの読む順番とローカル確認](docs/developer-reading-guide.ja.md)から始め、
-各READMEの使用例と規範仕様へ進んでください。
-古い画面や通信断を含む具体的な操作例は[Guarded dispatchガイド](docs/guarded-dispatch-guide.ja.md)、
-厳密なwire/ABI条件は[基本protocol](protocol/specs/protocol.md)にあります。
-過去の実測結果は対象commitと環境に限る証拠として別に読む構成です。
+## Main
 
 [English](README.md) | 日本語
 
@@ -619,6 +608,19 @@ var ui := GuaAutoAdapterScript.new()
 ```
 
 アダプターはルート`Control`から標準コントロールを収集し、ボタンシグナルを監視して、Inspectorからのクリック要求を通常のGodot入力経路へ送ります。
+
+## 実装を読み始める開発者へ
+
+ゲーム側adapterが画面を公開し、外部テストやツールが対象を探して操作を送り、
+adapterが適用して完了を報告し、呼び出し側が結果を観測する、という流れが中心です。
+操作を受理しただけではgame上の成功を確認したことにはなりません。
+UIの意味データ、追加状態、物理読取、記録、配布では確認できる内容が異なります。
+
+[開発者向けの読む順番とローカル確認](docs/developer-reading-guide.ja.md)から始め、
+各READMEの使用例と規範仕様へ進んでください。
+古い画面や通信断を含む具体的な操作例は[Guarded dispatchガイド](docs/guarded-dispatch-guide.ja.md)、
+厳密なwire/ABI条件は[基本protocol](protocol/specs/protocol.md)にあります。
+過去の実測結果は対象commitと環境に限る証拠として別に読む構成です。
 
 ## リリース自動化
 
