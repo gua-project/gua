@@ -46,7 +46,10 @@ jobs:
         run: bun run --filter @gua/inspector build
 
       - name: Build Tauri inspector
-        run: bun run --filter @gua/inspector tauri:build
+        shell: pwsh
+        run: |
+          scripts/set-inspector-release-version.ps1 -Version '${{ steps.version.outputs.version }}'
+          bun run --filter @gua/inspector tauri:build
 
       - name: Configure Debug native build
         run: cmake --preset windows-msvc-debug "-DGUA_VERSION=${{ steps.version.outputs.version }}" "-DGUA_GODOT_PLUGIN_VERSION=${{ steps.version.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}"
@@ -107,7 +110,7 @@ jobs:
           Remove-Item -Recurse -Force $assets, $godotRoot -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $assets, $godotTarget, (Join-Path $godotTarget "bin") | Out-Null
 
-          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $godotTarget
+          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $godotTarget -Version $version
           Copy-Item "examples/godot-gdscript/addons/gua/bin/*.dll" (Join-Path $godotTarget "bin")
 
           Compress-Archive -Path (Join-Path $godotRoot "addons") -DestinationPath (Join-Path $assets "gua-godot-plugin-windows-v$version.zip") -CompressionLevel Optimal
@@ -430,7 +433,7 @@ jobs:
           New-Item -ItemType Directory -Force (Join-Path $root "unity"), (Join-Path $godot "bin") | Out-Null
           Copy-Item "build/web-release/native/gua-runtime/libgua_runtime.a" (Join-Path $root "unity")
           Copy-Item "build/web-release/native/gua-core/libgua-core.a" (Join-Path $root "unity")
-          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $godot
+          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $godot -Version '${{ needs.windows-assets.outputs.version }}'
           Copy-Item "examples/godot-gdscript/addons/gua/bin/gua_godot.web.debug.wasm32.wasm" (Join-Path $godot "bin")
           Copy-Item "examples/godot-gdscript/addons/gua/bin/gua_godot.web.release.wasm32.wasm" (Join-Path $godot "bin")
           scripts/verify-godot-web-addon.ps1 -AddonDirectory $godot -RequireBinaries
@@ -473,7 +476,7 @@ jobs:
           $root = 'artifacts/godot-addon'
           $addon = Join-Path $root 'addons/gua'
           New-Item -ItemType Directory -Force (Join-Path $addon 'bin') | Out-Null
-          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $addon
+          scripts/stage-godot-addon-sources.ps1 -AddonDirectory $addon -Version '${{ needs.windows-assets.outputs.version }}'
           foreach ($pattern in 'gua_godot.windows.*', 'gua_godot.linux.*', 'gua_godot.macos.*', 'gua_godot.web.*') {
             $files = @(Get-ChildItem artifacts/download -Recurse -File -Filter $pattern)
             foreach ($file in $files) { Copy-Item $file.FullName (Join-Path $addon 'bin') -Force }
