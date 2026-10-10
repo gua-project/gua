@@ -72,7 +72,7 @@ UI、Observe、physics、画像が常に同一時刻に取得されたとは判�
 各完了を待つ再生を、
 [SemanticSnapshotTests](../bindings/dotnet/tests/Gua.Snapshots.Tests/SemanticSnapshotTests.cs)は
 baseline欠落・明示承認・maskを扱います。
-ソースやassertionを読んだことを、今回そのtestを実行した証拠とは扱いません。
+テストではassertionが確認する条件を読み、実行時にそのケースが選択され成功したことを確認してください。
 
 ## 4. ローカルで確認する手順
 
@@ -83,9 +83,7 @@ engineを起動しない確認です。Visual StudioのC++ toolchain、Ninja、
 CMake 3.20以上、.NET SDK 10.0.x、Bun 1.3.14、依存を取得できるnetworkが必要です。
 公式VS presetを使う場合は[toolchain文書](native-toolchains.md)のgenerator条件が別途必要です。
 
-**下記コマンドはすべて今回のローカル環境では未実行・未検証です。**
-test project、package scripts、CMake、[CI準備](../.github/workflows/syntax-check.yml)と
-照合した手順です。既知の環境開始エラーの再プローブはしていません。
+[CI設定](../.github/workflows/syntax-check.yml)にも、test project・native build・packageの準備例があります。
 実行時は対象commit・環境・終了コード・test結果・skip・ログを保存してください。
 準備の失敗や0件選択を成功として数えません。
 
@@ -171,8 +169,7 @@ fake browser portやpackage unit testから、実browser/engineの成功は推�
 [transport](spatial-transport-r1.md)は実bridge/MCP/consumer、
 [配布契約](distribution-contract.md)は識別したfeed・hash・隔離cache/archiveを扱います。
 [Viewer手順](../protocol/specs/trace-viewer.md)はfixtureと実browser画面操作を確認します。
-これらのコマンドは今回未実行・未検証です。過去の結果はそれぞれの証拠として残し、
-現在の再実行結果と混ぜません。
+過去の検証結果を参照するときは、対象commit・環境・実行経路を確認してください。
 
 ## 5. 保証の範囲と限界
 
@@ -186,18 +183,3 @@ Valueの検証は観測ではなく、Observeは全内部代入の履歴では�
 Spatialの空結果は通常移動の成功ではなく、Trace/画像の表示は元の実行の成功ではありません。
 baseline比較やschema validationにも、それぞれの比較対象・構造検査の限界があります。
 
-### この改稿で照合した範囲
-
-PR #181のhead ae07ca34d78fb9e54b6a2c6388db3e1e7b73289aと、
-そのbase main 9297e7b49e56d42cfb62ffa7b1a0277337442462の仕様・主要型/関数・
-関連test assertion・test project・CMake・package scripts・CI準備をGitHub APIで読み合わせました。
-今回の新しい動作証拠はPRの最終headに対応するCI/reviewに分けて報告します。
-既存の成功件数・Contract mapping・review履歴・成果物保存先を書き換えるものではありません。
-
-### 文書の棚卸しと役割
-
-仕様・package README・開発案内を優先し、用語を前提とした冒頭へ用途・流れ・入口・確認の案内を加えました。
-日本語READMEとUnity文書には読む入口を追加しました。
-既に導入順が明確なexamplesのREADMEはそのまま参照します。
-guarded evidence、spatial/distribution acceptance、release計画、実行履歴は証拠として保持しました。
-生成物・第三者文書・AGENTS/skill/監査運用指示には変更を加えていません。

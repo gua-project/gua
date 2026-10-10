@@ -14,7 +14,7 @@ maskは比較から除外する領域で、秘密を自動検出する機能で�
 [GuaVisualAssertions.ExpectScreenshotAsync](GuaScreenshotComparison.cs)と
 [VisualTests](../../tests/Gua.Visual.Tests/VisualTests.cs)で、mask・寸法違い・差分成果物を追えます。
 下のoptions例を読み、[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)のVisual suiteで比較処理を確認します。
-実engineの描画確認は、そのengineと同じrendererの別の確認です。今回ローカルでは未実行です。
+実engineの描画は、対象engineとrendererを用意して確認してください。
 
 `Gua.Testing.Visual` adds opt-in PNG baseline comparison to ordinary .NET tests.
 The package targets both `net10.0` and `netstandard2.1`.

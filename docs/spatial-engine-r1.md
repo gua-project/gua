@@ -17,7 +17,7 @@ leaseは一つの読取境界で有限batchを実行する権利で、終了時�
 下のReproductionにはengine path・固定fixture・backendが必要です。
 [共通準備と実engine確認の区別](developer-reading-guide.ja.md)を読み、
 幾何・性能・許可取消の既存結果は対象patch/OS/backendと合わせて確認してください。
-以下の測定値・件数・成果物記録は保持していますが、今回fixture runnerは未実行・未検証です。
+測定値・件数・成果物は、以下の記録で確認できます。
 
 `GuaUnitySpatial` reads its explicitly registered `PhysicsScene`;
 `GuaSpatialReader` reads its explicitly registered `World3D` direct state.

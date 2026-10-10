@@ -15,7 +15,7 @@ Playerは公開範囲と入力許可を制限するprofileで、Debug初期化�
 以下の対象platformとengine準備を読み、
 [共通の確認準備と実engine確認の区別](../../../docs/developer-reading-guide.ja.md)へ進みます。
 click成功はdispatchした入力の報告なので、applicationの期待状態もassertしてください。
-今回はUnity起動・build・browser確認を実行していません。既存の対応範囲は以下の記述を保持しています。
+対応範囲と利用手順は以下を参照してください。
 
 The package automatically starts the Gua runtime in Play Mode and desktop Mono
 players on Windows x64, Linux x64, Intel macOS, and Apple Silicon macOS. It

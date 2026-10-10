@@ -16,7 +16,7 @@ Snapshot読取/変更poll」という順です。Snapshotは最新の公開値�
 [CreateObserveOwner / Observe / Notify / SubscribeObservations](../../bindings/dotnet/src/Gua.Core/GuaObserve.cs)から寿命とgetter評価を追い、
 [ObserveTests](../../bindings/dotnet/tests/Gua.Selector.Tests/ObserveTests.cs)で失敗・復旧・resetを確認します。
 手順は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)、接続をまたぐ購読は
-[Observe transport](observe-transport-v1.md)です。以下の契約と過去の実行記録は保持しています。
+[Observe transport](observe-transport-v1.md)です。詳細な条件と実装時の検証記録は以下を参照してください。
 
 Issue #119 / G-02。構造の正本は `observe-v1.schema.json`、値は既存の
 [Value v1](value-v1.md)。OPEN-03、およびG-02が担当するOPEN-04を本書で確定する。

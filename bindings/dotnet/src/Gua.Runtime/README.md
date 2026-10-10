@@ -16,7 +16,7 @@ GuaClockも、明示的に利用したゲーム処理だけを制御します。
 [GuaRuntime](GuaRuntime.cs)はUI/bridgeの入口、
 [game-input API](GuaGameInput.cs)は保持・lease・cleanupの入口です。
 [ObserveTransportTests](../../tests/Gua.Selector.Tests/ObserveTransportTests.cs)等のruntime経路と
-[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)を参照してください。下のAPI条件を保持し、受理結果からゲーム上の成功を推定しません。
+[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)を参照してください。APIの条件は以下に説明しています。受理結果だけではゲーム上の成功を確認できません。
 
 Semantic Game Action descriptor v2 exposes `Category`, `Aliases`, `Tags`, and
 `AgentExposure`. Use `FindGameInputActions` with a `GuaGameInputActionSelector`

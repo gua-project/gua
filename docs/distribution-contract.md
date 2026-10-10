@@ -14,7 +14,6 @@ RIDはOS/CPU別の資産を選ぶ識別子です。
 下の実行例には、事前に作った正確なpackage feedとfull commitが必要です。
 確認準備と確認の段階は[開発者ガイド](developer-reading-guide.ja.md)、
 native buildは[toolchain文書](native-toolchains.md)を参照してください。
-今回このconsumerコマンドは未実行・未検証です。
 
 以下のacceptance表・hash・過去のroute記録は検証証拠です。
 それぞれの対象commit・環境・機能の範囲で読み、現在の全engine対応や公開済み版の保証へ広げません。

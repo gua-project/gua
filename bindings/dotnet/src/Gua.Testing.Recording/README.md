@@ -16,7 +16,6 @@ Recordingは再生する入力、Traceは実行時の事実を調べる証拠と
 [GuaReplayer.ReplayAsync](GuaReplayer.cs)、
 [RecordingTests](../../tests/Gua.Visual.Tests/RecordingTests.cs)が読む入口です。
 下の使用例と[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)のVisual/Recording suiteで、相関・待機・秘密参照を確認します。
-今回そのローカル手順は未実行です。
 
 `Gua.Testing.Recording` records semantic Gua actions and replays them through the
 normal request-ID-correlated action lifecycle. The package targets both `net10.0`

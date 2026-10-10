@@ -15,7 +15,7 @@ EmitActionResult → 同じIDの完了をpoll」です。受理だけで成功�
 [Observe API](GuaObserve.cs)が追加値の入口です。
 `RID`はOS/architectureごとのnative資産の選択名です。
 下のtarget/resolver/packing説明と[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)を読み、Selector suiteでbinding境界を確認します。
-今回はローカル手順を実行していません。native testの成功だけでengine内の適用を保証しません。
+native testの成功だけでengine内の適用を保証しません。
 
 `Gua.Core` is the .NET binding for the native Gua C ABI.
 

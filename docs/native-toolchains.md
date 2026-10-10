@@ -15,7 +15,6 @@ libraryのbuild成功、native unit test、managed binding、実engine適用は�
 [root CMakeLists.txt](../CMakeLists.txt)がtargetの入口、
 [native core](../native/gua-core/CMakeLists.txt)と
 [runtime](../native/gua-runtime/CMakeLists.txt)がlibrary/testを定義します。
-以下の各platformコマンドは今回未実行・未検証です。
 iOS/Androidの将来方針を、現在の検証済みdesktop経路と同じ対応保証にはしません。
 
 Gua's native reference implementation is developed first on Windows with MSVC.

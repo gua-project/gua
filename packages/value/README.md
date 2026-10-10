@@ -12,7 +12,6 @@ catalogはenum型名と許される候補の対応表です。
 下の例を[Value契約](../../protocol/specs/value-v1.md)と読み合わせ、
 [共通準備とValue test/check](../../docs/developer-reading-guide.ja.md)で型・境界・比較を確認します。
 このpackageはgameの観測・操作やtransportを実装しません。
-ローカル手順は今回未実行・未検証です。
 
 Gua共通Value v1の型・検証・等価比較。契約は
 [`protocol/specs/value-v1.md`](../../protocol/specs/value-v1.md)を参照する。

@@ -17,7 +17,6 @@ Player公開範囲とgame inputの許可はhostが決め、tool引数では昇�
 [共通準備とWebMCP test/check](../../docs/developer-reading-guide.ja.md)で登録・取消・完了待機を確認します。
 実験的なbrowser API・実engine exportの確認は別に必要です。
 fake modelContextの成功はbrowser/物理機能の実行証拠ではありません。
-ローカル手順は今回未実行・未検証です。
 
 Browser-native WebMCP adapter for a Gua-enabled Godot Web Export or Unity WebGL page.
 It registers tools on the experimental `document.modelContext` API and calls an

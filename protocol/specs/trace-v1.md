@@ -17,7 +17,7 @@ hostの時計は別なので、同じ数値を同時刻や原因の証拠とし�
 確認準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)のVisual/Trace suiteを使います。
 表示とoffline reportは[Trace Viewer](trace-viewer.md)、過去の統合結果は
 [acceptance記録](trace-integrated-acceptance.md)を参照してください。
-以下の保存条件と既存検証参照を現在の再実行結果には読み替えません。
+保存形式と品質の詳細な条件は以下に説明しています。
 
 Trace は操作と観測の事実を保存する。Goal、条件の時間的採点、主結果の
 優先順位、再送、Replay、入力解除、時計操作は呼び出し側の責務である。

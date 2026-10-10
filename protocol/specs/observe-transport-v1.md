@@ -16,7 +16,7 @@ Valueの型とenum候補を運ぶため、応答はObserve本文の`document`と
 [runtime Observe client](../../bindings/dotnet/src/Gua.Runtime/GuaRuntime.Observe.cs)がnativeへ接続します。
 [ObserveTransportTests](../../bindings/dotnet/tests/Gua.Selector.Tests/ObserveTransportTests.cs)は実WebSocketの型保持・欠落・reset・他接続拒否の入口です。
 確認の準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)を参照してください。
-下記の経路表と実行結果は実装時の記録で、今回のengine実行を表すものではありません。
+下記の経路表と実行結果は、それぞれに記載した環境と機能についての検証記録です。
 
 G-01/G-02のValue、Owner、sample、通知、gap、epoch、公開profile契約をそのまま使う。
 OPEN-01は追加capability `observe_v1` と新コマンドで解消する。既存UI/World、

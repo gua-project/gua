@@ -14,9 +14,8 @@ UIの公開と実操作はUPMのruntime adapter、探索・待機・assertionは
 [UnitySceneTestHost](UnitySceneTestHost.cs)と
 [Unity runtime文書](../../../unity/Documentation~/index.md)が入口です。
 [UnityIntegrationTests](../../tests/Gua.Unity.Integration.Tests/UnityIntegrationTests.cs)は実engine準備が必要な別suiteです。
-共通の準備と未確認範囲は[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)を参照してください。
-以下のplatform/API説明を保持し、Mono経路の説明からIL2CPPや全Editor構成の成功を推定しません。
-今回のUnity起動・buildは未実行・未検証です。
+共通の準備と確認範囲は[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)を参照してください。
+対象platformとAPIは以下を参照してください。Mono経路の確認だけでは、IL2CPPや全Editor構成の動作は確認できません。
 
 Starts Unity 6000.5+ Editor Play Mode or Mono standalone players on Windows x64,
 Linux x64, Intel macOS, and Apple Silicon macOS, and

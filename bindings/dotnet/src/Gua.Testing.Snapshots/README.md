@@ -15,7 +15,7 @@ UIとWorldも同時取得とは限りません。秘密の全表現へルール�
 [CompareSnapshot / ExpectSnapshot](GuaSemanticSnapshots.cs)が実装、
 [SemanticSnapshotTests](../../tests/Gua.Snapshots.Tests/SemanticSnapshotTests.cs)が差分・承認・maskの確認箇所です。
 下のoptions例と[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)のSnapshot suiteを使います。
-baseline更新は通常の確認手順に混ぜず、今回の手順は未実行・未検証です。
+baseline更新は期待結果を書き換えるため、差分を確認して明示承認し、通常の確認手順とは分けて行ってください。
 
 Opt-in semantic regression comparison for UI and optional World trees. Targets
 `net10.0` and `netstandard2.1`; depends on `Gua.Testing`. No native or engine API

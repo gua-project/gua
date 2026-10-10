@@ -17,7 +17,7 @@ spaceEpochはscene再生成や原点変更の境界、coverageはhostが確認�
 物理実行には[host契約](spatial-host-r1.md)と
 [engine側読取](../../docs/spatial-engine-r1.md)を続けて読みます。
 [開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)のSelector suiteはoffline条件を含みますが、engine精度や性能の測定ではありません。
-以下の幾何・結果・ABI条件と既存evidenceを保持します。
+幾何・結果・ABIの詳細な条件と検証証拠は以下を参照してください。
 
 `spatial-r1` is a contract identifier, not a product release. The source of truth
 is `spatial-r1.schema.json` plus the semantic rules below. These are offline

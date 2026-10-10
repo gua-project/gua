@@ -14,7 +14,6 @@ epochはreset世代、frameは公開回、revisionは内容の変更を識別し
 下の使用例と[共通準備とWorld test/check](../../docs/developer-reading-guide.ja.md)で
 型・selector・tool処理を確認します。spatial tool schemaの共有も、
 browserへTesting/Debugの物理読取権限を与えるものではありません。
-ローカル手順は今回未実行・未検証です。
 
 Browser-safe World Object Tree v1 types, payload validators, MCP tool definitions,
 and provider adapters shared by `gui-mcp` and browser WebMCP integrations.

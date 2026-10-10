@@ -16,7 +16,6 @@ Worldは読取だけ、game inputとspatialはhostの明示許可と能力確認
 以下のUsageで接続先・成果物directoryを設定し、
 [共通準備とMCP test/check](../../docs/developer-reading-guide.ja.md)でclient処理を確認します。
 そのunit testは任意のgameでの実操作やengineの対応を保証しません。
-ローカル手順は今回未実行・未検証です。
 
 Virtual-time tools are `get_clock`, `clock_install`, `clock_pause`,
 `clock_run_for`, and `clock_resume`. They control only work explicitly connected

@@ -18,7 +18,7 @@ Guarded dispatch は、**観測時の前提を操作に添え、受理時とゲ�
 [Guarded remote dispatch v1仕様](../protocol/specs/guarded-dispatch-v1.md)と
 [schema](../protocol/schema/guarded-dispatch-v1.schema.json)を参照してください。
 実装時のContract mapping、レビュー履歴、テスト件数と成果物保存先は
-[検証証拠](guarded-dispatch-evidence.md)に保持しています。
+[検証証拠](guarded-dispatch-evidence.md)を参照してください。
 その実行履歴だけから現在の動作を保証するものではありません。
 
 ## 2. 操作が実行されるまでの流れ
@@ -161,10 +161,8 @@ CMake 3.20以上、Ninja、.NET SDK 10.0.x、Bun（CIのportable-nativeは1.3.14
 依存取得用のネットワークが必要です。MSVCとNinjaを使えるDeveloper PowerShellで、
 checkoutしたリポジトリのrootから実行してください。Godot/Unityの起動は不要です。
 
-**今回、以下のローカルコマンドはすべて未実行・未検証です。**
-既存のCMake/test定義と[CI設定](../.github/workflows/syntax-check.yml)を照合して
-記載しています。現在の成功件数を示す手順ではありません。実行時はcommit、
-環境、終了コード、test結果、skipとログを記録してください。
+[CI設定](../.github/workflows/syntax-check.yml)にもnative buildとmanaged testの準備例があります。
+実行時はcommit、環境、終了コード、test結果、skipとログを記録してください。
 既存の履歴は[検証証拠](guarded-dispatch-evidence.md)を参照してください。
 
 `build/guarded-guide` はこの手順用の出力先です。別構成のビルドを混ぜず、
@@ -244,12 +242,3 @@ native UIの保持枠は全owner合計256件で、切断後もhost完了待ち�
 - 全engine、MCP/Inspector/WebMCPの全経路、配布済みbinary/packageの受入確認。
   上記ソースとtestを読んだことや、以前のCI成功だけではそれらを証明できません。
 
-### このガイドの照合範囲
-
-2026-10-07にGitHub APIで確認したmain
-`9297e7b49e56d42cfb62ffa7b1a0277337442462` を基準に、
-上記仕様/schema、managed session、bridge/runtime/core、関連test、
-CMake test名、test projectとCIの準備処理を読み合わせました。
-ローカル実行環境の開始エラーが既に確認されているため再プローブは行わず、
-今回のruntime・engine・packageの動作確認は未実施です。
-この記載は過去の検証証拠を更新する新しい実行記録ではありません。

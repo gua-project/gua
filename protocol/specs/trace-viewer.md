@@ -14,7 +14,7 @@ UI boundsとの関連付けが確認できないときは推測したoverlayを�
 [GuaTraceReport.WriteHtml](../../bindings/dotnet/src/Gua.Testing/Trace/GuaTraceReport.cs)がHTML生成、
 [GuaTraceViewer](../../packages/inspector/src/TraceViewer.tsx)が表示の入口です。
 [Trace v1](trace-v1.md)で各事実の意味を読み、下のDeveloper validationで
-fixture生成・画面操作・成果物を確認します。ブラウザーが必要なこの手順は今回未実行・未検証です。
+fixture生成・画面操作・成果物を確認します。この手順にはブラウザーが必要です。
 共通準備とtest suiteは[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)を参照してください。
 表示にエラーがないことは、元のgameの成功や通知の連続性を保証しません。
 

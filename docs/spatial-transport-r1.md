@@ -17,8 +17,8 @@ ownerは要求と結果の接続上の所有者、spaceEpochは空間再生成�
 結果のunknown/partialや保存不能も成功へ読み替えません。
 
 共通の環境準備とfixture/unit testの区別は[開発者ガイド](developer-reading-guide.ja.md)にあります。
-下記の生成・fixture・consumerコマンドは今回未実行・未検証です。
-実測対応表と過去のacceptance記録を保持し、browserのPlayer portに権限があるとは推定しません。
+実測対応表と過去のacceptance記録は、対象の環境と機能の範囲で参照してください。
+browserのPlayer portには、このTesting/Debug照会を実行する権限はありません。
 
 Issue #134 connects the #131 contracts, #132 native scheduler and #133 real-engine
 readers. No physics is implemented in a client. World radius DTOs remain unchanged.
