@@ -1,5 +1,24 @@
 # Gua Trace v1（#109）
 
+## 操作の前後に何が起きたかを残すために
+
+テスト失敗後に「操作を送ったか」「gameが受け取ったか」「どの状態を見て判定したか」を
+読み返す記録です。Traceは呼び出し側の処理や観測の事実を保存し、
+成功条件の決定、再送、Replay、入力解除を代わりに実行しません。
+
+「Trace session作成 → step開始 → 要求IDや観測を関連付ける → step/主結果を記録 →
+finalize → reader/Viewerで読む」という順です。stepは一つの処理のまとまり、
+source/epoch/requestはhost・reset世代・要求の相関です。collectorの取得時計と
+hostの時計は別なので、同じ数値を同時刻や原因の証拠として扱いません。
+欠損・取得不能・保存上限も記録の品質として残します。
+
+[GuaTraceSession.BeginStep / Observe / CompleteAsync](../../bindings/dotnet/src/Gua.Testing/Trace/GuaTraceSession.cs)が保存の入口です。
+[TraceTests](../../bindings/dotnet/tests/Gua.Visual.Tests/TraceTests.cs)を読み、
+確認準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)のVisual/Trace suiteを使います。
+表示とoffline reportは[Trace Viewer](trace-viewer.md)、過去の統合結果は
+[acceptance記録](trace-integrated-acceptance.md)を参照してください。
+保存形式と品質の詳細な条件は以下に説明しています。
+
 Trace は操作と観測の事実を保存する。Goal、条件の時間的採点、主結果の
 優先順位、再送、Replay、入力解除、時計操作は呼び出し側の責務である。
 保存失敗によって主結果を変更しない。

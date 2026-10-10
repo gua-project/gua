@@ -1,5 +1,22 @@
 # Gua.Testing.Recording
 
+## 操作の流れを保存して再現する
+
+設定画面で行ったクリックや値変更を、座標だけでなくsemantic targetと引数の列として保存します。
+`GuaRecorder`で操作し、要求IDに対応する完了を受けて記録し、
+`GuaReplayer`で対象を解決し直して各操作の完了を待ちます。
+Recordingは再生する入力、Traceは実行時の事実を調べる証拠という役割の違いがあります。
+
+通常Replayは逐次完了を待つ方式です。保持入力を区間開始からの時刻で送る必要がある場合だけ
+[Timed Segment](../../../../protocol/specs/timed-segment-v1.md)を明示選択します。
+秘密の入力は平文ではなく`secretKey`参照を記録し、再生時に呼び出し側が値を供給します。
+記録ファイルがあっても、現在のtarget・許可・ゲーム状態で同じ結果になる保証はありません。
+
+[GuaRecorder](GuaRecorder.cs)、
+[GuaReplayer.ReplayAsync](GuaReplayer.cs)、
+[RecordingTests](../../tests/Gua.Visual.Tests/RecordingTests.cs)が読む入口です。
+下の使用例と[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)のVisual/Recording suiteで、相関・待機・秘密参照を確認します。
+
 `Gua.Testing.Recording` records semantic Gua actions and replays them through the
 normal request-ID-correlated action lifecycle. The package targets both `net10.0`
 and `netstandard2.1`. It depends on `Gua.Testing` but has

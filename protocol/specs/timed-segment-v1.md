@@ -1,5 +1,26 @@
 # Timed Segment v1 — OPEN-07
 
+## 完了の遅れに入力間隔を引きずらせないために
+
+例えば「区間開始で移動を押し、200ms後に離す」という有限の入力列では、
+押した操作の完了返信を待ってから200msを数えると保持時間が変わります。
+Timed Segmentは共通の開始時点からのoffsetで送信を予定し、完了待ちを別に扱う拡張です。
+通常のRecording Replayを自動的にこの方式へ変更するものではありません。
+
+「全入力とhost能力を事前検査 → 新ownerで区間開始 → offset順に送信 →
+相関した完了を確認 → 自ownerのcleanupとneutral確認」の順です。
+ownerは保持入力と結果の所有者、leaseはhostの実時間による安全期限です。
+予定releaseが通常の保持終了を担い、lease expiryを正常な再現成功とは扱いません。
+send、resultReceived、hostAppliedはそれぞれ送信境界・返信取得・実適用の時刻で、
+取得していない適用時刻は不明のまま残します。
+
+[GuaTimedSegmentReplay.ReplayAsync](../../bindings/dotnet/src/Gua.Testing.Recording/GuaTimedSegmentReplay.cs)が予定と完了を分け、
+[GuaRuntimeSegmentHost](../../bindings/dotnet/src/Gua.Testing.Recording/GuaRuntimeSegmentHost.cs)がlocal runtimeへつなぎます。
+[TimedSegmentTests](../../bindings/dotnet/tests/Gua.Visual.Tests/TimedSegmentTests.cs)で遅い返信・順序・期限・cleanupを確認し、
+実行準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)のVisual/Recording suiteを使います。
+対応しないsimulationやstrict適用時間を、実時間送信の成功から保証してはいけません。
+以下の能力・時間・結果条件が規範です。
+
 Timed Segment は既存 Recording/Replay の明示的・後方互換な拡張である。
 旧ファイル、`PreserveDelays` / `PreferConditions`、MCP / Inspector の通常 Replay は
 従来の逐次 completion 待ちを維持する。それらは CLOCK-003 の実行経路ではない。

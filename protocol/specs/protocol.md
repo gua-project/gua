@@ -1,5 +1,26 @@
 # Gua Protocol Draft
 
+## 開発者が最初に読む入口
+
+例えばタイトル画面のPlayボタンを外部テストから押すには、gameが画面を意味付きのデータとして
+公開し、testが対象を探して要求を送り、gameが適用し、testが結果を読み直す必要があります。
+Semantic UI Treeはrole・名前・状態・操作を持つ画面の公開表現です。
+World Object Treeは明示登録したgame objectの読取、game inputは別に許可した入力操作を担当します。
+
+frameはadapterが組み立てて公開する一まとまり、revisionは公開内容が変わった番号、
+sessionEpochはreset後の別セッションを区別する世代です。完成前のframeは読取へ公開しません。
+要求の受理とgameでの完了は別で、同じrequest IDの完了を確認した後も、
+期待する画面になったかは明示的に観測します。古い画面を前提にした操作は
+[Guarded dispatchガイド](../../docs/guarded-dispatch-guide.ja.md)を参照してください。
+
+[UI公開・操作のGuaContext](../../bindings/dotnet/src/Gua.Core/GuaContext.cs)と
+[adapter側GuaRuntime](../../bindings/dotnet/src/Gua.Runtime/GuaRuntime.cs)がコードの入口です。
+追加状態は[Value](value-v1.md)から[Observe](observe-v1.md)、
+物理読取は[Spatial](spatial-r1.md)から[host](spatial-host-r1.md)、
+失敗の記録は[Trace](trace-v1.md)へ進みます。
+この文書は基本契約の規範です。機能別の読む順番・確認準備・保証の違いは
+[開発者ガイド](../../docs/developer-reading-guide.ja.md)に集約し、契約を複製しません。
+
 [Guarded remote dispatch v1](guarded-dispatch-v1.md) adds capability-negotiated,
 connection-owned UI and game-input dispatch with atomic enqueue/consume guards.
 

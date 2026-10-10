@@ -1,5 +1,21 @@
 # Semantic Lint v1
 
+## 公開されたUI/Worldの矛盾を調べるために
+
+「クリックできるボタンなのに名前がない」「World objectが参照するUIが見つからない」
+といった公開データの問題を、要求したときに一覧にする診断です。
+Lintは実際の見た目やゲームの正しさを採点するものではありません。
+
+「確定したツリーを取得 → 指定profileの公開範囲でルール検査 → ruleIdとpathを持つreport」
+の順で動きます。stagingはまだ公開していないフレームで、検査対象にしません。
+保存済みsnapshotを使う場合は、呼び出し側が正しい公開範囲のJSONを用意します。
+Lintは登録・公開の途中に自動実行されず、修正やゲーム操作も行いません。
+
+[GuaSemanticLinter.Analyze](../../bindings/dotnet/src/Gua.Core/GuaSemanticLint.cs)から
+[nativeルール実装](../../native/gua-core/src/semantic_lint.cpp)を追ってください。
+[SemanticLintTests](../../bindings/dotnet/tests/Gua.Selector.Tests/SemanticLintTests.cs)は公開済みprojectionとfixtureの確認箇所です。
+実行準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)、判定基準は以下のrule表です。
+
 `semantic-lint.schema.json` describes an explicit, read-only analysis of published
 UI v2 and optional World v1 snapshots. The native core owns all rules. Nothing
 calls lint during registration, publication, observation or action processing.

@@ -1,5 +1,9 @@
 # Gua
 
+日本語で実装を読み始める開発者は
+[読む順番・仕組み・ローカル確認のガイド](docs/developer-reading-guide.ja.md)を参照してください。
+機能別README、規範仕様、過去の検証記録をそれぞれの役割に沿って案内しています。
+
 English | [日本語](README.ja.md)
 
 [![License](https://img.shields.io/github/license/link1345/gua)](https://github.com/link1345/gua/blob/main/LICENSE)

@@ -1,5 +1,23 @@
 # Input Action metadata v1 (#121 / OPEN-01)
 
+## 入力の意味と値の形を利用側へ伝えるために
+
+「移動」の入力にどの値を渡せるかを、ツールがゲーム固有のコードを知らずに確認するための
+追加metadataです。Action Mapはhostが公開する操作一覧、descriptorは各操作の説明です。
+`valueSchema`はSet値の形と制約、`examples`は設計時の値の例であり、
+実行許可や確認済み入力を意味しません。
+
+hostがmetadata付きdescriptorを登録し、対応capabilityを確認したclientが明示的な
+`get_game_input_actions_v2`等で読みます。元のv1応答へ新fieldを混ぜません。
+値の例を選んでも、送信時とhostのconsume時に現在のdescriptor・権限・確認条件を検査します。
+
+[native値schema検証](../../native/gua-core/src/input_value_schema.hpp)と
+[game-input descriptor公開](../../bindings/dotnet/src/Gua.Runtime/GuaGameInput.cs)が実装の入口です。
+[InputMetadataTests](../../bindings/dotnet/tests/Gua.Selector.Tests/InputMetadataTests.cs)の
+`CurrentSchemaAndConfirmationAreRecheckedOnHostConsumption`はconsume時の再検査を示します。
+準備・実行は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)のSelector suiteを使います。
+以下の許可するschema subsetと互換性条件が規範です。
+
 This additive contract preserves the existing `description`, `valueType`,
 `range`, holdability, activity, risk, exposure and confirmation semantics.
 Metadata describes player actions and input axes; never publish secrets in

@@ -1,5 +1,23 @@
 # Observe transport v1（G-03 / #120）
 
+## 外部ツールから追加状態を読むために
+
+ゲーム側で登録した敵のphaseを、別プロセスのテストやMCPから読みたい場合の接続契約です。
+値の登録はゲーム側、接続は読取と購読を担当します。
+Valueの型とenum候補を運ぶため、応答はObserve本文の`document`と
+必要な候補定義の`catalogs`を分けています。
+
+「capability確認 → Snapshot付きsubscribe → subscriptionIdを使うpoll → unsubscribe」
+と進みます。subscriptionIdはその接続の購読を識別する値です。
+返信が失われるとcursorが進んだか不明になるため、同じ購読から都合よく再開せず、
+新しいSnapshotと購読から再同期します。Player/Debugの公開範囲はhostが決めます。
+
+[remote Observe client](../../bindings/dotnet/src/Gua.Testing/GuaWebSocketContext.Observe.cs)が接続世代と購読を保持し、
+[runtime Observe client](../../bindings/dotnet/src/Gua.Runtime/GuaRuntime.Observe.cs)がnativeへ接続します。
+[ObserveTransportTests](../../bindings/dotnet/tests/Gua.Selector.Tests/ObserveTransportTests.cs)は実WebSocketの型保持・欠落・reset・他接続拒否の入口です。
+確認の準備は[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)を参照してください。
+下記の経路表と実行結果は、それぞれに記載した環境と機能についての検証記録です。
+
 G-01/G-02のValue、Owner、sample、通知、gap、epoch、公開profile契約をそのまま使う。
 OPEN-01は追加capability `observe_v1` と新コマンドで解消する。既存UI/World、
 Observe v1 JSON、ABI構造体、version番号を変更しない。旧clientは既存応答を使用できる。

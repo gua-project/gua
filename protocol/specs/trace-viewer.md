@@ -1,5 +1,23 @@
 # Common Trace Viewer and offline report
 
+## 保存したTraceを調べて共有するために
+
+失敗したテストの記録を、ゲームを再起動せずに開く画面です。
+Inspectorのoffline panelと単体HTML reportは同じViewerを使います。
+Trace directoryを選ぶ、または`GuaTraceReport.WriteHtml`で新しいHTMLを作り、
+step・要求・観測・欠損の区別を読みます。記録からゲーム操作やReplayは実行しません。
+
+例えば完了が遅れた入力では、enqueue/consumeとlate-completionを別の事実として表示します。
+スクリーンショットは呼び出し側が許可・必要なmaskを済ませたものだけを添付し、
+UI boundsとの関連付けが確認できないときは推測したoverlayを作りません。
+
+[GuaTraceReport.WriteHtml](../../bindings/dotnet/src/Gua.Testing/Trace/GuaTraceReport.cs)がHTML生成、
+[GuaTraceViewer](../../packages/inspector/src/TraceViewer.tsx)が表示の入口です。
+[Trace v1](trace-v1.md)で各事実の意味を読み、下のDeveloper validationで
+fixture生成・画面操作・成果物を確認します。この手順にはブラウザーが必要です。
+共通準備とtest suiteは[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)を参照してください。
+表示にエラーがないことは、元のgameの成功や通知の連続性を保証しません。
+
 Inspector's **Open Gua Trace (offline)** panel and `GuaTraceReport.WriteHtml`
 use the same `GuaTraceViewer` component and Trace v1 reader. The viewer never
 controls a game, executes Recording, or loads a trace-provided URL/path.

@@ -1,5 +1,22 @@
 # gui-mcp
 
+## native gameをMCPから操作する
+
+AIツールから「設定画面を読み、音量を変えて確認する」ために、MCPの呼出しを
+実行中のgameのWebSocket bridgeへ渡すserverです。gameを起動・実装するものではありません。
+接続先gameがframeを公開し、serverがtreeを読み、操作要求を送信し、
+request IDに対応する完了を待ちます。必要な画面変化はその後の読取で確認します。
+
+[MCP server入口runGuaMcpServer](src/index.ts)から、tool登録・bridge接続・完了待機を追えます。
+送信前の失敗と送信後の完了不明は下のoutcome表で区別します。
+通信断後に操作を無条件に再送すると、既に実行した操作を二重に行う可能性があります。
+Worldは読取だけ、game inputとspatialはhostの明示許可と能力確認が必要です。
+仮想時間はGuaClockを使う処理だけに作用します。
+
+以下のUsageで接続先・成果物directoryを設定し、
+[共通準備とMCP test/check](../../docs/developer-reading-guide.ja.md)でclient処理を確認します。
+そのunit testは任意のgameでの実操作やengineの対応を保証しません。
+
 Virtual-time tools are `get_clock`, `clock_install`, `clock_pause`,
 `clock_run_for`, and `clock_resume`. They control only work explicitly connected
 to GuaClock, not engine-global time.

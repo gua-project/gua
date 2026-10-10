@@ -1,5 +1,22 @@
 # Native Toolchains
 
+## native実装をビルドして確認する
+
+C#やTypeScriptの呼出しが最終的に利用するC ABIのcore/runtimeを、対象OSのcompilerで作るための案内です。
+C ABIは言語間の関数境界、C++20は実装側の言語、MSVCはWindowsで使うcompilerです。
+configureはbuild条件と出力directoryを決める段階、buildは実際にlibraryとtest実行ファイルを作る段階です。
+
+Windowsでは[現在のCMakePresets.json](../CMakePresets.json)がVisual Studio 18 2026/x64と
+Debug/Releaseの出力先を指定します。CMake 3.21以上に加え、そのgeneratorを扱えるCMakeと
+対応Visual StudioのC++ workloadが必要です。下のpresetコマンドにはその環境を用意します。
+[Ninjaによる限定した確認準備とCTest](developer-reading-guide.ja.md)も参照してください。
+libraryのbuild成功、native unit test、managed binding、実engine適用は別々の確認です。
+
+[root CMakeLists.txt](../CMakeLists.txt)がtargetの入口、
+[native core](../native/gua-core/CMakeLists.txt)と
+[runtime](../native/gua-runtime/CMakeLists.txt)がlibrary/testを定義します。
+iOS/Androidの将来方針を、現在の検証済みdesktop経路と同じ対応保証にはしません。
+
 Gua's native reference implementation is developed first on Windows with MSVC.
 That is the primary local toolchain for early C++ work.
 

@@ -1,5 +1,23 @@
 # 共通Value v1
 
+## 値を言語間で同じ意味にするために
+
+敵の状態が「第2段階」へ変わったことをC#とTypeScriptで比較したいとき、
+文字列や数値を適当に変換すると、型やenumの定義が失われます。
+Valueは型を付けた値の共通表現です。`integer`と`number`は別型、
+`list`は順序付き、`set`は順序を無視して比較する集合です。
+enumのcatalogは、`game.BossPhase`のような型名と許される候補名を対応付けます。
+
+流れは「型とenum候補を用意 → 値を生成/元JSONから読取 → 検証 → 型を保った比較/出力」です。
+外部JSONは数値へ丸める前の文字列から読みます。Valueそのものはゲームを観測せず、
+UIやWorldの既存フィールドを自動的にこの形式へ置き換えません。
+
+[GuaValue.FromJson / ValueEquals](../../bindings/dotnet/src/Gua.Core/GuaValue.cs)はnativeへ委譲する入口、
+[parseValue / valuesEqual](../../packages/value/src/index.ts)はTSの入口です。
+[ValueTests](../../bindings/dotnet/tests/Gua.Selector.Tests/ValueTests.cs)で往復・拒否・比較を読み、
+[開発者ガイドのローカル確認手順](../../docs/developer-reading-guide.ja.md)のSelector/Value suiteで確認します。
+以下のschema・ABI条件が規範で、末尾の成功件数は過去の検証記録です。
+
 Issue #118 / G-01。`value-v1.schema.json` と `enum-catalog-v1.schema.json` が
 追加観測Valueの構造の正本であり、本書が意味検証・比較・ABIを規定する。
 既存World state、UI value、Input vector2とは別の契約である。

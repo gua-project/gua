@@ -1,5 +1,23 @@
 # gua-webmcp
 
+## browser内のgameへツールをつなぐ
+
+Godot Web ExportやUnity WebGLのページ内で、ブラウザーのツール呼出しを
+同じページのengine bridgeへ渡すadapterです。
+例えばUIを読み、確認済みのボタン操作を送り、engineが適用した完了を受け取ります。
+外部MCP serverの起動やWebSocket接続はこのpackageの役割ではありません。
+
+[registerGuaWebMcp / createGodotWebBridge / createUnityWebGlBridge](src/index.ts)が入口です。
+engineが用意したportを接続し、利用できるcapabilityだけをtoolとして登録します。
+ownerはこのページの保持入力と完了の所有者です。timeout・取消・解除・engine終了では
+その入力を解放します。既にconsumeした操作の副作用がなかったとは判断できません。
+Player公開範囲とgame inputの許可はhostが決め、tool引数では昇格できません。
+
+以下のport準備とfeature detectionを確認し、
+[共通準備とWebMCP test/check](../../docs/developer-reading-guide.ja.md)で登録・取消・完了待機を確認します。
+実験的なbrowser API・実engine exportの確認は別に必要です。
+fake modelContextの成功はbrowser/物理機能の実行証拠ではありません。
+
 Browser-native WebMCP adapter for a Gua-enabled Godot Web Export or Unity WebGL page.
 It registers tools on the experimental `document.modelContext` API and calls an
 engine bridge in the same page. It does not start an MCP server or WebSocket.

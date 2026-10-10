@@ -1,5 +1,22 @@
 # Gua.Testing.Snapshots
 
+## 公開データの変化を回帰テストにする
+
+設定画面のrole、label、値や階層が意図せず変わったことを、
+承認したbaseline（期待する公開JSON）と比較するpackageです。
+見た目のpixel比較は[Visual](../Gua.Testing.Visual/README.md)が担当します。
+
+流れは「安定したUI/必要ならWorldを読む → mask/ignoreルールで正規化 →
+baselineと比較 → 差分と結果を保存」です。初回baselineも明示承認が必要です。
+通常CIでは承認を有効にせず、欠落・差分を失敗として読みます。
+既定ではbounds/positionやframe metadataを比較から外すため、位置や鮮度の保証にはなりません。
+UIとWorldも同時取得とは限りません。秘密の全表現へルールを用意するのは呼び出し側です。
+
+[CompareSnapshot / ExpectSnapshot](GuaSemanticSnapshots.cs)が実装、
+[SemanticSnapshotTests](../../tests/Gua.Snapshots.Tests/SemanticSnapshotTests.cs)が差分・承認・maskの確認箇所です。
+下のoptions例と[共通の確認準備とsuite別手順](../../../../docs/developer-reading-guide.ja.md)のSnapshot suiteを使います。
+baseline更新は期待結果を書き換えるため、差分を確認して明示承認し、通常の確認手順とは分けて行ってください。
+
 Opt-in semantic regression comparison for UI and optional World trees. Targets
 `net10.0` and `netstandard2.1`; depends on `Gua.Testing`. No native or engine API
 changes are required. This package does not replace screenshot/Visual comparison:
