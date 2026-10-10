@@ -7,6 +7,15 @@ on:
       - main
 
 jobs:
+  release-visible-version:
+    name: Release visible version metadata
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag-driven Inspector and packaged Godot versions
+        shell: pwsh
+        run: scripts/test-release-visible-version.ps1
+
   godot-desktop-addon-contract:
     name: Godot desktop / ${{ matrix.rid }}
     needs: pack-native-nuget
