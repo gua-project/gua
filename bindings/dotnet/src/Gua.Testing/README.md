@@ -420,3 +420,35 @@ coreのTrace writerに逆依存を追加しない。既存比較とdiagnostics s
 Player diagnosticsは認可済みgetter/profileを明示する`GuaTraceCapture.Diagnostics` overloadを使う。
 既存diagnostics sessionは`GuaDiagnosticOptions.Trace/TraceStepId`でDebug Stepへ接続できる。
 Lintはreport添付のみ、比較は呼出側の明示呼出しだけで、TraceはScenario成否やReplayを決めない。
+
+## Bounded offline Trace HTML
+
+`GuaTraceReport.RenderHtml(GuaTraceReadResult trace, int maxOutputBytes)` renders
+an already inspected snapshot without reading or writing files. Read with
+`GuaTraceReader.Read(directory, maxBytes, maxRecords, maxRecordBytes)` using
+appropriate input limits, inspect/redact the actual snapshot, then pass that
+same snapshot to the renderer. Keep the snapshot and its collections unchanged
+throughout rendering. The renderer does not perform secret detection or redaction.
+
+The result is `GuaTraceHtmlResult(bool Succeeded, byte[]? Utf8Html, string? Error)`.
+Success returns the complete self-contained UTF-8 HTML without a BOM, including
+the bundled Viewer and its CSP hash. Its byte length is at most `maxOutputBytes`.
+Save those bytes with a create-only file operation after admitting them against
+the destination budget. Saving, cancellation, and filesystem errors belong to the
+caller. Do not reconstruct the HTML, rescan the public Viewer for literal secrets,
+or reread the trace between inspection and rendering.
+
+A nonpositive cap returns `invalid-output-limit`. Exceeding the cap during
+generation returns `report-limit`. Bundle failures return `viewer-not-bundled` or
+`invalid-viewer-bundle`; other rendering failures return `report-failed`.
+Every failure returns `Succeeded = false` and `Utf8Html = null`; no partial output
+or filesystem side effect is exposed. Errors contain no input text or paths.
+
+The output buffer capacity is capped, and success creates one additional exact
+byte-array copy. JSON is serialized to the bounded stream without a complete
+intermediate JSON/HTML string. The cap is an output limit, not a total managed
+heap limit: the existing input snapshot, fixed bundled Viewer, serializer buffers
+(including the largest encoded token), and returned copy also consume memory.
+Bound input separately with the reader limits. `WriteHtml(directory, path)` shares
+this renderer and retains its create-only behavior and existing error contract;
+its legacy overload has no caller-selectable output budget.
