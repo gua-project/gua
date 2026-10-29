@@ -101,28 +101,20 @@ remote `GuaWebSocketContext`のObserve APIはtransport形式を返す。
 InspectorはObserve panelで候補と通知を表示し、gap/staleで再購読を要求する。
 MCP/WebMCPは同名の4 commandを公開し、remote側から登録・profile選択はできない。
 
-## 実行した検証と残る境界
+## 再現手順と判定範囲
 
-Windows MSVC / Godot 4.7 / Unity 6000.7.0b2で検証。
-
-- native C/C++ CTest 8/8。catalog破棄後のsnapshotと履歴、空enum set、buffer契約を含む。
-- .NET Selector tests 193/193（Observe transport統合9件を含む）。実native runtime→WebSocket→.NET。
-- 実Godot GDScript smoke：enum、空list、Player投影、非公開化のgap、破棄通知。
-- 実Unity desktop Player：Debug/Player 2/2。World位置、追加phase、候補、空list、秘密値除外、変更、reset。
-- 実Godot→Inspector/MCPの各WebSocket client：独立購読、semantic click、変更poll。
-- TypeScript全workspace check成功。対象Bun tests 226/226。
-  WebMCPはcapability、購読解除、timeout後の遅延応答の解除を試験。
+過去の実行環境・成功件数・修正経緯は[検証記録](https://github.com/gua-project/gua/pull/185#issuecomment-6487401918)を参照。
+以下の手順では実行した版・環境とログを保存し、実engineとfixtureの結果を区別する。
 
 外部clientの再現はGodotで`--headless --path examples/godot-gdscript --script scripts/gua_observe_fixture.gd`
 を起動し、`GUA_BRIDGE_PORT`と`GUA_OBSERVE_BRIDGE_URL`を揃え、
 `bun scripts/run-observe-client-smoke.ts`を実行する。
 Godot Web/Unity WebGLの実exportをheadless Chromeで起動し、実Object登録→Player snapshot→
-SDK toolからsemantic click→両独立購読の変更通知→解除を確認した。
-Godotは空enum set、Unityは空enum list。両方ともenumTypeと候補を保持する。
-UnityのIL2CPPで非参照Bootstrap assemblyが除去される問題を再現し、
-`AlwaysLinkAssembly`でフレーム駆動を維持する修正後の実exportで確認した。
-.NETは応答喪失時のsocket破棄・再接続と64件上限の明示拒否後の既存token維持を試験。
-不足symbolのDLL注入では初期化失敗時のnative destroyが一度だけ呼ばれることを確認した。
+SDK toolからsemantic click→両独立購読の変更通知→解除を確認する。
+Godotは空enum set、Unityは空enum list。両方ともenumTypeと候補を保持すること。
+UnityのIL2CPPでは非参照Bootstrap assemblyも保持し、フレーム駆動を維持する必要がある。
+.NETは応答喪失時のsocket破棄・再接続、64件上限の明示拒否後の既存token維持、
+初期化失敗時にnative destroyが一度だけ呼ばれることを確認する。
 
 Webの再現はGodotのmain sceneを`GuaObserve.tscn`へ設定してWeb debug exportし、
 Unityは通常fixtureをWebGLへexportする（TMP準備は既存`import-unity-tmp-resources.ps1`）。
