@@ -134,29 +134,21 @@ phase.Notify();
 var changes = subscription.PollJson(); // statusを必ず確認する
 ```
 
-## 要件・検証・後続
+## 要件と検証の対応
 
-| 要件 | G-02の検証 | 後続 |
+| 要件 | 検証 | 関連契約 |
 | --- | --- | --- |
-| AT-OBS-001 | 複数Owner同名、重複拒否、解除・破棄・再生成、reset | #120 実エンジン寿命への接続 |
-| AT-OBS-003 | added/changed/removed、取得不能・復旧、理由、秘密値 | #125 Trace保存 |
-| AT-OBS-004 | 原子的Snapshot+cursor、並列publish、独立購読、件数/byte欠損 | #120 transport切断、#125 欠損保存 |
-| VALUE-002 | 共通Value等価・不正値・collectionコピー | #120 wireでの型保持 |
-| TIME-002 | frame/explicitの順序、UI/World別frame、epoch | #125 収集時計との関連付け |
+| AT-OBS-001 | 複数Owner同名、重複拒否、解除・破棄・再生成、reset | [transport](observe-transport-v1.md)の実エンジン寿命 |
+| AT-OBS-003 | added/changed/removed、取得不能・復旧、理由、秘密値 | [Trace](trace-v1.md)保存 |
+| AT-OBS-004 | 原子的Snapshot+cursor、並列publish、独立購読、件数/byte欠損 | transport切断、Trace欠損保存 |
+| VALUE-002 | 共通Value等価・不正値・collectionコピー | transportのwire型保持 |
+| TIME-002 | frame/explicitの順序、UI/World別frame、epoch | Trace収集時計との関連付け |
 
 共通fixtureは `protocol/fixtures/observe-v1.json`。native/C++と.NETが遷移例を実行し、
 Bun/Ajvが正常・異常documentを検証する。既存Value/UI/World/reset試験を維持する。
 Godot/Unity、Gua.Runtime/bridge、MCP/WebMCP、Inspectorの接続は[Observe transport v1](observe-transport-v1.md)を参照。
-Trace writer/reader/Viewerと製品E2Eは#125ほか。GuaのCIからPlaytestを参照しない。
+Trace writer/reader/Viewerは[Trace仕様](trace-v1.md)を参照。製品E2Eは利用側で検証し、GuaのCIからPlaytestを参照しない。
 検証実績は変更の引き渡し時に記載し、未実行のremote CIやengine E2Eを成功扱いしない。
 
-### ローカル検証記録（2026-09-29）
-
-- MSVC 19.51 + Ninja、Godot無効・WebSocket bridge有効でビルド成功。
-  VS2026標準presetはローカルのinstance検出に失敗したため、VsDevCmd経由のNinja構成を使用。
-- CTest 8/8、Gua.Selector.Tests 144/144（skipなし）。C++ getter内Context moveの追加回帰も成功。
-- Gua.Coreのnet10.0 / netstandard2.1ビルド、全workspaceの`bun run check`成功。
-- Value/ObserveのBun 87/87、実native/.NET出力8 documentのAjv検証成功。
-- 読み取り専用監査のOwner明示破棄後Player履歴、.NET getter内Disposeを失敗試験で再現し修正。
-  C++ getter内Context moveも寿命tokenを維持する回帰試験で修正を確認。
-- remote CI、他OS、エンジンのObserve接続、Traceへの保存は未実行・今回の統合完了対象外。
+過去のローカル検証結果・監査経緯は[検証記録](https://github.com/gua-project/gua/pull/185#issuecomment-6487401918)を参照。
+対象版・環境に限定した証拠であり、現在のengine E2Eの成功を意味しない。

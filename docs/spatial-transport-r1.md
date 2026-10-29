@@ -125,6 +125,10 @@ before packing Gua.Testing. No release or deployment is performed by these check
 
 ## Measured support / 実測対応表
 
+The table below records PR #168 scope. For later pinned route results and current
+limitations, use the [current acceptance record](remaining-route-acceptance.md#current-acceptance-status).
+It does not revalidate any route at the current source revision.
+
 | Engine / OS / backend | Native scheduler & bindings | WebSocket / Native MCP | Built-in browser privilege |
 | --- | --- | --- | --- |
 | Godot 4.7 stable / Windows x64 / GodotPhysics3D | Real packaged addon and host pump | TypeScript, built native MCP and isolated candidate NuGet consumer passed; common Trace/report generated | Unsupported |
@@ -134,7 +138,7 @@ before packing Gua.Testing. No release or deployment is performed by these check
 | Unity Linux/macOS / other engine patches/backends | Unverified for #134; no inherited transport acceptance claim | Unverified | Unsupported built-in privilege path |
 | Godot Web / Unity WebGL | Existing ports project Player/PublicAgent | No authorized r1 Testing/Debug browser channel | Unsupported; tools absent |
 
-The current engine/consumer execution record is [PR #168](https://github.com/gua-project/gua/pull/168)
+The historical engine/consumer execution record is [PR #168](https://github.com/gua-project/gua/pull/168)
 and [parent #130](https://github.com/gua-project/gua/issues/130): tested commits,
 commands, per-RID CI artifacts and unverified scope are recorded there. The
 desktop Godot CI checks require three actual physics batches (TypeScript, MCP,
@@ -152,6 +156,7 @@ Report payload/HTML checks do not imply a new browser visual QA pass.
 Input ports remain public projections. A future privileged browser transport
 needs its own host authorization and actual engine/browser verification.
 
-Parent #130 evidence is mapped to #131 contracts, #132 scheduling, #133 engine
-geometry/profiling and #134 routes/Trace/package acceptance. Distribution #129
-remains open; neither this change nor the previous engine merge completes #130.
+Parent acceptance conditions, closure and retained limitations are recorded in
+the [acceptance record](remaining-route-acceptance.md#current-acceptance-status).
+Contract, scheduling, engine and transport evidence have distinct scopes; no
+individual fixture establishes all routes or all features.

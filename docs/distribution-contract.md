@@ -28,7 +28,7 @@ the latest schemas or rebuilds the Viewer.
 
 `0.0.0-ci` is the existing private CI candidate identifier. It is meaningful only
 with a full commit and SHA-256 manifest, and must never be uploaded as a public
-release. The source default `0.5.0-preview.3` and existing GitHub releases do not
+release. Existing source defaults and GitHub releases do not
 select the next release version or channel. No tag or publication is needed to
 run artifact acceptance. Issue #129 is judged against actual artifacts built
 from an identified target commit/version, including retained hashes and evidence
@@ -77,28 +77,15 @@ tests on a source fixture are supporting evidence only; artifact acceptance
 must use the identified addon/UPM payload in the engine fixture and verify the
 actual archive composition separately. A published release is not required.
 
-The [PR #168 execution record](spatial-acceptance-followup.md) provides actual
-Godot 4.7 stable GodotPhysics3D/Jolt bridge, built Native MCP and isolated
-NuGet-consumer runs on all four RIDs. It uses the candidate addon payload also
-assembled into validated ZIPs, rather than demonstrating engine execution from
-the extracted ZIPs. Its reviewed head is
-`0fd01cbcd11c5b5d30399c9a6273418d193edd68`; CI artifacts pin the identical-tree
-checkout `9c2eb7b59a356680806e287a4e2c48fb3b0fb1be` and package version `0.0.0-ci`.
-Windows Unity 6000.5.3f1 standalone Mono/PhysX passed the same three spatial
-client paths. The later [identified UPM route record](distribution-route-evidence.md)
-also establishes Windows artifact-only Editor Play Mode and Player UI operation,
-plus a precompiled-provider Player spatial run, at its stated commit/archive hash.
-These results establish their measured scope, not every feature in the engine
-packages. Existing release-only CI already defines four-RID Unity jobs; the
-separate candidate workflow makes Player validation available without a tag or
-publication. The [current acceptance record](remaining-route-acceptance.md#current-acceptance-status)
-retains Windows/Linux Editor, four-RID Mono Player/spatial and Godot evidence,
-and the later native arm64 Editor success. Native Intel macOS / Unity
-6000.5.3f1 / actual UPM / Editor Play Mode is **UNVERIFIED**: no Intel Mac is
-available and the test was not executed. This is not a failed or unsupported
-route. Issue #129/#130 closure does not establish Intel Editor acceptance;
-M4, Rosetta and Intel Player results cannot substitute for it. This limitation
-does not extend to all Intel routes or other measured features, patches or backends.
+Measured route outcomes, tested commits, package/archive hashes and CI references
+are retained in the [current acceptance record](remaining-route-acceptance.md#current-acceptance-status),
+[Godot/Unity spatial record](spatial-acceptance-followup.md) and
+[identified UPM record](distribution-route-evidence.md). Read each within its
+recorded product/recipe scope; no later-source or all-feature acceptance is implied.
+Native Intel macOS / Unity 6000.5.3f1 / actual UPM / Editor Play Mode remains
+**UNVERIFIED** because no Intel Mac is available and the test was not executed.
+M4, Rosetta and Intel Player results do not substitute for it. This limitation
+does not invalidate the other measured Intel routes.
 
 Godot C# runtime samples, Unity IL2CPP, Unity IMGUI, EditorWindow automation,
 unlisted RIDs and experimental browser paths are outside this desktop acceptance.
@@ -134,14 +121,11 @@ Godot addon archives include the MIT notice for the pinned godot-cpp dependency
 ## Compatibility and completion gates
 
 Previously published package names, native ABI and public managed signatures are retained.
-The new Value package is `gua-value-tools`; the rejected `gua-value` name was
-never published. See the [1.1.0 release plan](release-1.1.0.md) for the bounded
-compatibility review and publication prerequisites.
+The Value package is `gua-value-tools`. The historical naming decision and
+bounded compatibility review are retained in the [1.1.0 release plan](release-1.1.0.md).
 External tools that pin the strict 1.0.10 diagnostics/version schemas must
 update those schemas when upgrading: added response fields fail their old
-unknown-property rules. No failure was demonstrated on the supported
-same-release paths; this caveat does not require a runtime compatibility fix
-or a major-version change before the proposed 1.1.0 publication.
+unknown-property rules. Use the schemas distributed with the selected release.
 The current native version API reports `abiVersion: 1` and
 `protocolSchemaVersion: "2"`; versioned descriptor structs remain additive C ABI
 extensions. The external consumer asserts these values and retains
@@ -195,17 +179,13 @@ scripts/verify-distribution-consumer.ps1 -PackageDirectory artifacts/packages `
 | AT-PACK-002 | Consumer copied outside the repository; isolated NuGet caches; local-feed-only acceptance restore; native overrides rejected |
 | AT-PACK-003 | Extracted self-contained consumer ZIP and fresh installed .NET Tool run, package manifests and embedded report |
 
-Candidate acceptance incorporates merged #122 at
-`989163781a0e5ce6ac629e99a7d140a47e0db1ad` and repeats the four-RID consumer gates.
 Issue closure requires exact-head required CI/audit success and a mapping of
 the original #129 acceptance conditions to the identified target artifacts,
 environment, assertions, results and remaining support scope. Retain package
 versions, source commits, hashes, dependency/license manifests, Viewer evidence
 and actual launch/attach/operation evidence for each declared RID/route; skips,
 loading alone and unrelated consumer success do not satisfy those conditions.
-The four-RID package gates and PR #168 Godot evidence can be reused within their
-measured scope. The owner closed #129/#130 with the native Intel Editor
-unverified limitation retained and tracked in #174; see the current acceptance
-record above. Closure is not a claim that every declared route passed. Public
-publication is separate and is neither required for closure nor authorized by
+Historical closure and execution evidence are retained in the acceptance records
+linked above. Closure does not establish that every declared route passed. Public
+publication is a separate operation and is not authorized by
 successful artifact acceptance.

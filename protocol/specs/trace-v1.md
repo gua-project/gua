@@ -310,24 +310,14 @@ Watchを停止・最後に取得してからfinalizeする。必要な遅い結�
 Watch停止と保存は共通のFlushTimeout予算を使う。応答しない同期readは強制中断せず、
 native-stop-timeoutを残してreaderの追記を停止する。期限後の取得結果は記録へ混入しない。
 
-この変更は T-01 の保存基盤、T-04 の汎用記録口、T-05 の共通 offline Viewer を提供する。
-`.NET GuaActionCompletion` は opt-in 自動記録に接続済み。取得できない epoch は
-unconfirmed として扱い、completion が返した epoch でのみ確定相関する。
+`.NET GuaActionCompletion` はopt-in自動記録に接続する。取得できないepochは
+unconfirmedとし、completionが返したepochでのみ確定相関する。
 
-子作業の実装と保証境界は以下の通り。親 #109 の統合受け入れは
-[trace-integrated-acceptance](trace-integrated-acceptance.md) に条件・assertion・
-対象commit・実行結果を対応付ける。汎用APIだけの証拠と実接続の証拠を区別する。
+保存基盤・外部Runner・共通Viewerの検証範囲と、利用側の保証境界は
+[統合検証記録](trace-integrated-acceptance.md)に記載する。
+対象commit・条件・assertion・実行結果を確認し、汎用APIと実接続の証拠を区別する。
 
-| 子 Issue | 実装済みの範囲 | 保証境界・利用側の責務 |
-| --- | --- | --- |
-| #123 T-01 | schema、writer/reader、有限上限、4 保存組合せ、部分末尾、redaction、容量/中断の故障 fixture | 強制終了時の未flush/メモリのみの保存は保証対象外 |
-| #124 T-02 | Selector/解決ID、明示/自動Step、native UI/Input/cleanup lifecycle、遅い結果、非破壊履歴 | native履歴未提供hostのphaseは未提供と表示。ゲーム画面でのGodot/Unity E2Eは別途 |
-| #125 T-03 | Snapshot/観測の分離、Observeの実native/実WebSocket購読、Value/カタログ、中間Change、欠損、独立UI/World読取 | ゲーム内部の未公開変化、失われた履歴の復元は保証対象外。各Runnerが取得契機を明示する |
-| #126 T-04 | 外部 Runner API、共通 Value、未知注釈/添付、評価/主結果/cleanup分離、native/Observe横断fixture、framework-free配布consumer | 任意の外部Runnerの採点・非公開情報の自動判別・ゲーム画面のE2Eは保証対象外 |
-| #127 T-05 | 共通 React、静的 HTML、timeline/状態/JSON/区間差分、caller-authorized PNGとbounds overlay、全端点・欠損表示、版固定資産/schema配布 | 同時pixel/snapshot取得とpixel秘密判別はcaller責務。ゲーム操作・Replay・外部添付fetchは対象外 |
-| #128 T-06 | 明示Lint report、明示baseline comparison、既存diagnostics session、Recordingの実API接続とnative/Observe統合fixture | 実ゲーム/利用側RunnerのE2E、pixel秘密判別は保証対象外。実行証拠はtrace-validation.md |
-
-## T-06 既存機能の明示接続（#128）
+## 既存機能の明示接続
 
 `GuaTraceCapture.Lint(trace, step, report)` は明示実行済みの
 `GuaSemanticLinter.Analyze` のreportを `gua.semantic-lint.v1` 添付にする。
@@ -386,4 +376,6 @@ queue/artifactが満杯なら追加eventを保証せず、最大64品質issue内
 別APIのまま。汎用添付schemaや未知recordはViewerが安全なtextとして表示する。
 
 Gua は Gua Playtest に依存しない。Observe 本体、InputAction metadata、Replay 時間制御は
-この変更では実装しない。未提供の依存 API を仮実装して完了扱いにはしない。
+それぞれ[Observe](observe-v1.md)、[InputAction metadata](input-action-metadata-v1.md)、
+[Timed Segment](timed-segment-v1.md)の契約を参照する。Traceの記録成功だけから
+それらの実行成功や製品E2Eの完了を推定しない。

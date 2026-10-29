@@ -191,6 +191,6 @@ the tests; the Value Bun suite picks up schema tests. Legacy tests remain active
 | bracket/estimate, missing normals/refs | SP-03 | anonymous/truncated bracket and estimate fixtures |
 | legacy World/Input and old clients | SP-06 | unchanged schemas, existing tests, additive version check |
 
-Fresh prerequisites #72/#73/#98/#118 were closed/completed at implementation
-start on main 60c903b3b218310cc2bf13d2d583fdcc987dee51. Contract tests are not
-adapter execution, engine precision, performance, distribution or Trace proof.
+Implementation prerequisite history is retained in the [implementation record](https://github.com/gua-project/gua/pull/185#issuecomment-6487401918).
+Contract tests are not adapter execution, engine precision, performance,
+distribution or Trace proof.

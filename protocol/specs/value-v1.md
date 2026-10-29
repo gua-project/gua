@@ -114,18 +114,17 @@ C ABI境界のC++例外は捕捉し、allocation等の失敗はinternalに変換
 | 10 | duplicate | set要素／enum候補の重複 |
 | 11 | internal | メモリ割当等の内部失敗 |
 
-## 互換性と後続統合（OPEN-01 / OPEN-02）
+## 互換性と関連契約
 
-G-01のOPEN-01は独立Value v1 schemaと追加のC ABIシンボルで解決する。
+Value v1は独立schemaと追加のC ABIシンボルを使用する。
 既存ABI構造体・wire schema・protocolSchemaVersion・abiVersionは変更しない。
 旧clientがadditionalPropertiesを拒否する既存レスポンスへ新フィールドを追加しない。
 型生成器は導入せず、手書きの各言語型を共通fixtureで照合する。
 
-G-01のOPEN-02は上記enum・Unicode・integer/number・collection規則で解決する。
 containsAll/Any、regex等の条件演算子はP-03で定義する。Observe/Property、
 Snapshot/Change、Assertion、注釈への組み込み時にはこのValue契約を参照する。
-それらのエンドポイント・新field・capability negotiationはG-02/G-03以降で実装し、
-本変更だけで旧clientとの新Observe通信が完成したとは扱わない。
+Observeのエンドポイント・field・capability negotiationは[Observe transport](observe-transport-v1.md)の契約を参照する。
+Value単体の検証からObserve通信の成功を推定しない。
 
 ## 要件と検証の対応
 
@@ -138,15 +137,15 @@ JSON Schemaは構造・型・通常の数値範囲・uniqueItemsを検証する�
 enum参照／定義衝突、Unicode、重複JSONキー、丸め前の整数、非JSON値は意味検証で保証する。
 `schemaReject`は汎用JS schema validatorでも拒否できる異常例を区別する。
 
-| 要件 | 検証 | ローカル結果 |
-| --- | --- | --- |
-| AT-VALUE-001 | 全7型、各空collection、往復、型保持 | native / C# / TS 成功 |
-| AT-VALUE-002 | 整数境界・丸め、小数、非有限、禁止型、Unicode、識別可能な拒否 | native / C# / TS 成功 |
-| AT-VALUE-003 | enum候補取得、型違い、alias、定義衝突 | native / C# / TS 成功 |
-| AT-VALUE-004 | set順序、list順序、重複、-0、空の型 | native / C# / TS 成功 |
-| AT-VALUE-005 | 既存World nullとInput vector2、新Value制限の分離 | 互換回帰試験で確認 |
-| ASSERT-003 | integer/number、enumType、collection型を含む等価 | native / C# / TS 成功 |
+| 要件 | 検証 |
+| --- | --- |
+| AT-VALUE-001 | 全7型、各空collection、往復、型保持 |
+| AT-VALUE-002 | 整数境界・丸め、小数、非有限、禁止型、Unicode、識別可能な拒否 |
+| AT-VALUE-003 | enum候補取得、型違い、alias、定義衝突 |
+| AT-VALUE-004 | set順序、list順序、重複、-0、空の型 |
+| AT-VALUE-005 | 既存World nullとInput vector2、新Value制限の分離 |
+| ASSERT-003 | integer/number、enumType、collection型を含む等価 |
 
 MSVC CTest、NUnit、Bun/Ajvで同じfixtureを消費する。CIにはportable native jobの
 CTest／NUnitと両managed targetビルド、既存TS jobのValue試験を組み込む。
-ローカルWindowsの成功と、未実行のリモートCI・他OS・後続Observe統合は区別する。
+各実行の対象版・環境と未検証範囲を区別する。過去のローカル結果は[検証記録](https://github.com/gua-project/gua/pull/185#issuecomment-6487401918)を参照。
