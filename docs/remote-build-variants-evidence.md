@@ -105,3 +105,17 @@ HEAD `9df9192` の PR CI では、実 WebAssembly（Node上）の4構成 profile
 Linux/macOS の Shipping・AI Player 実 native と staging、Development OFF が合格。
 Windows full-profile GDE の4構成と Godot packaged consumer は実行中。
 これは WebGL browser/Unity WebGL Player の完了証明ではなく、各証拠の実行経路を区別する。
+
+## UPM 構造の実ファイル照合
+
+同じ CI run `41265352383`（HEAD `5a88970`）の実 native 配布物を取得し、実 Unity IL と
+Windows/Linux/macOS arm64 の UPM 配置で verifier の正常系を確認した。
+macOS universal archive の実生成・実行を証明するものではない。
+`verify-unity-variant-package.ps1` は host と同じ native pair の build-info も再 probe し、
+manifest の宣言だけで identity を通さない。他 RID のバイナリは各 producer CI の実 probe と
+manifest/hash を照合する。異なる architecture の DLL を同じ host で実行したとは扱わない。
+`test-unity-upm-mixing.ps1` はその実 verifier に、改名 QA DLL と hash を更新した
+canonical QA runtime 置換を行い、それぞれ extra-file / compiled-identity の正しい理由で拒否した。
+実 fixture は `build/upm-native-proof-ce242cdb`、fault 結果は
+`build/upm-mixing-d9410835c69249efb097d34a902ec9a7/results.json`。
+最終独立監査は2/2終了済みであり、この検証補強は親が実装・実証した。

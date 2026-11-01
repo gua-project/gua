@@ -31,6 +31,12 @@ foreach ($layout in $layouts) {
     foreach ($name in $layout.names) {
         $entry=@($manifest.files | Where-Object path -CEQ $name)
         if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath (Join-Path $native $name) -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry[0].sha256) { throw "Unity native hash mismatch: $($layout.path)/$name" }
+        $hostLayout=if ($IsWindows) {'Windows/x86_64'} elseif ($IsMacOS) {'macOS'} else {'Linux/x86_64'}
+        if ($layout.path -eq $hostLayout) {
+            $symbol=if ($name.Contains('runtime')) {'gua_runtime_copy_build_info_json'} else {'gua_copy_build_info_json'}
+            $actualInfo=(& dotnet $probe native (Join-Path $native $name) $symbol) | ConvertFrom-Json
+            if ($LASTEXITCODE -or ($actualInfo | ConvertTo-Json -Depth 12 -Compress) -ne ($info | ConvertTo-Json -Depth 12 -Compress)) { throw "Unity native compiled identity mismatch: $($layout.path)/$name" }
+        }
     }
 }
 $js = @(Get-ChildItem -LiteralPath $Directory -Recurse -File -Filter '*.jslib')
