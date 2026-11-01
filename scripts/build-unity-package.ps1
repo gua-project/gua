@@ -65,8 +65,13 @@ Copy-Item (Join-Path $root "bindings\unity\package.json") $artifact
 Copy-Item (Join-Path $root "bindings\unity\Documentation~\index.md") (Join-Path $artifact "Documentation~")
 Copy-Item (Join-Path $root "bindings\unity\Samples~") $artifact -Recurse
 Copy-Item (Join-Path $root "bindings\unity\Runtime\link.xml") (Join-Path $artifact "Runtime")
-Copy-Item (Join-Path $plugins "Managed\*.dll") (Join-Path $artifact "Runtime\Plugins\Managed")
-Copy-Item (Join-Path $plugins "Windows\x86_64\*.dll") (Join-Path $artifact "Runtime\Plugins\Windows\x86_64")
+foreach ($assembly in 'Gua.Core.dll','Gua.Runtime.dll') {
+    Copy-Item -LiteralPath (Join-Path $plugins "Managed/$assembly") -Destination (Join-Path $artifact 'Runtime/Plugins/Managed')
+}
+& (Join-Path $PSScriptRoot 'copy-unity-managed-closure.ps1') -AssetsFile (Join-Path $root 'bindings/dotnet/src/Gua.Runtime/obj/project.assets.json') -TargetFramework netstandard2.1 -Destination (Join-Path $artifact 'Runtime/Plugins/Managed')
+foreach ($library in 'gua.dll','gua_runtime.dll') {
+    Copy-Item -LiteralPath (Join-Path $plugins "Windows/x86_64/$library") -Destination (Join-Path $artifact 'Runtime/Plugins/Windows/x86_64')
+}
 Copy-Item -LiteralPath (Join-Path $plugins "Windows/x86_64/gua-build-manifest.json") -Destination (Join-Path $artifact "Runtime/Plugins/Windows/x86_64")
 Copy-Item (Join-Path $root "scripts\unity-meta\gua.dll.meta") (Join-Path $artifact "Runtime\Plugins\Windows\x86_64")
 Copy-Item (Join-Path $root "scripts\unity-meta\gua_runtime.dll.meta") (Join-Path $artifact "Runtime\Plugins\Windows\x86_64")
@@ -78,6 +83,9 @@ Copy-Item (Join-Path $root "scripts\unity-meta\Gua.Unity.dll.meta") (Join-Path $
 Copy-Item (Join-Path $root "scripts\unity-meta\Gua.Unity.Bootstrap.dll.meta") (Join-Path $artifact "Runtime\Plugins\Managed")
 Copy-Item (Join-Path $root "scripts\unity-meta\Gua.Unity.TMP.dll.meta") (Join-Path $artifact "Runtime\Plugins\Managed")
 Copy-Item (Join-Path $root "scripts\unity-meta\Gua.Unity.Editor.dll.meta") (Join-Path $artifact "Editor")
+& (Join-Path $PSScriptRoot 'assert-unity-native-layout.ps1') -Directory (Join-Path $artifact 'Runtime/Plugins/Windows/x86_64') -Platform Windows -Remote on
+$compiled = (& dotnet (Join-Path $root 'tools/Gua.ArtifactProbe/bin/Release/net10.0/Gua.ArtifactProbe.dll') managed (Join-Path $artifact 'Runtime/Plugins/Managed/Gua.Unity.dll')) | ConvertFrom-Json
+if ($LASTEXITCODE -or -not $compiled.RemoteEnabled -or $compiled.PlayerOnly -or -not $compiled.remoteCommandHandler -or -not $compiled.remoteStartReference -or -not $compiled.webInstallImport) { throw 'Development Unity package contains a different compiled managed variant.' }
 $tgzStaging = Join-Path $root "artifacts\unity\tgz-staging"
 if (Test-Path -LiteralPath $tgzStaging) { Remove-Item -LiteralPath $tgzStaging -Recurse -Force }
 New-Item -ItemType Directory -Path $tgzStaging -Force | Out-Null

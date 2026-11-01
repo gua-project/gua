@@ -36,7 +36,10 @@ $package | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $artif
 Copy-Item (Join-Path $root "bindings/unity/Documentation~/index.md") (Join-Path $artifact "Documentation~")
 Copy-Item (Join-Path $root "bindings/unity/Samples~") $artifact -Recurse
 Copy-Item (Join-Path $root "bindings/unity/Runtime/link.xml") (Join-Path $artifact "Runtime")
-Copy-Item (Join-Path $plugins "Managed/*.dll") (Join-Path $artifact "Runtime/Plugins/Managed")
+foreach ($assembly in 'Gua.Core.dll','Gua.Runtime.dll') {
+    Copy-Item -LiteralPath (Join-Path $plugins "Managed/$assembly") -Destination (Join-Path $artifact 'Runtime/Plugins/Managed')
+}
+& (Join-Path $PSScriptRoot 'copy-unity-managed-closure.ps1') -AssetsFile (Join-Path $root 'bindings/dotnet/src/Gua.Runtime/obj/project.assets.json') -TargetFramework netstandard2.1 -Destination (Join-Path $artifact 'Runtime/Plugins/Managed')
 Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Core.dll.meta") (Join-Path $artifact "Runtime/Plugins/Managed")
 Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Runtime.dll.meta") (Join-Path $artifact "Runtime/Plugins/Managed")
 if (-not $DesktopOnly) {

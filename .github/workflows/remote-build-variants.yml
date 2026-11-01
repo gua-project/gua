@@ -88,12 +88,16 @@ jobs:
           pattern: selected-*-${{ github.sha }}
           path: artifacts/mixing
       - shell: pwsh
-        run: scripts/test-remote-package-mixing.ps1 -ShippingPackage artifacts/mixing/selected-shipping-${{ github.sha }} -QAPackage artifacts/mixing/selected-qa-${{ github.sha }} -AIPlayerPackage artifacts/mixing/selected-ai-player-${{ github.sha }}
+        run: |
+          scripts/test-remote-package-mixing.ps1 -ShippingPackage artifacts/mixing/selected-shipping-${{ github.sha }} -QAPackage artifacts/mixing/selected-qa-${{ github.sha }} -AIPlayerPackage artifacts/mixing/selected-ai-player-${{ github.sha }}
+          scripts/test-unity-package-mixing.ps1 -ShippingNativeDirectory artifacts/mixing/selected-shipping-${{ github.sha }} -QARuntimeLibrary artifacts/mixing/selected-qa-${{ github.sha }}/gua_runtime.dll
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: remote-mixing-${{ github.sha }}
-          path: build/package-mixing-*/results.json
+          path: |
+            build/package-mixing-*/results.json
+            build/unity-mixing-*/result.json
           if-no-files-found: error
   web-variants:
     runs-on: ubuntu-latest

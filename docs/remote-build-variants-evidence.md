@@ -79,3 +79,29 @@ socket DLL 依存不在も再確認した。graph 検査は保存済み証拠 pr
 Draft PR は https://github.com/gua-project/gua/pull/186 。初回 CI は `b4c8d74` の PR merge snapshot。
 Web static identity の4構成、標準回帰の Windows/Linux/macOS native/managed lane は合格した。
 新たな実 WebAssembly variant acceptance と portable Shipping/AI Player CI は追加後 HEAD で評価する。
+
+## 最終監査 pass 2 と追加修正
+
+固定 HEAD `9df9192` の最終独立監査で、前回4件の修正を確認し、UPM native 配布先に
+改名 QA DLL を加えた場合の extra-file 検査漏れを1件報告された。
+全 native ファイルを必要な pair/manifest/Unity meta と照合する共通検査を追加し、
+UPM verifier と実 Editor guard の双方で拒否する。managed 依存も既存 Plugins の
+wildcard コピーから、明示した binding と解決済み dependency closure のコピーへ変更した。
+既存 Windows 開発用 packager も native を2個だけ明示コピーし IL/配布先を検査する。
+`test-unity-package-mixing.ps1` の正常→改名 QA DLL 故障注入が期待した
+`Unexpected Unity native package file: gua_runtime_old.dll` で拒否された。
+実 Unity Editor でも同じ混入を行い Player 生成前の guard が同じ理由で失敗した。
+実ログは Shipping fixture の `editor-renamed-qa-fault.log`。故障ファイルは除去済み。
+監査は通常タスクの上限2/2を消費しており、修正の検証は親が担当、追加監査は行わない。
+
+最終修正 guard を再コンパイルし、同一 guard を4つの既存隔離 fixture へ入れて
+Player を再ビルド・実行した。4構成とも `GUA_UNITY_VARIANT_PASS` と終了0を確認。
+`build/unity-variant-{shipping,ai-player,qa,development}-*/editor-final.log` と
+`player-final.log`、`Player/result.json` に実証を保存した。
+native identity は各構築時点のものであり、全件を同一最終 HEAD の native build と扱わない。
+最終 HEAD 自体の新規ビルドは CI 側で判定する。
+
+HEAD `9df9192` の PR CI では、実 WebAssembly（Node上）の4構成 profile/input/resetテスト、
+Linux/macOS の Shipping・AI Player 実 native と staging、Development OFF が合格。
+Windows full-profile GDE の4構成と Godot packaged consumer は実行中。
+これは WebGL browser/Unity WebGL Player の完了証明ではなく、各証拠の実行経路を区別する。

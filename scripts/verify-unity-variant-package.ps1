@@ -20,6 +20,7 @@ if (-not $DesktopOnly) { $layouts += @{path='WebGL';names=@('libgua-core.a','lib
 $source = $null; $build = $null
 foreach ($layout in $layouts) {
     $native = Join-Path $Directory "Runtime/Plugins/$($layout.path)"
+    & (Join-Path $PSScriptRoot 'assert-unity-native-layout.ps1') -Directory $native -Platform ($layout.path.Split('/')[0]) -Remote $Remote
     $manifest = Get-Content -LiteralPath (Join-Path $native 'gua-build-manifest.json') -Raw | ConvertFrom-Json
     $info = $manifest.build
     if ($manifest.schemaVersion -ne 1 -or $info.flavor -ne $Flavor -or $info.remoteEnabled -ne $enabled -or

@@ -44,6 +44,14 @@ public sealed class GuaVariantBuildGuard : IPreprocessBuildWithReport
                 if (web ? (name != "libgua-core.a" && name != "libgua_runtime.a") :
                     (name != "gua.dll" && name != "gua_runtime.dll" && name != "libgua.so" && name != "libgua_runtime.so" && name != "libgua.dylib" && name != "libgua_runtime.dylib")) continue;
                 string file = ResolveAsset(importer.assetPath);
+                string[] pair = web ? new[] {"libgua-core.a","libgua_runtime.a"} :
+                    name.EndsWith(".dll",StringComparison.Ordinal) ? new[] {"gua.dll","gua_runtime.dll"} :
+                    name.EndsWith(".so",StringComparison.Ordinal) ? new[] {"libgua.so","libgua_runtime.so"} : new[] {"libgua.dylib","libgua_runtime.dylib"};
+                var allowed = pair.Concat(pair.Select(n=>n+".meta")).Concat(new[]{"gua-build-manifest.json","gua-build-manifest.json.meta"});
+                if(web) allowed=allowed.Concat(new[]{"Managed.meta"});
+                if(web && GuaUnityCompiledBuild.IsRemoteEnabled()) allowed=allowed.Concat(new[]{"GuaWebMcp.jslib","GuaWebMcp.jslib.meta"});
+                foreach(var candidate in Directory.GetFiles(Path.GetDirectoryName(file)!))
+                    if(!allowed.Contains(Path.GetFileName(candidate),StringComparer.Ordinal)) throw new InvalidDataException("Unexpected Unity native package file: "+Path.GetFileName(candidate));
                 string manifestPath = Path.Combine(Path.GetDirectoryName(file)!, "gua-build-manifest.json");
                 using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
                 ValidateIdentity(manifest.RootElement.GetProperty("build"), expected);
