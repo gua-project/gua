@@ -10,6 +10,12 @@ add_library(gua-runtime ${GUA_RUNTIME_LIBRARY_TYPE}
 
 add_library(gua::runtime ALIAS gua-runtime)
 
+if(EMSCRIPTEN)
+    add_executable(gua-web-build-info tests/build_info_probe.cpp)
+    target_link_libraries(gua-web-build-info PRIVATE gua::runtime)
+    target_link_options(gua-web-build-info PRIVATE "-sENVIRONMENT=node" "-sWASM_ASYNC_COMPILATION=0")
+endif()
+
 if(GUA_DESKTOP_NATIVE AND GUA_BUILD_GODOT)
     # A distributed Godot addon contains per-platform Debug and Release
     # GDExtensions side by side. Embed the runtime so each library is

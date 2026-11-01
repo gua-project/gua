@@ -6,7 +6,9 @@ param(
     [string]$OutputDirectory,
 
     [string]$WebNativeDirectory,
-    [switch]$DesktopOnly
+    [switch]$DesktopOnly,
+    [ValidateSet('shipping','development','qa','ai-player')][string]$Flavor = 'development',
+    [ValidateSet('on','off')][string]$Remote = 'on'
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,14 +49,19 @@ Copy-Item (Join-Path $plugins "Windows/x86_64/*") (Join-Path $artifact "Runtime/
 Copy-Item (Join-Path $plugins "Linux/x86_64/*") (Join-Path $artifact "Runtime/Plugins/Linux/x86_64")
 Copy-Item (Join-Path $plugins "macOS/*") (Join-Path $artifact "Runtime/Plugins/macOS")
 if (-not $DesktopOnly) {
+    if ($Remote -eq 'on') {
     Copy-Item (Join-Path $root "bindings/unity/Runtime/Plugins/WebGL/GuaWebMcp.jslib") (Join-Path $artifact "Runtime/Plugins/WebGL")
     Copy-Item (Join-Path $root "bindings/unity/Runtime/Plugins/WebGL/GuaWebMcp.jslib.meta") (Join-Path $artifact "Runtime/Plugins/WebGL")
+    }
     foreach ($webLibrary in "libgua_runtime.a", "libgua-core.a") {
         $webLibraries = @(Get-ChildItem -LiteralPath $WebNativeDirectory -Recurse -File -Filter $webLibrary)
         if ($webLibraries.Count -ne 1) { throw "Expected one $webLibrary below '$WebNativeDirectory', found $($webLibraries.Count)." }
         Copy-Item -LiteralPath $webLibraries[0].FullName -Destination (Join-Path $artifact "Runtime/Plugins/WebGL")
         Copy-Item (Join-Path $root "scripts/unity-meta/$webLibrary.meta") (Join-Path $artifact "Runtime/Plugins/WebGL")
     }
+    $webManifests = @(Get-ChildItem -LiteralPath $WebNativeDirectory -Recurse -File -Filter 'gua-build-manifest.json')
+    if ($webManifests.Count -ne 1) { throw 'Expected one verified Web archive manifest.' }
+    Copy-Item -LiteralPath $webManifests[0].FullName -Destination (Join-Path $artifact 'Runtime/Plugins/WebGL')
 }
 
 $scriptAssemblies = Join-Path $project "Library/ScriptAssemblies"
@@ -69,6 +76,7 @@ if (-not (Test-Path -LiteralPath $editorAssembly)) { throw "Unity editor assembl
 Copy-Item -LiteralPath $editorAssembly -Destination (Join-Path $artifact "Editor")
 Copy-Item (Join-Path $root "scripts/unity-meta/Gua.Unity.Editor.dll.meta") (Join-Path $artifact "Editor")
 
+& (Join-Path $PSScriptRoot 'verify-unity-variant-package.ps1') -Directory $artifact -Flavor $Flavor -Remote $Remote -DesktopOnly:$DesktopOnly
 $staging = Join-Path $OutputDirectory "tgz-staging"
 if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
 New-Item -ItemType Directory -Force $staging | Out-Null

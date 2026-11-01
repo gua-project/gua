@@ -32,6 +32,7 @@ int main(int argc,char** argv) {
     gua_begin_frame(c,"variant");
     gua_register_node(c,"public","button","Public",{0,0,10,10},1,1);
     gua_register_node(c,"secret","button","Hidden secret",{0,0,10,10},0,1);
+    gua_register_node(c,"text","textbox","Public text",{0,0,10,10},1,1);
     gua_end_frame(c);
     const auto tree=json([&](char* out,int size){return gua_copy_ui_tree_json(c,out,size);});
     assert((tree.find("Hidden secret")==std::string::npos)==player);
@@ -68,6 +69,36 @@ int main(int argc,char** argv) {
         assert(consumed.kind==GUA_GAME_INPUT_CLEANUP && consumed.operation==GUA_GAME_INPUT_RELEASE_ALL);
         assert(gua_complete_game_input_request(c,consumed.request_id,1,0));
         assert(gua_release_game_input_owner(c,owner));
+        // Legacy polling must leave nonlegacy correlated completions intact.
+        gua_action_request_descriptor_t descriptor{sizeof(descriptor)};
+        descriptor.action=GUA_ACTION_SET_VALUE; descriptor.node_id="text"; descriptor.value="updated";
+        uint64_t request_id=0;
+        assert(gua_enqueue_action(c,&descriptor,&request_id)==GUA_ACTION_ACCEPTED && request_id);
+        gua_action_request_t request{sizeof(request)};
+        assert(gua_consume_action_request(c,GUA_ACTION_SET_VALUE,"text",&request));
+        gua_action_result_t result{sizeof(result),request_id,GUA_ACTION_SET_VALUE,GUA_ACTION_STATUS_SUCCEEDED,0,"text","updated",0};
+        assert(gua_emit_action_result(c,&result));
+        gua_event_t legacy{}; assert(!gua_poll_event(c,&legacy));
+        gua_event_v3_t completion{sizeof(completion)};
+        assert(gua_poll_event_v3_for_request(c,request_id,&completion));
+        assert(completion.base.request_id==request_id && completion.base.action==GUA_ACTION_SET_VALUE);
+        assert(!gua_poll_event_v3_for_request(c,request_id,&completion));
+        // Private requestless events cannot alter status, stale reset counts or discarded counts.
+        gua_reset_options_t events_reset{sizeof(events_reset),GUA_RESET_EVENTS,0,UINT64_MAX,GUA_RESET_FLAGS_VERSION_CURRENT};
+        gua_reset_report_t before{sizeof(before)}, after{sizeof(after)};
+        assert(gua_reset_context(c,&events_reset,&before)==GUA_RESET_ERROR_STALE_EPOCH);
+        assert(before.unconsumed_event_count==0);
+        assert(gua_emit_click(c,"secret"));
+        assert(gua_reset_context(c,&events_reset,&after)==GUA_RESET_ERROR_STALE_EPOCH);
+        assert(after.unconsumed_event_count==before.unconsumed_event_count && after.discarded_event_count==0);
+        gua_context_status_t status{sizeof(status)};
+        assert(gua_get_context_status(c,&status) && status.unconsumed_event_count==0);
+        assert(gua_emit_click(c,"public"));
+        assert(gua_reset_context(c,&events_reset,&after)==GUA_RESET_ERROR_STALE_EPOCH);
+        assert(after.unconsumed_event_count==1);
+        events_reset.expected_session_epoch=0;
+        assert(gua_reset_context(c,&events_reset,&after)==GUA_RESET_SUCCEEDED);
+        assert(after.unconsumed_event_count==1 && after.discarded_event_count==1);
     }
     assert(gua_enqueue_click(c,"public"));
     assert(gua_consume_click_request(c,"public"));

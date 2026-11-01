@@ -23,6 +23,8 @@ if(args[0]=="native") {
     using var stream=File.OpenRead(args[1]); using var pe=new PEReader(stream);
     var reader=pe.GetMetadataReader();
     var values=new Dictionary<string,object?>();
+    values["remoteStartReference"]=reader.MemberReferences.Any(h=>reader.GetString(reader.GetMemberReference(h).Name)=="StartInspectorBridge");
+    values["webInstallImport"]=reader.MethodDefinitions.Any(h=>reader.GetString(reader.GetMethodDefinition(h).Name)=="GuaUnityWebInstall");
     foreach(var handle in reader.TypeDefinitions) {
         var type=reader.GetTypeDefinition(handle);
         if(reader.GetString(type.Namespace)!="Gua.Unity") continue;

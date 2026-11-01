@@ -8,7 +8,6 @@ using Gua.Runtime;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
-using UnityEditor.PackageManager;
 
 namespace Gua.Unity.Editor
 {
@@ -27,23 +26,33 @@ public sealed class GuaVariantBuildGuard : IPreprocessBuildWithReport
             throw new BuildFailedException("Shipping, QA and AI Player require a Release Player build.");
         try
         {
-            using var loaded = JsonDocument.Parse(GuaBuildInfo.GetJson());
-            ValidateIdentity(loaded.RootElement, expected);
+            // WebGL archives cannot execute in the Editor; validate their emitted build identity and bytes.
+            bool web = report.summary.platform == BuildTarget.WebGL;
+            using var loaded = web ? null : JsonDocument.Parse(GuaBuildInfo.GetJson());
+            if (!web)
+            {
+            ValidateIdentity(loaded!.RootElement, expected);
             using var runtime = new GuaRuntime();
             if (runtime.GetBuildInfoJson() != GuaBuildInfo.GetJson()) throw new InvalidDataException("Loaded core/runtime build mismatch.");
+            }
+            string? sourceCommit = null, buildId = null;
             int selectedCore = 0, selectedRuntime = 0;
             foreach (var importer in PluginImporter.GetAllImporters())
             {
                 if (!importer.GetCompatibleWithPlatform(report.summary.platform)) continue;
                 string name = Path.GetFileName(importer.assetPath);
-                if (name != "gua.dll" && name != "gua_runtime.dll" && name != "libgua.so" && name != "libgua_runtime.so" && name != "libgua.dylib" && name != "libgua_runtime.dylib") continue;
+                if (web ? (name != "libgua-core.a" && name != "libgua_runtime.a") :
+                    (name != "gua.dll" && name != "gua_runtime.dll" && name != "libgua.so" && name != "libgua_runtime.so" && name != "libgua.dylib" && name != "libgua_runtime.dylib")) continue;
                 string file = ResolveAsset(importer.assetPath);
                 string manifestPath = Path.Combine(Path.GetDirectoryName(file)!, "gua-build-manifest.json");
                 using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
                 ValidateIdentity(manifest.RootElement.GetProperty("build"), expected);
                 var fileBuild = manifest.RootElement.GetProperty("build");
-                if (fileBuild.GetProperty("sourceCommit").GetString() != loaded.RootElement.GetProperty("sourceCommit").GetString() ||
-                    fileBuild.GetProperty("buildId").GetString() != loaded.RootElement.GetProperty("buildId").GetString())
+                sourceCommit ??= web ? fileBuild.GetProperty("sourceCommit").GetString() : loaded!.RootElement.GetProperty("sourceCommit").GetString();
+                buildId ??= web ? fileBuild.GetProperty("buildId").GetString() : loaded!.RootElement.GetProperty("buildId").GetString();
+                if (string.IsNullOrEmpty(sourceCommit) || string.IsNullOrEmpty(buildId) ||
+                    fileBuild.GetProperty("sourceCommit").GetString() != sourceCommit ||
+                    fileBuild.GetProperty("buildId").GetString() != buildId)
                     throw new InvalidDataException("Imported native assets came from different builds.");
                 var entries = manifest.RootElement.GetProperty("files").EnumerateArray().Where(e => e.GetProperty("path").GetString() == name).ToArray();
                 if (entries.Length != 1) throw new InvalidDataException("Missing or duplicate native file identity.");
@@ -77,7 +86,7 @@ public sealed class GuaVariantBuildGuard : IPreprocessBuildWithReport
     {
         if (asset.StartsWith("Packages/", StringComparison.Ordinal))
         {
-            var package = PackageInfo.FindForAssetPath(asset) ?? throw new InvalidDataException("Cannot resolve Gua package.");
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(asset) ?? throw new InvalidDataException("Cannot resolve Gua package.");
             return Path.Combine(package.resolvedPath, asset.Substring(("Packages/" + package.name + "/").Length));
         }
         return Path.GetFullPath(asset);

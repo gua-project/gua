@@ -32,7 +32,8 @@ foreach ($file in $manifest.files) {
     }
     if ($file.path -eq 'Gua.Unity.dll') {
         $identity = (& dotnet $probe managed $path) | ConvertFrom-Json
-        if ($LASTEXITCODE -or $identity.RemoteEnabled -ne ($Remote -eq 'on') -or $identity.PlayerOnly -ne ($Flavor -eq 'ai-player') -or $identity.remoteCommandHandler -ne ($Remote -eq 'on')) { throw 'Packaged Unity managed IL has the wrong remote variant.' }
+        if ($LASTEXITCODE -or $identity.RemoteEnabled -ne ($Remote -eq 'on') -or $identity.PlayerOnly -ne ($Flavor -eq 'ai-player') -or
+            $identity.remoteCommandHandler -ne ($Remote -eq 'on') -or $identity.remoteStartReference -ne ($Remote -eq 'on') -or $identity.webInstallImport -ne ($Remote -eq 'on')) { throw 'Packaged Unity managed IL has the wrong remote variant.' }
     }
     if ($Remote -eq 'off' -and $file.path -match '(?i)(gua_webmcp_bridge\.gd|GuaWebMcp\.jslib|gua[-_]ws[-_]bridge)') { throw 'Remote implementation found in a disabled package.' }
 }

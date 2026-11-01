@@ -47,7 +47,8 @@ if ($GodotExtension) {
 }
 if ($UnityAssembly) {
     $managedIdentity = (& dotnet $probe managed $UnityAssembly) | ConvertFrom-Json
-    if ($LASTEXITCODE -or $managedIdentity.RemoteEnabled -ne ($Remote -eq 'on') -or $managedIdentity.PlayerOnly -ne ($Flavor -eq 'ai-player') -or $managedIdentity.remoteCommandHandler -ne ($Remote -eq 'on')) { throw 'Unity managed IL has the wrong remote variant.' }
+    if ($LASTEXITCODE -or $managedIdentity.RemoteEnabled -ne ($Remote -eq 'on') -or $managedIdentity.PlayerOnly -ne ($Flavor -eq 'ai-player') -or
+        $managedIdentity.remoteCommandHandler -ne ($Remote -eq 'on') -or $managedIdentity.remoteStartReference -ne ($Remote -eq 'on') -or $managedIdentity.webInstallImport -ne ($Remote -eq 'on')) { throw 'Unity managed IL has the wrong remote variant.' }
 }
 # All identity checks happen before any distribution file is written.
 New-Item -ItemType Directory -Force $output | Out-Null

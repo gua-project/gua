@@ -3101,17 +3101,6 @@ extern "C" int gua_emit_click(gua_context_t* ctx, const char* node_id)
 
 extern "C" int gua_poll_event(gua_context_t* ctx, gua_event_t* out_event)
 {
-#if GUA_COMPILED_PLAYER_ONLY
-    if (!out_event) return 0;
-    gua_event_v2_t event{sizeof(event)};
-    while (gua_poll_event_v2_for_profile(ctx,GUA_OBSERVATION_PROFILE_PLAYER,&event)) {
-        if (event.status == GUA_ACTION_STATUS_SUCCEEDED && (event.action==GUA_ACTION_CLICK || event.action==GUA_ACTION_FOCUS)) {
-            out_event->type=event.action; std::snprintf(out_event->node_id,sizeof(out_event->node_id),"%s",event.node_id); return 1;
-        }
-    }
-    return 0;
-#else
-
     if (ctx == nullptr || out_event == nullptr) {
         return 0;
     }
@@ -3120,6 +3109,10 @@ extern "C" int gua_poll_event(gua_context_t* ctx, gua_event_t* out_event)
     while (true) {
         const auto legacy_event = std::find_if(ctx->events.begin(), ctx->events.end(), [&](const Event& event) {
             return !ctx->owned_action_requests.contains(event.request_id) &&
+#if GUA_COMPILED_PLAYER_ONLY
+                event_matches_profile(event, GUA_OBSERVATION_PROFILE_PLAYER) &&
+                event_observable_for_profile(ctx->nodes, event, GUA_OBSERVATION_PROFILE_PLAYER) &&
+#endif
                 (event.action == GUA_ACTION_CLICK || event.action == GUA_ACTION_FOCUS);
         });
         if (legacy_event == ctx->events.end()) {
@@ -3136,7 +3129,6 @@ extern "C" int gua_poll_event(gua_context_t* ctx, gua_event_t* out_event)
         std::snprintf(out_event->node_id, sizeof(out_event->node_id), "%s", event.node_id.c_str());
         return 1;
     }
-#endif
 }
 
 static int enqueue_action(gua_context_t* ctx, const gua_action_request_descriptor_t* descriptor,
@@ -3584,7 +3576,9 @@ extern "C" int gua_get_context_status(gua_context_t* ctx, gua_context_status_t* 
     out_status->node_count=static_cast<uint32_t>(project_nodes(ctx->nodes,GUA_OBSERVATION_PROFILE_PLAYER).size());
     out_status->pending_request_count=static_cast<uint32_t>(std::count_if(ctx->action_requests.begin(),ctx->action_requests.end(),[](const auto& r){return r.observation_profile==GUA_OBSERVATION_PROFILE_PLAYER;}));
     out_status->in_flight_request_count=static_cast<uint32_t>(std::count_if(ctx->consumed_requests.begin(),ctx->consumed_requests.end(),[](const auto& r){return r.observation_profile==GUA_OBSERVATION_PROFILE_PLAYER;}));
-    out_status->unconsumed_event_count=static_cast<uint32_t>(std::count_if(ctx->events.begin(),ctx->events.end(),[](const auto& e){return e.observation_profile==GUA_OBSERVATION_PROFILE_PLAYER;}));
+    out_status->unconsumed_event_count=static_cast<uint32_t>(std::count_if(ctx->events.begin(),ctx->events.end(),[&](const auto& event){
+        return event_matches_profile(event,GUA_OBSERVATION_PROFILE_PLAYER) && event_observable_for_profile(ctx->nodes,event,GUA_OBSERVATION_PROFILE_PLAYER);
+    }));
     out_status->log_count=0; out_status->has_screenshot=ctx->player_screenshot_enabled && !ctx->screenshot.data_uri.empty();
     out_status->first_pending_action=0; out_status->first_pending_node_id[0]='\0';
     out_status->first_event_action=0; out_status->first_event_node_id[0]='\0';
@@ -3652,7 +3646,13 @@ extern "C" int gua_reset_context(gua_context_t* ctx, const gua_reset_options_t* 
 #if GUA_COMPILED_PLAYER_ONLY
     const auto visible_nodes=static_cast<uint32_t>(project_nodes(ctx->nodes,GUA_OBSERVATION_PROFILE_PLAYER).size());
     const auto visible_world=static_cast<uint32_t>(project_world_objects(ctx->world_objects,GUA_OBSERVATION_PROFILE_PLAYER).size());
+    const auto visible_events=static_cast<uint32_t>(std::count_if(ctx->events.begin(),ctx->events.end(),[&](const Event& event) {
+        return event_matches_profile(event,GUA_OBSERVATION_PROFILE_PLAYER) &&
+            event_observable_for_profile(ctx->nodes,event,GUA_OBSERVATION_PROFILE_PLAYER);
+    }));
     const auto project_report=[&] {
+        out_report->unconsumed_event_count=visible_events;
+        if(out_report->discarded_event_count) out_report->discarded_event_count=visible_events;
         if(out_report->discarded_node_count) out_report->discarded_node_count=visible_nodes;
         out_report->discarded_log_count=0; out_report->discarded_screenshot=0;
         out_report->first_pending_action=0; out_report->first_pending_node_id[0]='\0';
@@ -3671,7 +3671,12 @@ extern "C" int gua_reset_context(gua_context_t* ctx, const gua_reset_options_t* 
     const bool dirty_requests = (reset_flags & GUA_RESET_REQUESTS) != 0U &&
         (!ctx->action_requests.empty() || !ctx->consumed_requests.empty() || pending_game_input_count != 0 ||
             !ctx->consumed_game_input_requests.empty());
-    const bool dirty_events = (reset_flags & GUA_RESET_EVENTS) != 0U && !ctx->events.empty();
+    const bool dirty_events = (reset_flags & GUA_RESET_EVENTS) != 0U &&
+#if GUA_COMPILED_PLAYER_ONLY
+        visible_events != 0;
+#else
+        !ctx->events.empty();
+#endif
     if (options->strict != 0 && (dirty_requests || dirty_events)) {
         out_report->result = GUA_RESET_ERROR_DIRTY;
         #if GUA_COMPILED_PLAYER_ONLY

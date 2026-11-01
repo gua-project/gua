@@ -41,3 +41,19 @@ Godot EXE/PCK と実行 log/result は `build/godot-variant-*`。
 - 構成否定試験の長い一時パスが MSBuild で失敗したケースは否定試験の合格とせず、パス短縮後に狙った configure error を確認した。
 - .NET build は合格したが、この環境では NuGet vulnerability feed に接続できず NU1900 警告が残った。脆弱性 audit 成功とは主張しない。
 - Unity 実 Player/Editor のビルド・実行、各 variant の Web/WASM 実 consumer、Windows 以外の出荷 variant、最終 HEAD CI/独立・外部レビューは、この台帳初版時点では未完了。静的 IL や他 engine の合格で代用しない。
+
+## 独立監査 pass 1 と修正
+
+固定 HEAD `f1d81f7c6fc6f13454b9599df3dca2722bc5e1f2` を独立・読み取り専用で監査し、4件を修正した。
+Unity の PackageInfo 曖昧参照は Editor guard 実コンパイルで再現し、限定名で解消。
+WebGL は desktop DLL の必須数判定から static archive の manifest/hash 検査へ分岐し、
+Emscripten で実リンクした Node probe の immutable build-info から archive manifest を生成する。
+Player legacy polling は click/focus だけを取り出し、set-value 完了の request-specific v3 取得を壊さない。
+reset/status のイベント数と strict dirty 判定は公開 Player イベントへ投影する。
+後二件は `build_variant_tests.cpp` に exact-count / correlation / private-public 比較を加え、
+AI Player Release の実 native テストで合格（`artifacts/remote-validation/ai-review-fixes.log`）。
+Unity runtime source の PE metadata では Shipping の remote handler / native start reference /
+Web install import がすべて absent、Development/AI Player ではすべて present。
+`artifacts/remote-validation/unity-editor-guard.log` の最初の失敗は修正後の成功ログへ更新した。
+
+追加した Web static probe/UPM多プラットフォーム検査と新 CI consumer job は、最終 HEAD CI の結果で判定する。

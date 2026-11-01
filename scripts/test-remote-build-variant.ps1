@@ -13,7 +13,8 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $BuildDirectory) { $BuildDirectory = Join-Path $root "build/remote-$Flavor-$Remote-$Configuration" }
 $build = [IO.Path]::GetFullPath($BuildDirectory)
 $remoteValue = if ($Remote -eq 'on') { 'ON' } else { 'OFF' }
-$configure = @('-S',$root,'-B',$build,'-G','Visual Studio 18 2026','-A','x64',
+$generator = & (Join-Path $PSScriptRoot 'get-msvc-generator.ps1')
+$configure = @('-S',$root,'-B',$build,'-G',$generator,'-A','x64',
     "-DGUA_DISTRIBUTION_FLAVOR=$Flavor","-DGUA_ENABLE_REMOTE_AUTOMATION=$remoteValue",
     '-DGUA_STAGE_IN_SAMPLE=OFF','-DGUA_BUILD_EXAMPLES=OFF','-DBUILD_TESTING=ON',
     "-DGUA_BUILD_GODOT=$(if ($WithGodot) { 'ON' } else { 'OFF' })","-DGUA_GODOT_CONFIGURATION=$Configuration")
