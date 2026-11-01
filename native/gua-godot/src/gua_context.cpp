@@ -464,6 +464,13 @@ String GuaContext::get_player_ui_tree_json() const
     return copy_runtime_json(runtime_, gua_runtime_copy_player_ui_tree_json);
 }
 
+String GuaContext::get_build_info_json() const
+{
+    return String::utf8(gua::godot_detail::copy_json_with_retry([](char* out,int size) {
+        return gua_runtime_copy_build_info_json(out,size);
+    }).c_str());
+}
+
 String GuaContext::get_version_json() const
 {
     return copy_runtime_json(runtime_, gua_runtime_copy_version_json);
@@ -1051,6 +1058,7 @@ Dictionary GuaContext::observe_command(uint64_t client,int command,uint64_t subs
 
 void GuaContext::_bind_methods()
 {
+    ClassDB::bind_method(D_METHOD("get_build_info_json"), &GuaContext::get_build_info_json);
     ClassDB::bind_method(D_METHOD("create_observe_owner", "source", "runtime_id"), &GuaContext::create_observe_owner);
     ClassDB::bind_method(D_METHOD("destroy_observe_owner", "owner"), &GuaContext::destroy_observe_owner);
     ClassDB::bind_method(D_METHOD("register_observe", "owner", "name", "allow_player", "sensitive"), &GuaContext::register_observe);

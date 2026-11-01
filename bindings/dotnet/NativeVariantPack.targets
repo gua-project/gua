@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <GuaDistributionFlavor Condition="'$(GuaDistributionFlavor)' == ''">shipping</GuaDistributionFlavor>
+    <GuaEnableRemoteAutomation Condition="'$(GuaEnableRemoteAutomation)' == ''">false</GuaEnableRemoteAutomation>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(GuaNativeAssetsRoot)' != ''">
+    <None Include="$(GuaNativeAssetsRoot)/**/gua-build-manifest.json" Pack="true"
+          PackagePath="runtimes/%(RecursiveDir)native/gua-$(GuaNativeComponent)-build-manifest.json" />
+  </ItemGroup>
+  <Target Name="VerifyGuaNativeBuildVariants" BeforeTargets="GenerateNuspec">
+    <Error Condition="'$(GuaNativeAssetsRoot)' == ''" Text="Native packing requires verified per-RID manifests in GuaNativeAssetsRoot; unlabeled legacy DLL fallback is not a distribution proof." />
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)../../scripts/verify-native-assets-manifests.ps1&quot; -NativeAssetsRoot &quot;$(GuaNativeAssetsRoot)&quot; -Flavor &quot;$(GuaDistributionFlavor)&quot; -EnableRemoteAutomation &quot;$(GuaEnableRemoteAutomation)&quot;" />
+  </Target>
+</Project>

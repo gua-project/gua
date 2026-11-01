@@ -101,6 +101,15 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(gua-build-variant-tests tests/build_variant_tests.cpp)
+    target_link_libraries(gua-build-variant-tests PRIVATE gua-runtime)
+    target_compile_options(gua-build-variant-tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+    set(GUA_TEST_REMOTE off)
+    if(GUA_ENABLE_REMOTE_AUTOMATION)
+        set(GUA_TEST_REMOTE on)
+    endif()
+    add_test(NAME gua-build-variant-tests COMMAND gua-build-variant-tests ${GUA_DISTRIBUTION_FLAVOR} ${GUA_TEST_REMOTE} ${GUA_REMOTE_CEILING})
+    set_tests_properties(gua-build-variant-tests PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)
     add_executable(gua-runtime-guarded-profile-tests tests/guarded_profile_tests.cpp)
     target_link_libraries(gua-runtime-guarded-profile-tests PRIVATE gua-runtime)
     target_compile_options(gua-runtime-guarded-profile-tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
@@ -121,9 +130,9 @@ endif()
 if(WIN32)
     add_custom_command(TARGET gua-runtime POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_SOURCE_DIR}/examples/dotnet-godot/addons/gua/bin"
+            "${GUA_DOTNET_ADDON_DIRECTORY}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:gua-runtime>"
-            "${CMAKE_SOURCE_DIR}/examples/dotnet-godot/addons/gua/bin/$<TARGET_FILE_NAME:gua-runtime>"
+            "${GUA_DOTNET_ADDON_DIRECTORY}/bin/$<TARGET_FILE_NAME:gua-runtime>"
     )
 endif()

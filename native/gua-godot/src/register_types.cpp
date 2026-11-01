@@ -28,6 +28,11 @@ void uninitialize_gua_godot_module(ModuleInitializationLevel level)
 
 extern "C" {
 
+int GDE_EXPORT gua_godot_copy_build_info_json(char* out_json, int out_json_size)
+{
+    return gua_runtime_copy_build_info_json(out_json, out_json_size);
+}
+
 GDExtensionBool GDE_EXPORT gua_godot_library_init(
     GDExtensionInterfaceGetProcAddress get_proc_address,
     GDExtensionClassLibraryPtr library,

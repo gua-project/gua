@@ -19,6 +19,8 @@ public static class GuaUnityEditorCommands
 
     public static void BuildPlayer()
     {
+        // This command builds the repository's development fixture, not a shipping game.
+        Environment.SetEnvironmentVariable("GUA_BUILD_VARIANT", Argument("-guaVariant") ?? "development");
         PrepareProject();
         var scene = Argument("-guaScene") ?? throw new ArgumentException("-guaScene is required.");
         var output = Argument("-guaOutput") ?? throw new ArgumentException("-guaOutput is required.");

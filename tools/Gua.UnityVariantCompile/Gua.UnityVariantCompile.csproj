@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework><LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems><Nullable>enable</Nullable>
+    <AssemblyName Condition="'$(CompileEditor)' != 'true'">Gua.Unity</AssemblyName>
+    <AssemblyName Condition="'$(CompileEditor)' == 'true'">Gua.Unity.Editor</AssemblyName>
+    <DefineConstants Condition="'$(GuaEnableRemoteAutomation)' == 'true'">$(DefineConstants);GUA_REMOTE_AUTOMATION</DefineConstants>
+    <DefineConstants Condition="'$(GuaPlayerOnly)' == 'true'">$(DefineConstants);GUA_PLAYER_ONLY</DefineConstants>
+    <DefineConstants Condition="'$(CompileEditor)' == 'true'">$(DefineConstants);UNITY_EDITOR</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj" />
+    <Reference Include="$(UnityManagedDirectory)/UnityEngine/*.dll" />
+    <Reference Include="$(UnityScriptAssemblies)/Unity.InputSystem.dll" />
+    <Reference Include="$(UnityScriptAssemblies)/UnityEngine.UI.dll" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(CompileEditor)' != 'true'">
+    <Compile Include="../../bindings/unity/Runtime/**/*.cs" Exclude="../../bindings/unity/Runtime/TMP/**/*.cs;../../bindings/unity/Runtime/Bootstrap/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(CompileEditor)' == 'true'">
+    <Compile Include="../../bindings/unity/Editor/GuaVariantBuildGuard.cs" />
+    <Reference Include="$(GuaUnityAssembly)" />
+  </ItemGroup>
+</Project>

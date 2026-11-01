@@ -22,6 +22,8 @@ public sealed partial class GuaRuntime : IDisposable
     public GuaRuntime()
     {
         try {
+            if (CopyJson(0, JsonSource.BuildInfo) != GuaBuildInfo.GetJson())
+                throw new InvalidOperationException("Gua core/runtime build variants do not match.");
             _handle = Native.gua_runtime_create();
             if (_handle == 0) throw new InvalidOperationException("Failed to create a Gua runtime.");
             _observations = new GuaContext(Native.gua_runtime_borrow_context(_handle));
@@ -255,6 +257,7 @@ public sealed partial class GuaRuntime : IDisposable
     public void AddLog(int level, string message) { ThrowIfDisposed(); Native.gua_runtime_add_log(_handle, level, message); }
     public string GetUiTreeJson() { ThrowIfDisposed(); return CopyUiTree(_handle); }
     public string GetPlayerUiTreeJson() { ThrowIfDisposed(); return CopyJson(_handle, JsonSource.PlayerUiTree); }
+    public string GetBuildInfoJson() { ThrowIfDisposed(); return CopyJson(_handle, JsonSource.BuildInfo); }
     public string GetVersionJson() { ThrowIfDisposed(); return CopyVersion(_handle); }
     /// <summary>Read-only, redacted Debug diagnostics, including the bounded native lifecycle journal.</summary>
     public string GetDiagnosticsJson() { ThrowIfDisposed(); return Observations.GetDiagnosticsJson(); }
@@ -302,8 +305,9 @@ public sealed partial class GuaRuntime : IDisposable
     {
         JsonSource.UiTree => Native.gua_runtime_copy_ui_tree_json(handle, buffer, bufferSize),
         JsonSource.PlayerUiTree => Native.gua_runtime_copy_player_ui_tree_json(handle, buffer, bufferSize),
+        JsonSource.BuildInfo => Native.gua_runtime_copy_build_info_json(buffer, bufferSize),
         JsonSource.Version => Native.gua_runtime_copy_version_json(handle, buffer, bufferSize),
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
-    private enum JsonSource { UiTree, PlayerUiTree, Version }
+    private enum JsonSource { UiTree, PlayerUiTree, Version, BuildInfo }
 }

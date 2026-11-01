@@ -49,7 +49,9 @@ public sealed partial class GuaUnityRuntime
         if (runtime == null) return;
         var map = FindGameInputMapInActiveScene();
         if (hasPublishedGameInputMap && ReferenceEquals(map, publishedGameInputMap)) { gameInputMapRefreshPending = false; return; }
+#if GUA_REMOTE_AUTOMATION
         ReleaseWebGameInputSession();
+#endif
         DisposeGameInput();
         if (map == null)
         {

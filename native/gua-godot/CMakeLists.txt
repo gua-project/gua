@@ -1,9 +1,17 @@
 include(FetchContent)
 
 set(GODOTCPP_API_VERSION "4.7" CACHE STRING "Godot API version for the Gua GDExtension." FORCE)
-set(GUA_GODOT_CONFIGURATION "Debug" CACHE STRING "Build configuration for the Gua GDExtension (Debug or Release).")
+if(GUA_RELEASE_ONLY)
+    set(GUA_GODOT_CONFIGURATION_DEFAULT "Release")
+else()
+    set(GUA_GODOT_CONFIGURATION_DEFAULT "Debug")
+endif()
+set(GUA_GODOT_CONFIGURATION "${GUA_GODOT_CONFIGURATION_DEFAULT}" CACHE STRING "Build configuration for the Gua GDExtension (Debug or Release).")
 set_property(CACHE GUA_GODOT_CONFIGURATION PROPERTY STRINGS Debug Release)
 string(TOLOWER "${GUA_GODOT_CONFIGURATION}" GUA_GODOT_CONFIGURATION_LOWER)
+if(GUA_RELEASE_ONLY AND NOT GUA_GODOT_CONFIGURATION_LOWER STREQUAL "release")
+    message(FATAL_ERROR "This variant requires the Godot Release target")
+endif()
 if(GUA_GODOT_CONFIGURATION_LOWER STREQUAL "debug")
     set(GODOTCPP_TARGET "template_debug" CACHE STRING "Godot build target for the Gua GDExtension." FORCE)
 elseif(GUA_GODOT_CONFIGURATION_LOWER STREQUAL "release")
@@ -88,16 +96,16 @@ set_target_properties(gua-godot
     PROPERTIES
         OUTPUT_NAME "${GUA_GODOT_OUTPUT_NAME}"
         PREFIX ""
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
-        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_SOURCE_DIR}/examples/godot-gdscript/addons/gua/bin"
+        RUNTIME_OUTPUT_DIRECTORY "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        LIBRARY_OUTPUT_DIRECTORY "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        LIBRARY_OUTPUT_DIRECTORY_DEBUG "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${GUA_GODOT_ADDON_DIRECTORY}/bin"
+        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${GUA_GODOT_ADDON_DIRECTORY}/bin"
 )
 
 if(EMSCRIPTEN)

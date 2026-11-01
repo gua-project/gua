@@ -64,4 +64,7 @@ foreach ($asset in @(
     Copy-Item -LiteralPath (Join-Path $root "scripts/unity-meta/$($asset.Meta)") -Destination $asset.Destination -Force
 }
 
+foreach ($ridLayout in @(@{Rid='win-x64';Target=$windowsNative},@{Rid='linux-x64';Target=$linuxNative},@{Rid='osx-universal';Target=$macNative})) {
+    Copy-Item -LiteralPath (Join-Path (Join-Path $NativeAssetsRoot $ridLayout.Rid) 'gua-build-manifest.json') -Destination $ridLayout.Target -Force
+}
 Write-Host "Prepared Unity project dependencies for Gua $Version."

@@ -36,6 +36,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
     private object? frameFocusTarget;
     private bool screenshotRunning;
     private static GuaUnityRuntime activeRuntime;
+#if GUA_REMOTE_AUTOMATION
     private readonly Dictionary<ulong, int> webCalls = new();
     private readonly Dictionary<ulong, int> webGameInputCalls = new();
     private GuaGameInputSession? webGameInputSession;
@@ -46,6 +47,8 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
     [DllImport("__Internal")] private static extern void GuaUnityWebInstall(string hostName, string ownerId, int timeoutMs);
     [DllImport("__Internal")] private static extern void GuaUnityWebUninstall(string ownerId);
     [DllImport("__Internal")] private static extern void GuaUnityWebResolve(string ownerId, int callId, string json, int failed);
+
+#endif
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     public static void EnsureStarted()
@@ -69,7 +72,14 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             SceneManager.activeSceneChanged += HandleGameInputActiveSceneChanged;
             InitializeGameInput();
             runtime.EnableWorldObjectTreeAdapter();
-            if (Application.platform == RuntimePlatform.WebGLPlayer)
+            using (var build = JsonDocument.Parse(runtime.GetBuildInfoJson())) {
+                if (build.RootElement.GetProperty("remoteEnabled").GetBoolean() != GuaUnityCompiledBuild.RemoteEnabled ||
+                    (build.RootElement.GetProperty("remotePermissionCeiling").GetString() == "player") != GuaUnityCompiledBuild.PlayerOnly)
+                    throw new InvalidOperationException("Gua Unity managed/native build variants do not match.");
+            }
+#if GUA_REMOTE_AUTOMATION
+            bool remoteEnabled = true;
+            if (remoteEnabled && Application.platform == RuntimePlatform.WebGLPlayer)
             {
                 webObserveClient = runtime.CreateObserveClient(GuaObservationProfile.Player);
                 webOwnerId = Guid.NewGuid().ToString("N");
@@ -77,13 +87,14 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
                 webInstalled = true;
                 Debug.Log("Gua Unity WebGL same-page bridge installed.");
             }
-            else
+            else if (remoteEnabled)
             {
                 var configured = Environment.GetEnvironmentVariable("GUA_BRIDGE_PORT");
                 var port = int.TryParse(configured, NumberStyles.None, CultureInfo.InvariantCulture, out var value) ? value : 8765;
                 if (!runtime.StartInspectorBridge(port)) throw new InvalidOperationException($"Failed to start Gua Inspector bridge on port {port}.");
                 Debug.Log($"Gua Unity adapter listening on {runtime.InspectorBridgeUrl}.");
             }
+#endif
             activeRuntime = this;
         }
         catch (Exception error)
@@ -151,12 +162,15 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
             catch (Exception error) { Debug.LogError("Gua Unity world publication failed: " + error); }
             DispatchActions();
             PumpGameInput();
+#if GUA_REMOTE_AUTOMATION
             if (Application.platform == RuntimePlatform.WebGLPlayer) { FlushWebActionResults(); FlushWebGameInputResults(); }
+#endif
             ScheduleScreenshot();
         }
         catch (Exception error) { Debug.LogError("Gua Unity adapter frame failed: " + error); }
     }
 
+#if GUA_REMOTE_AUTOMATION
     public void HandleWebRequest(string json)
     {
         if (runtime == null) return;
@@ -643,11 +657,13 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
     }
     [Serializable] private sealed class WebError { public string code, message; }
 
+#endif
     private void OnDestroy()
     {
-        webObserveClient?.Dispose(); webObserveClient = null;
         UnsubscribeGameInputSceneEvents();
         if (activeRuntime == this) activeRuntime = null;
+#if GUA_REMOTE_AUTOMATION
+        webObserveClient?.Dispose(); webObserveClient = null;
         if (webInstalled)
         {
             GuaUnityWebUninstall(webOwnerId);
@@ -655,6 +671,7 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
         }
         webCalls.Clear();
         ReleaseWebGameInputSession();
+#endif
         foreach (var pair in uGuiClickHandlers)
             if (pair.Key != null) pair.Key.onClick.RemoveListener(pair.Value);
         foreach (var pair in visualClickHandlers) pair.Key.clicked -= pair.Value;

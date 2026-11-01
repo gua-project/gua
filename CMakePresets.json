@@ -14,7 +14,10 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/windows-msvc-debug",
       "cacheVariables": {
-        "GUA_GODOT_CONFIGURATION": "Debug"
+        "GUA_GODOT_CONFIGURATION": "Debug",
+        "GUA_DISTRIBUTION_FLAVOR": "development",
+        "GUA_ENABLE_REMOTE_AUTOMATION": true,
+        "GUA_STAGE_IN_SAMPLE": true
       },
       "condition": {
         "type": "equals",
@@ -30,6 +33,60 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/windows-msvc-release",
       "cacheVariables": {
+        "GUA_GODOT_CONFIGURATION": "Release",
+        "GUA_DISTRIBUTION_FLAVOR": "development",
+        "GUA_ENABLE_REMOTE_AUTOMATION": true,
+        "GUA_STAGE_IN_SAMPLE": true
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-shipping",
+      "displayName": "Windows shipping",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-shipping",
+      "cacheVariables": {
+        "GUA_DISTRIBUTION_FLAVOR": "shipping",
+        "GUA_ENABLE_REMOTE_AUTOMATION": false,
+        "GUA_GODOT_CONFIGURATION": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-qa",
+      "displayName": "Windows qa",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-qa",
+      "cacheVariables": {
+        "GUA_DISTRIBUTION_FLAVOR": "qa",
+        "GUA_ENABLE_REMOTE_AUTOMATION": true,
+        "GUA_GODOT_CONFIGURATION": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-ai-player",
+      "displayName": "Windows ai-player",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-ai-player",
+      "cacheVariables": {
+        "GUA_DISTRIBUTION_FLAVOR": "ai-player",
+        "GUA_ENABLE_REMOTE_AUTOMATION": true,
         "GUA_GODOT_CONFIGURATION": "Release"
       },
       "condition": {
@@ -48,6 +105,21 @@
     {
       "name": "windows-msvc-release",
       "configurePreset": "windows-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-shipping",
+      "configurePreset": "windows-shipping",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-qa",
+      "configurePreset": "windows-qa",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-ai-player",
+      "configurePreset": "windows-ai-player",
       "configuration": "Release"
     }
   ]

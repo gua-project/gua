@@ -1,0 +1,46 @@
+name: Remote build variants
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-variants:
+    name: Remote variant / ${{ matrix.name }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: shipping, flavor: shipping, remote: 'off', configuration: Release, godot: true }
+          - { name: development, flavor: development, remote: 'on', configuration: Debug, godot: true }
+          - { name: qa, flavor: qa, remote: 'on', configuration: Release, godot: true }
+          - { name: ai-player, flavor: ai-player, remote: 'on', configuration: Release, godot: true }
+          - { name: development-local, flavor: development, remote: 'off', configuration: Debug, godot: false }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Build and accept the actual variant
+        shell: pwsh
+        run: |
+          $args = @{ Flavor = '${{ matrix.flavor }}'; Remote = '${{ matrix.remote }}'; Configuration = '${{ matrix.configuration }}' }
+          if ('${{ matrix.godot }}' -eq 'true') { $args.WithGodot = $true }
+          scripts/test-remote-build-variant.ps1 @args
+      - name: Preserve build and packaged-consumer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-${{ matrix.name }}-${{ github.sha }}
+          path: |
+            build/remote-*/remote-build-evidence/**
+            build/remote-*/Testing/Temporary/**
+            build/remote-*/package-*/**
+          if-no-files-found: error

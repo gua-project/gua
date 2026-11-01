@@ -1,5 +1,11 @@
 # Gua Protocol Draft
 
+[Remote build variants](remote-build-variants.md) define immutable compiled
+availability and the AI-player Player ceiling independently of optimization
+configuration and session profile. Explicit Debug consumers are rejected in an
+AI-player build; unscoped compatibility calls use Player there. Other variants
+retain the existing local Debug-compatible API behavior.
+
 ## 開発者が最初に読む入口
 
 例えばタイトル画面のPlayボタンを外部テストから押すには、gameが画面を意味付きのデータとして

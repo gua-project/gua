@@ -51,6 +51,10 @@ jobs:
           scripts/set-inspector-release-version.ps1 -Version '${{ steps.version.outputs.version }}'
           bun run --filter @gua/inspector tauri:build
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Configure Debug native build
         run: cmake --preset windows-msvc-debug "-DGUA_VERSION=${{ steps.version.outputs.version }}" "-DGUA_GODOT_PLUGIN_VERSION=${{ steps.version.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}"
 
@@ -116,10 +120,8 @@ jobs:
           Compress-Archive -Path (Join-Path $godotRoot "addons") -DestinationPath (Join-Path $assets "gua-godot-plugin-windows-v$version.zip") -CompressionLevel Optimal
 
           $nativeRoot = Join-Path $env:RUNNER_TEMP "gua-native-win-x64"
-          New-Item -ItemType Directory -Force $nativeRoot | Out-Null
-          Copy-Item "build/windows-msvc-release/native/gua-core/Release/gua.dll" $nativeRoot
-          Copy-Item "build/windows-msvc-release/native/gua-runtime/Release/gua_runtime.dll" $nativeRoot
-          Copy-Item "LICENSE" $nativeRoot
+          scripts/stage-remote-build.ps1 -BuildDirectory build/windows-msvc-release -OutputDirectory $nativeRoot -Flavor development -Remote on
+          "nativeRoot=$nativeRoot" >> $env:GITHUB_OUTPUT
           Compress-Archive -Path (Join-Path $nativeRoot "*") -DestinationPath (Join-Path $assets "gua-native-win-x64-v$version.zip") -CompressionLevel Optimal
 
           Copy-Item "packages/inspector/src-tauri/target/release/bundle" (Join-Path $assets "inspector") -Recurse
@@ -137,8 +139,7 @@ jobs:
         with:
           name: gua-unity-native-v${{ steps.version.outputs.version }}
           path: |
-            build/windows-msvc-release/native/gua-core/Release/gua.dll
-            build/windows-msvc-release/native/gua-runtime/Release/gua_runtime.dll
+            ${{ steps.package.outputs.nativeRoot }}
           if-no-files-found: error
 
       - name: Upload Windows Godot GDExtensions
@@ -179,8 +180,8 @@ jobs:
 
       - name: Configure native and Godot targets
         run: |
-          cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_EXAMPLES=OFF -DGUA_GODOT_CONFIGURATION=Release -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} "-DGUA_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_GODOT_PLUGIN_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}"
-          cmake -S . -B build/godot-debug -DCMAKE_BUILD_TYPE=Debug -DGUA_BUILD_EXAMPLES=OFF -DGUA_GODOT_CONFIGURATION=Debug -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} "-DGUA_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_GODOT_PLUGIN_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}"
+          cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_EXAMPLES=OFF -DGUA_GODOT_CONFIGURATION=Release -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} "-DGUA_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_GODOT_PLUGIN_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}" -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
+          cmake -S . -B build/godot-debug -DCMAKE_BUILD_TYPE=Debug -DGUA_BUILD_EXAMPLES=OFF -DGUA_GODOT_CONFIGURATION=Debug -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} "-DGUA_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_GODOT_PLUGIN_VERSION=${{ needs.windows-assets.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}" -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
 
       - name: Build and test release native targets
         run: |
@@ -213,14 +214,15 @@ jobs:
           otool -l '${{ matrix.runtime-file }}' | grep -A2 LC_RPATH | grep -F '@loader_path'
           ! otool -L "examples/godot-gdscript/addons/gua/bin/gua_godot.macos.release.${{ matrix.arch }}.dylib" | grep -F 'gua_runtime'
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Package release native archive
         shell: pwsh
         run: |
           $stage = "artifacts/native/${{ matrix.rid }}"
-          New-Item -ItemType Directory -Force $stage | Out-Null
-          Copy-Item "${{ matrix.core-file }}" $stage
-          Copy-Item "${{ matrix.runtime-file }}" $stage
-          Copy-Item LICENSE $stage
+          scripts/stage-remote-build.ps1 -BuildDirectory build/native -OutputDirectory $stage -Flavor development -Remote on
           Compress-Archive -Path "$stage/*" -DestinationPath "artifacts/gua-native-${{ matrix.rid }}-v${{ needs.windows-assets.outputs.version }}.zip" -CompressionLevel Optimal
 
       - name: Upload release native archive
@@ -281,6 +283,9 @@ jobs:
           foreach ($contract in $contracts) {
             $target = "artifacts/native/$($contract.Rid)"
             New-Item -ItemType Directory -Force $target | Out-Null
+            $manifest = @(Get-ChildItem $contract.Root -Recurse -File -Filter gua-build-manifest.json)
+            if ($manifest.Count -ne 1) { throw "Expected one native manifest for $($contract.Rid)." }
+            Copy-Item $manifest[0].FullName $target
             foreach ($fileName in @($contract.Core, $contract.Runtime)) {
               $matches = @(Get-ChildItem $contract.Root -Recurse -File -Filter $fileName)
               if ($matches.Count -ne 1) {
@@ -292,8 +297,8 @@ jobs:
 
       - name: Pack native NuGet packages
         run: |
-          dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release -p:GuaPackageVersion=${{ needs.windows-assets.outputs.version }} -p:PackageVersion=${{ needs.windows-assets.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
-          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release -p:GuaPackageVersion=${{ needs.windows-assets.outputs.version }} -p:PackageVersion=${{ needs.windows-assets.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native
+          dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release -p:GuaPackageVersion=${{ needs.windows-assets.outputs.version }} -p:PackageVersion=${{ needs.windows-assets.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:GuaDistributionFlavor=development -p:GuaEnableRemoteAutomation=true
+          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release -p:GuaPackageVersion=${{ needs.windows-assets.outputs.version }} -p:PackageVersion=${{ needs.windows-assets.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:GuaDistributionFlavor=development -p:GuaEnableRemoteAutomation=true
 
       - name: Verify native package contents
         shell: pwsh
@@ -368,6 +373,10 @@ jobs:
           pattern: gua-release-native-*
           path: artifacts/download/portable
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Build Unity native layout and Universal 2 libraries
         shell: pwsh
         run: |
@@ -391,6 +400,12 @@ jobs:
             lipo (Join-Path $root "osx-universal/$file") -verify_arch x86_64 arm64
             if ($LASTEXITCODE -ne 0) { throw "Universal 2 verification failed for $file." }
           }
+          foreach ($layout in @(@{Source='artifacts/download/windows';Rid='win-x64'},@{Source='artifacts/download/portable/gua-release-native-linux-x64';Rid='linux-x64'})) {
+            $manifest = @(Get-ChildItem $layout.Source -Recurse -File -Filter gua-build-manifest.json)
+            if ($manifest.Count -ne 1) { throw 'Expected one verified native manifest.' }
+            Copy-Item $manifest[0].FullName (Join-Path $root $layout.Rid)
+          }
+          scripts/write-native-pair-manifest.ps1 -Directory (Join-Path $root 'osx-universal') -Flavor development -Remote on
 
       - name: Upload Unity desktop native plugins
         uses: actions/upload-artifact@v4

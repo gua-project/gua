@@ -50,4 +50,6 @@
           Condition="'$(GuaNativeAssetsRoot)' == '' And !Exists('..\..\..\..\build\windows-msvc-release\native\gua-core\Release\gua.dll')">
     <Error Text="Packing Gua.Core requires GuaNativeAssetsRoot with all four RID assets, or the legacy Windows Release gua.dll build." />
   </Target>
+  <PropertyGroup><GuaNativeComponent>core</GuaNativeComponent></PropertyGroup>
+  <Import Project="../../NativeVariantPack.targets" />
 </Project>
