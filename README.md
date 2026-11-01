@@ -39,6 +39,13 @@ player.
 
 **Build → Run → Inspect → Test → Fix → Test again.**
 
+Remote automation is an explicit build opt-in. Source builds default to a
+remote-free Shipping variant; Development/Editor, QA Release and Player-only
+AI-player distribution use separate variants. Existing `windows-msvc-*` sample
+presets explicitly select Development and are not Shipping artifacts. See
+[the build contract](protocol/specs/remote-build-variants.md) and
+[distribution guide](docs/remote-build-variants.ja.md).
+
 Gua starts with the Playwright-like model: the browser DOM becomes a Semantic UI
 Tree, and locators, actions, waits, and assertions operate against the live game
 runtime. It then extends that model for game development with game-world

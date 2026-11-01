@@ -1,4 +1,5 @@
 #include "gua/runtime.h"
+#include "gua/build_config.h"
 #include "gua/semantic_lint.h"
 #include "../../gua-core/src/value_json.hpp"
 #include <optional>
@@ -37,7 +38,7 @@ struct gua_runtime_t {
         std::vector<uint64_t> request_ids;
     };
     struct GameInputAuthorization {
-        int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG;
+        int observation_profile = GUA_DEFAULT_OBSERVATION_PROFILE;
         uint64_t owner_id = 0;
         bool consumed = false;
         bool guarded = false;
@@ -64,7 +65,7 @@ struct gua_runtime_t {
     std::unordered_map<uint64_t, GameInputAuthorization> game_input_request_profiles;
     bool world_object_tree_enabled = false;
     bool player_screenshot_enabled = false;
-    int observation_profile = GUA_OBSERVATION_PROFILE_DEBUG;
+    int observation_profile = GUA_DEFAULT_OBSERVATION_PROFILE;
     std::atomic_bool bridge_stopping = false;
     uint64_t next_screenshot_request_id = 1;
     std::deque<gua_screenshot_request_t> screenshot_requests;
@@ -98,6 +99,7 @@ constexpr uint32_t all_game_input_capabilities =
 
 uint32_t effective_game_input_capabilities(const gua_runtime_t* runtime, int observation_profile)
 {
+    if (!gua_build_profile_allowed(observation_profile)) return 0;
     if (observation_profile == GUA_OBSERVATION_PROFILE_DEBUG) return runtime->game_input_capabilities;
     if (observation_profile == GUA_OBSERVATION_PROFILE_PLAYER)
         return runtime->game_input_capabilities & runtime->player_game_input_capabilities;
@@ -193,6 +195,7 @@ std::string decorate_version_json(gua_runtime_t* runtime, std::string json,std::
     }
     filter_runtime_capabilities(json, runtime->virtual_clock_enabled,
         effective_game_input_capabilities(runtime, runtime->observation_profile));
+    if (GUA_COMPILED_PLAYER_ONLY) remove_capability(json, "virtual_clock_v1");
     if (!runtime->world_object_tree_enabled) remove_capability(json, "world_object_tree_v1");
     if (!runtime->godot_plugin_version.empty()) {
         const std::string marker = "\"godotPluginVersion\":null";
@@ -533,6 +536,7 @@ std::string reset_report_json(gua_runtime_t* runtime, unsigned long long expecte
 
 extern "C" gua_runtime_t* gua_runtime_create(void)
 {
+    if (GUA_COMPILED_PLAYER_ONLY && observation_profile_from_environment() == "debug") return nullptr;
     auto runtime = std::make_unique<gua_runtime_t>();
     runtime->context = gua_create_context();
     if (runtime->context == nullptr) {
@@ -542,6 +546,11 @@ extern "C" gua_runtime_t* gua_runtime_create(void)
         runtime->observation_profile = GUA_OBSERVATION_PROFILE_PLAYER;
 
     return runtime.release();
+}
+
+extern "C" int gua_runtime_copy_build_info_json(char* out_json, int out_json_size)
+{
+    return gua_copy_build_info_json(out_json, out_json_size);
 }
 
 extern "C" void gua_runtime_destroy(gua_runtime_t* runtime)
@@ -565,7 +574,7 @@ extern "C" gua_context_t* gua_runtime_borrow_context(gua_runtime_t* runtime) {
     return valid_runtime(runtime) ? runtime->context : nullptr;
 }
 extern "C" uint64_t gua_runtime_create_observe_client(gua_runtime_t* r,int profile) {
-    if(!valid_runtime(r) || profile<0 || profile>1) return 0;
+    if(!valid_runtime(r) || !gua_build_profile_allowed(profile)) return 0;
     try { std::lock_guard lock(r->context_mutex);
         if(r->observation_profile==GUA_OBSERVATION_PROFILE_PLAYER && profile==GUA_OBSERVATION_PROFILE_DEBUG) return 0;
         auto id=r->next_observe_client++;
@@ -1081,6 +1090,7 @@ extern "C" void gua_runtime_set_game_input_capabilities(gua_runtime_t* runtime, 
     const std::lock_guard lock(runtime->context_mutex);
     runtime->game_input_capabilities = capabilities & all_game_input_capabilities;
     runtime->player_game_input_capabilities &= runtime->game_input_capabilities;
+    gua_set_player_game_input_capabilities(runtime->context,runtime->player_game_input_capabilities);
 }
 
 extern "C" void gua_runtime_set_player_game_input_capabilities(gua_runtime_t* runtime, uint32_t capabilities)
@@ -1088,6 +1098,7 @@ extern "C" void gua_runtime_set_player_game_input_capabilities(gua_runtime_t* ru
     if (!valid_runtime(runtime)) return;
     const std::lock_guard lock(runtime->context_mutex);
     runtime->player_game_input_capabilities = capabilities & runtime->game_input_capabilities & all_game_input_capabilities;
+    gua_set_player_game_input_capabilities(runtime->context,runtime->player_game_input_capabilities);
 }
 
 extern "C" uint32_t gua_runtime_get_game_input_capabilities(gua_runtime_t* runtime, int observation_profile)
@@ -1186,7 +1197,7 @@ static int enqueue_runtime_game_input(gua_runtime_t* runtime,
     bool guarded, uint64_t epoch, uint64_t revision, bool validate_only = false)
 {
     if (!valid_runtime(runtime) || descriptor == nullptr ||
-        (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER))
+        (!gua_build_profile_allowed(observation_profile)))
         return GUA_GAME_INPUT_ERROR_INVALID_ARGUMENT;
     const std::lock_guard lock(runtime->context_mutex);
     if (runtime->observation_profile == GUA_OBSERVATION_PROFILE_PLAYER && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)
@@ -1257,7 +1268,7 @@ extern "C" int gua_runtime_tick_game_input_leases(gua_runtime_t* runtime, double
 
 extern "C" int gua_runtime_copy_game_input_actions_json_v2(gua_runtime_t* runtime, int observation_profile, char* output, int size)
 {
-    if (!valid_runtime(runtime) || (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 0;
+    if (!valid_runtime(runtime) || (!gua_build_profile_allowed(observation_profile))) return 0;
     const std::lock_guard lock(runtime->context_mutex);
     if (runtime->observation_profile == GUA_OBSERVATION_PROFILE_PLAYER && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER) return 0;
     if ((effective_game_input_capabilities(runtime, observation_profile) & GUA_RUNTIME_GAME_INPUT_SEMANTIC) == 0) return 0;
@@ -1267,7 +1278,7 @@ extern "C" int gua_runtime_copy_game_input_actions_json_v2(gua_runtime_t* runtim
 extern "C" int gua_runtime_query_game_input_actions_json_v2(gua_runtime_t* runtime,
     const gua_game_input_action_selector_v1_t* selector, int observation_profile, char* output, int size)
 {
-    if (!valid_runtime(runtime) || !selector || (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 0;
+    if (!valid_runtime(runtime) || !selector || (!gua_build_profile_allowed(observation_profile))) return 0;
     const std::lock_guard lock(runtime->context_mutex);
     if (runtime->observation_profile == GUA_OBSERVATION_PROFILE_PLAYER && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER) return 0;
     if ((effective_game_input_capabilities(runtime, observation_profile) & GUA_RUNTIME_GAME_INPUT_SEMANTIC) == 0) return 0;
@@ -1294,7 +1305,7 @@ extern "C" int gua_runtime_query_game_input_actions_json(gua_runtime_t* runtime,
     const gua_game_input_action_selector_v1_t* selector, int observation_profile, char* out_json, int out_json_size)
 {
     if (!valid_runtime(runtime) || selector == nullptr ||
-        (observation_profile != GUA_OBSERVATION_PROFILE_DEBUG && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 0;
+        (!gua_build_profile_allowed(observation_profile))) return 0;
     const std::lock_guard lock(runtime->context_mutex);
     if (runtime->observation_profile == GUA_OBSERVATION_PROFILE_PLAYER && observation_profile != GUA_OBSERVATION_PROFILE_PLAYER) return 0;
     if ((effective_game_input_capabilities(runtime, observation_profile) & GUA_RUNTIME_GAME_INPUT_SEMANTIC) == 0) return 0;
@@ -1333,7 +1344,7 @@ extern "C" void gua_runtime_set_world_object_tree_enabled(gua_runtime_t* runtime
 
 extern "C" int gua_runtime_set_observation_profile(gua_runtime_t* runtime, int profile)
 {
-    if (!valid_runtime(runtime) || (profile != GUA_OBSERVATION_PROFILE_DEBUG && profile != GUA_OBSERVATION_PROFILE_PLAYER)) return 0;
+    if (!valid_runtime(runtime) || (!gua_build_profile_allowed(profile))) return 0;
     const std::lock_guard bridge_lock(runtime->bridge_mutex);
     const std::lock_guard context_lock(runtime->context_mutex);
     if ((inspector_bridge_running_unlocked(runtime) && runtime->observation_profile != profile) ||
@@ -1356,6 +1367,7 @@ extern "C" int gua_runtime_set_player_screenshot_enabled(gua_runtime_t* runtime,
     const std::lock_guard bridge_lock(runtime->bridge_mutex);
     const std::lock_guard context_lock(runtime->context_mutex);
     if (inspector_bridge_running_unlocked(runtime)) return 0;
+    if (!gua_set_player_screenshot_enabled(runtime->context, enabled)) return 0;
     runtime->player_screenshot_enabled = enabled != 0;
     return 1;
 }
@@ -1655,6 +1667,7 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
     runtime->bridge_stopping.store(false);
 
     gua::ws::BridgeHandlers handlers {
+#if !GUA_COMPILED_PLAYER_ONLY
         .create_spatial_client = [runtime] { return gua_runtime_create_spatial_client(runtime); },
         .release_spatial_client = [runtime](unsigned long long client) { gua_runtime_release_spatial_client(runtime,client); },
         .spatial_command = [runtime](unsigned long long client,int operation,std::string_view wire,unsigned long long batch_id) -> gua::ws::CommandResult {
@@ -1671,6 +1684,7 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
             if(status) return {false,"",spatial_safe_error(status)};
             return {true,raw ? spatial_document_json(raw) : "null",""};
         },
+#endif
         .create_observe_client = [runtime] { return gua_runtime_create_observe_client(runtime,runtime->observation_profile); },
         .release_observe_client = [runtime](unsigned long long client) { gua_runtime_release_observe_client(runtime,client); },
         .observe_command = [runtime](unsigned long long client,int operation,unsigned long long subscription) -> gua::ws::CommandResult {
@@ -1770,6 +1784,7 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
             const std::lock_guard lock(runtime->context_mutex);
             return decorate_version_json(runtime,core_version_json(),client);
         },
+#if !GUA_COMPILED_PLAYER_ONLY
         .clock_supported = [runtime] {
             const std::lock_guard lock(runtime->context_mutex);
             return runtime->virtual_clock_enabled;
@@ -1859,6 +1874,7 @@ extern "C" int gua_runtime_start_inspector_bridge(gua_runtime_t* runtime, int po
             }
             return gua::ws::CommandResult { true, std::move(json), {} };
         },
+#endif
         .query_nodes_json = [runtime](const gua::ws::QuerySelector& selector) {
             gua_selector_v1_t native {
                 sizeof(gua_selector_v1_t),

@@ -1,5 +1,10 @@
 # Gua
 
+遠隔機能はビルド時の明示 opt-in になった。ソースの既定は遠隔実装なしの通常出荷版。
+Development/Editor、QA Release、Player 上限固定の AI Player 出荷版を分ける。
+既存 `windows-msvc-*` サンプル preset は Development を明示した検証用であり、通常出荷用ではない。
+[ビルド・配布ガイド](docs/remote-build-variants.ja.md)と[規範仕様](protocol/specs/remote-build-variants.md)を参照。
+
 ## Main
 
 [English](README.md) | 日本語

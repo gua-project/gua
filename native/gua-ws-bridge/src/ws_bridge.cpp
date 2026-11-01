@@ -1,3 +1,5 @@
+#include "gua/gua.h"
+#include "gua/build_config.h"
 #include "gua/ws_bridge.hpp"
 #include "socket_platform.hpp"
 #include "../../gua-core/src/value_json.hpp"
@@ -1473,6 +1475,7 @@ private:
                 command.type != "pointer_button_down" && command.type != "pointer_button_up" &&
                 command.type != "gamepad_button_down" && command.type != "gamepad_button_up" &&
                 command.type != "set_gamepad_axis" && command.type != "text_input") return error_response(command.id, "unsupported");
+#if !GUA_COMPILED_PLAYER_ONLY
             if(command.type=="get_spatial_info" || command.type=="query_spatial_batch" || command.type=="poll_spatial_batch" || command.type=="cancel_spatial_batch") {
                 int operation=command.type=="get_spatial_info" ? 1 : command.type=="query_spatial_batch" ? 2 : command.type=="poll_spatial_batch" ? 3 : 4;
                 int response_id=0; uint64_t batch_id=0; std::string batch;
@@ -1497,6 +1500,7 @@ private:
                 auto result=handlers_.spatial_command(spatial_client_id,operation,batch,batch_id);
                 return result.ok ? ok_response(response_id,result.json) : error_response(response_id,result.error);
             }
+#endif
             if(command.type=="get_observe_snapshot" || command.type=="subscribe_observations" ||
                 command.type=="poll_observations" || command.type=="unsubscribe_observations") {
                 int operation=command.type=="get_observe_snapshot" ? 1 : command.type=="subscribe_observations" ? 2 : command.type=="poll_observations" ? 3 : 4;
@@ -1573,6 +1577,7 @@ private:
                     ? ok_response(command.id, handlers_.get_version_json())
                     : error_response(command.id, "get_version is not supported by this bridge");
             }
+#if !GUA_COMPILED_PLAYER_ONLY
             if (command.type == "get_clock") {
                 return handlers_.clock_supported && handlers_.clock_supported() && handlers_.get_clock_json
                     ? ok_response(command.id, handlers_.get_clock_json())
@@ -1591,6 +1596,7 @@ private:
                     command.step_ms, command.step_ms_present);
                 return result.ok ? ok_response(command.id, result.json) : error_response(command.id, result.error);
             }
+#endif
             if (command.type == "query_nodes") {
                 if (!handlers_.query_nodes_json) {
                     return error_response(command.id, "query_nodes is not supported by this bridge");

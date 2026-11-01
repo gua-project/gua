@@ -1,3 +1,5 @@
+#include "gua/gua.h"
+#include "gua/build_config.h"
 #include "gua/spatial_host.h"
 #include "value_json.hpp"
 #include <array>

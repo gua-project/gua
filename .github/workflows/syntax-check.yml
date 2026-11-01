@@ -69,8 +69,8 @@ jobs:
 
       - name: Configure Debug and Release native builds
         run: |
-          cmake -S . -B build/godot-debug -DCMAKE_BUILD_TYPE=Debug -DGUA_GODOT_CONFIGURATION=Debug -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF -DGUA_VERSION=0.0.0-ci -DGUA_BUILD_ID=${{ github.sha }}
-          cmake -S . -B build/godot-release -DCMAKE_BUILD_TYPE=Release -DGUA_GODOT_CONFIGURATION=Release -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF -DGUA_VERSION=0.0.0-ci -DGUA_BUILD_ID=${{ github.sha }}
+          cmake -S . -B build/godot-debug -DCMAKE_BUILD_TYPE=Debug -DGUA_GODOT_CONFIGURATION=Debug -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF -DGUA_VERSION=0.0.0-ci -DGUA_BUILD_ID=${{ github.sha }} -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
+          cmake -S . -B build/godot-release -DCMAKE_BUILD_TYPE=Release -DGUA_GODOT_CONFIGURATION=Release -DGUA_GODOT_ARCHITECTURE=${{ matrix.arch }} -DGUA_BUILD_IMGUI_EXAMPLE=OFF -DGUA_VERSION=0.0.0-ci -DGUA_BUILD_ID=${{ github.sha }} -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
 
       - name: Build Debug and Release Godot GDExtensions
         run: |
@@ -291,7 +291,7 @@ jobs:
           bun run --filter @gua/inspector build:trace
 
       - name: Configure portable native targets
-        run: cmake -S . -B build/portable -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF "-DGUA_VERSION=0.0.0-ci" "-DGUA_BUILD_ID=${{ github.sha }}"
+        run: cmake -S . -B build/portable -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF "-DGUA_VERSION=0.0.0-ci" "-DGUA_BUILD_ID=${{ github.sha }}" -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
 
       - name: Build portable native targets
         run: |
@@ -321,9 +321,7 @@ jobs:
       - name: Stage native package assets
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force "artifacts/native/${{ matrix.rid }}" | Out-Null
-          Copy-Item "${{ matrix.core-file }}" "artifacts/native/${{ matrix.rid }}/"
-          Copy-Item "${{ matrix.runtime-file }}" "artifacts/native/${{ matrix.rid }}/"
+          scripts/stage-remote-build.ps1 -BuildDirectory build/portable -OutputDirectory "artifacts/native/${{ matrix.rid }}" -Flavor development -Remote on
 
       - name: Upload native package assets
         uses: actions/upload-artifact@v4
@@ -363,8 +361,8 @@ jobs:
 
       - name: Pack native packages
         run: |
-          dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
-          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }} -p:GuaDistributionFlavor=development -p:GuaEnableRemoteAutomation=true
+          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release -p:GuaPackageVersion=0.0.0-ci -p:PackageVersion=0.0.0-ci -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }} -p:GuaDistributionFlavor=development -p:GuaEnableRemoteAutomation=true
 
       - name: Set up Bun for the packaged Trace Viewer
         uses: oven-sh/setup-bun@v2
@@ -493,7 +491,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -S . -B build/cpp -DCMAKE_BUILD_TYPE=Debug -DGUA_BUILD_GODOT=OFF
+        run: cmake -S . -B build/cpp -DCMAKE_BUILD_TYPE=Debug -DGUA_BUILD_GODOT=OFF -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
 
       - name: Build
         run: |
@@ -522,7 +520,7 @@ jobs:
 
       - name: Build native runtime for managed clock tests
         run: |
-          cmake -S . -B build/dotnet-native -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_GODOT=OFF
+          cmake -S . -B build/dotnet-native -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_GODOT=OFF -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
           cmake --build build/dotnet-native --config Release --target gua gua-runtime --parallel
 
       - name: Restore

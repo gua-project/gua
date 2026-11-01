@@ -231,11 +231,11 @@ extern "C" int gua_observe_set_limits(gua_context_t* c,uint32_t count,uint64_t b
         for(auto& j:c->observe.journals) observe_trim(c->observe,j); return 0; } OBS_CATCH
 }
 extern "C" int gua_observe_snapshot(gua_context_t* c,int p,gua_observe_result_t** out) {
-    if(out) *out=nullptr; if(!c || !out || p<0 || p>1) return GUA_OBSERVE_ARGUMENT;
+    if(out) *out=nullptr; if(!c || !out || !gua_build_profile_allowed(p)) return GUA_OBSERVE_ARGUMENT;
     OBS_TRY { std::lock_guard lock(c->mutex); *out=new gua_observe_result_t{observe_snapshot_json(*c,p),observe_snapshot_catalogs(*c,p)}; return 0; } OBS_CATCH
 }
 extern "C" int gua_observe_subscribe(gua_context_t* c,int p,uint64_t* id,gua_observe_result_t** out) {
-    if(out) *out=nullptr; if(id) *id=0; if(!c || !out || !id || p<0 || p>1) return GUA_OBSERVE_ARGUMENT;
+    if(out) *out=nullptr; if(id) *id=0; if(!c || !out || !id || !gua_build_profile_allowed(p)) return GUA_OBSERVE_ARGUMENT;
     OBS_TRY { std::lock_guard lock(c->mutex); auto& s=c->observe; auto& j=s.journals[p];
         auto result=std::make_unique<gua_observe_result_t>(gua_observe_result_t{observe_snapshot_json(*c,p),observe_snapshot_catalogs(*c,p)});
         auto key=s.next_id++; s.subscriptions.emplace(key,ObserveSubscription{p,c->session_epoch,j.sequence,j.generation});

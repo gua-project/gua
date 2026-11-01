@@ -8,6 +8,13 @@ extern "C" {
 
 typedef struct gua_context_t gua_context_t;
 
+/* Immutable build identity. This is availability, not a runtime authorization grant. */
+int gua_copy_build_info_json(char* out_json, int out_json_size);
+/* Host-owned Player screenshot opt-in; remote clients cannot call configuration APIs. */
+int gua_set_player_screenshot_enabled(gua_context_t* ctx, int enabled);
+/* Bits semantic/keyboard/pointer/gamepad/text, matching runtime capability bits. */
+void gua_set_player_game_input_capabilities(gua_context_t* ctx, uint32_t capabilities);
+
 typedef struct gua_bounds_t {
     float x;
     float y;

@@ -49,19 +49,21 @@ jobs:
         run: .github/scripts/release-version-from-tag.ps1
 
       - name: Configure native assets
-        run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_GODOT=OFF "-DGUA_VERSION=${{ steps.version.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}"
+        run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_GODOT=OFF "-DGUA_VERSION=${{ steps.version.outputs.version }}" "-DGUA_BUILD_ID=${{ github.sha }}" -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_STAGE_IN_SAMPLE=ON
 
       - name: Build and test native assets
         run: |
           cmake --build build/native --config Release --parallel
           ctest --test-dir build/native -C Release --output-on-failure
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Stage native assets
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force "artifacts/native/${{ matrix.rid }}" | Out-Null
-          Copy-Item "${{ matrix.core-file }}" "artifacts/native/${{ matrix.rid }}/"
-          Copy-Item "${{ matrix.runtime-file }}" "artifacts/native/${{ matrix.rid }}/"
+          scripts/stage-remote-build.ps1 -BuildDirectory build/native -OutputDirectory "artifacts/native/${{ matrix.rid }}" -Flavor development -Remote on
 
       - name: Upload native assets
         uses: actions/upload-artifact@v4
@@ -160,7 +162,7 @@ jobs:
           GUA_NATIVE_DIR: ${{ github.workspace }}\artifacts\native\win-x64
 
       - name: Pack Gua.Core
-        run: dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
+        run: dotnet pack bindings/dotnet/src/Gua.Core/Gua.Core.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }} -p:GuaDistributionFlavor=development -p:GuaEnableRemoteAutomation=true
 
       - name: Pack Gua.Testing
         run: dotnet pack bindings/dotnet/src/Gua.Testing/Gua.Testing.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
@@ -170,7 +172,7 @@ jobs:
 
       - name: Pack Unity runtime and testing host
         run: |
-          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }}
+          dotnet pack bindings/dotnet/src/Gua.Runtime/Gua.Runtime.csproj --configuration Release --no-build -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaNativeAssetsRoot=${{ github.workspace }}/artifacts/native -p:RepositoryCommit=${{ github.sha }} -p:GuaDistributionFlavor=development -p:GuaEnableRemoteAutomation=true
           dotnet pack bindings/dotnet/src/Gua.Testing.Unity/Gua.Testing.Unity.csproj --configuration Release --no-build -p:PackageVersion=${{ steps.version.outputs.version }} -p:GuaPackageVersion=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
 
       - name: Verify native package contents

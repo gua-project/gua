@@ -19,6 +19,9 @@ public static class GuaUnityEditorCommands
 
     public static void BuildPlayer()
     {
+        // This command builds the repository's development fixture, not a shipping game.
+        var buildVariant = Argument("-guaVariant") ?? "development";
+        Environment.SetEnvironmentVariable("GUA_BUILD_VARIANT", buildVariant);
         PrepareProject();
         var scene = Argument("-guaScene") ?? throw new ArgumentException("-guaScene is required.");
         var output = Argument("-guaOutput") ?? throw new ArgumentException("-guaOutput is required.");
@@ -48,7 +51,7 @@ public static class GuaUnityEditorCommands
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
         {
             scenes = new[] { scene }, locationPathName = output,
-            target = target, options = BuildOptions.Development,
+            target = target, options = buildVariant == "development" ? BuildOptions.Development : BuildOptions.None,
         });
         if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
             throw new InvalidOperationException($"Gua Unity player build failed: {report.summary.result} ({report.summary.totalErrors} errors).");

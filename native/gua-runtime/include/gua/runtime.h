@@ -9,6 +9,8 @@ extern "C" {
 #endif
 
 typedef struct gua_runtime_t gua_runtime_t;
+
+int gua_runtime_copy_build_info_json(char* out_json, int out_json_size);
 /* Host-only borrowed context for existing Observe C/C++ bindings. Never destroy
  * it. Synchronize host calls/getters with runtime destruction, as for all APIs. */
 gua_context_t* gua_runtime_borrow_context(gua_runtime_t* runtime);

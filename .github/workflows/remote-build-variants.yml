@@ -1,0 +1,155 @@
+name: Remote build variants
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-variants:
+    name: Remote variant / ${{ matrix.name }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: shipping, flavor: shipping, remote: 'off', configuration: Release, godot: true }
+          - { name: development, flavor: development, remote: 'on', configuration: Debug, godot: true }
+          - { name: qa, flavor: qa, remote: 'on', configuration: Release, godot: true }
+          - { name: ai-player, flavor: ai-player, remote: 'on', configuration: Release, godot: true }
+          - { name: development-local, flavor: development, remote: 'off', configuration: Debug, godot: false }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Build and accept the actual variant
+        shell: pwsh
+        run: |
+          $args = @{ Flavor = '${{ matrix.flavor }}'; Remote = '${{ matrix.remote }}'; Configuration = '${{ matrix.configuration }}'; BuildParallel = 4 }
+          if ('${{ matrix.godot }}' -eq 'true') { $args.WithGodot = $true }
+          scripts/test-remote-build-variant.ps1 @args
+      - name: Reject invalid configuration combinations
+        if: matrix.name == 'shipping'
+        shell: pwsh
+        run: scripts/test-remote-build-config.ps1
+      - name: Download existing Godot editor and Release template
+        if: matrix.godot
+        shell: pwsh
+        run: |
+          Invoke-WebRequest 'https://github.com/godotengine/godot-builds/releases/download/4.7-stable/Godot_v4.7-stable_win64.exe.zip' -OutFile godot.zip
+          Invoke-WebRequest 'https://github.com/godotengine/godot-builds/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz' -OutFile templates.zip
+          Expand-Archive godot.zip godot-editor
+          Expand-Archive templates.zip godot-templates
+      - name: Run packaged Godot consumer and preserve selected package
+        if: matrix.godot
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem 'build/remote-${{ matrix.flavor }}-${{ matrix.remote }}-${{ matrix.configuration }}' -Directory -Filter 'package-*' | Sort-Object Name | Select-Object -Last 1
+          $args = @{ PackageDirectory = $package.FullName; GodotExecutable = "$PWD/godot-editor/Godot_v4.7-stable_win64_console.exe"; Flavor = '${{ matrix.flavor }}'; Remote = '${{ matrix.remote }}' }
+          if ('${{ matrix.flavor }}' -eq 'development') { $args.Editor = $true } else { $args.ReleaseTemplate = "$PWD/godot-templates/templates/windows_release_x86_64.exe" }
+          scripts/test-godot-remote-build.ps1 @args
+          New-Item -ItemType Directory -Force artifacts/selected | Out-Null
+          Copy-Item -LiteralPath $package.FullName -Destination artifacts/selected/package -Recurse
+      - uses: actions/upload-artifact@v4
+        if: matrix.godot
+        with:
+          name: selected-${{ matrix.name }}-${{ github.sha }}
+          path: artifacts/selected/package
+          if-no-files-found: error
+      - name: Preserve build and packaged-consumer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-${{ matrix.name }}-${{ github.sha }}
+          path: |
+            build/remote-*/remote-build-evidence/**
+            build/remote-*/Testing/Temporary/**
+            build/remote-*/package-*/**
+            build/godot-variant-*/consumer.log
+            build/godot-variant-*/userdata/**/gua-variant-result.json
+            build/cfg-*/**
+          if-no-files-found: error
+  package-mixing:
+    needs: windows-variants
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: selected-*-${{ github.sha }}
+          path: artifacts/mixing
+      - shell: pwsh
+        run: |
+          scripts/test-remote-package-mixing.ps1 -ShippingPackage artifacts/mixing/selected-shipping-${{ github.sha }} -QAPackage artifacts/mixing/selected-qa-${{ github.sha }} -AIPlayerPackage artifacts/mixing/selected-ai-player-${{ github.sha }}
+          scripts/test-unity-package-mixing.ps1 -ShippingNativeDirectory artifacts/mixing/selected-shipping-${{ github.sha }} -QARuntimeLibrary artifacts/mixing/selected-qa-${{ github.sha }}/gua_runtime.dll
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: remote-mixing-${{ github.sha }}
+          path: |
+            build/package-mixing-*/results.json
+            build/unity-mixing-*/result.json
+          if-no-files-found: error
+  web-variants:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { flavor: shipping, remote: 'off' }
+          - { flavor: development, remote: 'on' }
+          - { flavor: qa, remote: 'on' }
+          - { flavor: ai-player, remote: 'on' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: 4.0.20
+          actions-cache-folder: emsdk-cache
+      - shell: pwsh
+        run: scripts/build-web-native.ps1 -RuntimeOnly -Flavor '${{ matrix.flavor }}' -Remote '${{ matrix.remote }}' -Configuration Release -BuildId '${{ github.sha }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-web-${{ matrix.flavor }}-${{ github.sha }}
+          path: build/web-release/stage/unity-web
+          if-no-files-found: error
+  portable-distribution:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        variant:
+          - { flavor: shipping, remote: 'off', optin: 'OFF' }
+          - { flavor: ai-player, remote: 'on', optin: 'ON' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - shell: pwsh
+        run: |
+          cmake -S . -B build/distribution -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_EXAMPLES=OFF -DGUA_DISTRIBUTION_FLAVOR=${{ matrix.variant.flavor }} -DGUA_ENABLE_REMOTE_AUTOMATION=${{ matrix.variant.optin }} -DGUA_BUILD_ID=${{ github.sha }}
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build/distribution --target gua gua-build-variant-tests --parallel 2
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir build/distribution -R '^gua-build-variant-tests$' --output-on-failure
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          scripts/stage-remote-build.ps1 -BuildDirectory build/distribution -OutputDirectory artifacts/package -Flavor '${{ matrix.variant.flavor }}' -Remote '${{ matrix.variant.remote }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portable-${{ matrix.os }}-${{ matrix.variant.flavor }}-${{ github.sha }}
+          path: |
+            artifacts/package
+            build/distribution/Testing/Temporary/LastTest.log
+          if-no-files-found: error

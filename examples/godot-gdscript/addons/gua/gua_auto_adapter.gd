@@ -148,7 +148,7 @@ func attach(root_control: Control) -> void:
 	root = root_control
 	last_clock_ticks_ms = Time.get_ticks_msec()
 	last_game_input_ticks_ms = last_clock_ticks_ms
-	if _ensure_context() and OS.has_feature("web"):
+	if _ensure_context() and OS.has_feature("web") and get_build_info().get("remoteEnabled", false):
 		var bridge_script := load("res://addons/gua/gua_webmcp_bridge.gd")
 		if bridge_script != null:
 			webmcp_bridge = bridge_script.new()
@@ -488,6 +488,13 @@ func get_ui_tree_json() -> String:
 		return ""
 
 	return context.get_ui_tree_json()
+
+
+func get_build_info() -> Dictionary:
+	if not _ensure_context() or not context.has_method("get_build_info_json"):
+		return {}
+	var info: Variant = JSON.parse_string(context.get_build_info_json())
+	return info if info is Dictionary else {}
 
 
 func get_version_json() -> String:

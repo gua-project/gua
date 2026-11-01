@@ -212,7 +212,7 @@ void finish(gua_spatial_host_t& h,host_batch& b,const char* reason) {
 }
 json projected_advertisement(gua_spatial_host_t& h,uint64_t p,const json& g) {
     auto pi=h.providers.find(p); require(pi!=h.providers.end(),GUA_SPATIAL_NOT_AUTHORIZED);
-    require(boolean(g.at("enabled"))&&(text(g,"profile")=="Debug"||text(g,"profile")=="Testing"),GUA_SPATIAL_NOT_AUTHORIZED);
+    require(!GUA_COMPILED_PLAYER_ONLY && boolean(g.at("enabled"))&&(text(g,"profile")=="Debug"||text(g,"profile")=="Testing"),GUA_SPATIAL_NOT_AUTHORIZED);
     auto descriptor=pi->second.registration.at("provider"); auto& policies=descriptor.fields.at("policies").items;
     policies.erase(std::remove_if(policies.begin(),policies.end(),[&](const json& id) { return !contains(g.at("policies"),text(id)); }),policies.end());
     require(!policies.empty(),GUA_SPATIAL_NOT_AUTHORIZED);
