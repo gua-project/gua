@@ -6,7 +6,8 @@ param(
     [string]$GodotCppSource,
     [string]$GodotBuildProfile,
     [string]$PythonExecutable,
-    [string]$BuildDirectory
+    [string]$BuildDirectory,
+    [ValidateRange(1,16)][int]$BuildParallel = 1
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -28,7 +29,7 @@ cmake @configure
 if ($LASTEXITCODE) { throw 'Variant configure failed.' }
 $targets = @('gua','gua-build-variant-tests')
 if ($WithGodot) { $targets += 'gua-godot' }
-cmake --build $build --config $Configuration --target @targets --parallel 1 -- /nr:false
+cmake --build $build --config $Configuration --target @targets --parallel $BuildParallel -- /nr:false
 if ($LASTEXITCODE) { throw 'Variant compilation failed.' }
 $previousPath = $env:PATH
 try {

@@ -21,6 +21,11 @@ static void environment(const char* value) {
 int main(int argc,char** argv) {
     assert(argc==4);
     const bool remote=std::string(argv[2])=="on", player=std::string(argv[3])=="player";
+#ifdef __EMSCRIPTEN__
+    const bool websocket=false; // Web variants expose the same-page binding, never native sockets.
+#else
+    const bool websocket=remote;
+#endif
     const auto info=json(gua_runtime_copy_build_info_json);
     assert(info==json(gua_copy_build_info_json));
     assert(info.find("\"flavor\":\""+std::string(argv[1])+"\"")!=std::string::npos);
@@ -109,9 +114,9 @@ int main(int argc,char** argv) {
     if(player) { assert(!gua_runtime_set_observation_profile(r,0)); assert(gua_runtime_get_observation_profile(r)==1); }
     assert(!gua_runtime_start_inspector_bridge(r,0));
     const int port=19461;
-    assert((gua_runtime_start_inspector_bridge(r,port)!=0)==remote);
-    assert((gua_runtime_inspector_bridge_running(r)!=0)==remote);
-    assert((std::strlen(gua_runtime_inspector_bridge_url(r))!=0)==remote);
+    assert((gua_runtime_start_inspector_bridge(r,port)!=0)==websocket);
+    assert((gua_runtime_inspector_bridge_running(r)!=0)==websocket);
+    assert((std::strlen(gua_runtime_inspector_bridge_url(r))!=0)==websocket);
     gua_runtime_stop_inspector_bridge(r); gua_runtime_stop_inspector_bridge(r);
     assert(!gua_runtime_inspector_bridge_running(r));
     assert(std::strlen(gua_runtime_inspector_bridge_url(r))==0);

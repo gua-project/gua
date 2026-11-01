@@ -64,13 +64,15 @@ if (-not $RuntimeOnly) {
     }
 }
 
-$targets = @("gua-runtime", "gua-web-build-info")
+$targets = @("gua-runtime", "gua-web-build-info", "gua-web-variant-tests")
 if (-not $RuntimeOnly) { $targets += "gua-godot" }
 cmake --build $build --target @targets
 if ($LASTEXITCODE -ne 0) { throw "Failed to build the Gua Web native targets." }
 
 $identity = (& node (Join-Path $build 'native/gua-runtime/gua-web-build-info.js')) | ConvertFrom-Json
 if ($LASTEXITCODE -or $identity.flavor -ne $Flavor -or $identity.remoteEnabled -ne ($Remote -eq 'on')) { throw 'Actual linked Web build identity mismatch.' }
+& node (Join-Path $build 'native/gua-runtime/gua-web-variant-tests.js') $Flavor $Remote $identity.remotePermissionCeiling
+if ($LASTEXITCODE) { throw 'Actual WebAssembly profile/input/reset acceptance failed.' }
 $stage = Join-Path $build 'stage/unity-web'
 New-Item -ItemType Directory -Force $stage | Out-Null
 $files = @()

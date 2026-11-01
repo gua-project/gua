@@ -284,7 +284,7 @@ World v1 provides no actions, pathfinding, teleportation, or arbitrary host meth
 
 ## Agent projection policy v1
 
-Capability `agent_projection_v1` applies the host-owned `debug` or `player` observation profile before data reaches a transport. Existing C ABI entry points remain debug-compatible; runtimes use the additive profile-aware tree, query, diagnostics, and action entry points. A runtime may narrow from debug to player before starting its bridge and cannot be elevated again by a command or tool argument.
+Capability `agent_projection_v1` applies the host-owned `debug` or `player` observation profile before data reaches a transport. Existing C ABI entry points remain debug-compatible except in a compiled AI-player variant, where unscoped reads use Player and explicit Debug reads fail; runtimes use the additive profile-aware tree, query, diagnostics, and action entry points. A runtime may narrow from debug to player before starting its bridge and cannot be elevated again by a command or tool argument.
 
 Debug returns the complete registered UI and World snapshots. Player UI `auto` nodes require effective visibility through every ancestor. Player World `auto` objects require host-defined semantic visibility and active state through every ancestor; render visibility is not a substitute. A `private` ancestor removes its complete subtree, and projection never reparents descendants.
 

@@ -8,7 +8,7 @@ $build = [IO.Path]::GetFullPath($BuildDirectory)
 $header = Get-Content -LiteralPath (Join-Path $build 'generated/gua/build_config.h') -Raw
 $expected = if ($Remote -eq 'on') { 1 } else { 0 }
 if ($header -notmatch "(?m)^#define GUA_COMPILED_REMOTE $expected\r?$") { throw 'Wrong generated compile gate.' }
-$projects = @(Get-ChildItem -LiteralPath $build -Recurse -Filter '*.vcxproj')
+$projects = @(Get-ChildItem -LiteralPath (Join-Path $build 'native') -Recurse -Filter '*.vcxproj')
 if (-not $projects.Count) { throw 'This object inspection currently requires the Windows MSVC generator.' }
 $bridge = @($projects | Where-Object Name -EQ 'gua-ws-bridge.vcxproj')
 if (($bridge.Count -eq 1) -ne ($Remote -eq 'on')) { throw 'Wrong transport target/link graph (including stale targets).' }
@@ -36,4 +36,13 @@ foreach ($project in $runtimeProjects) {
     Copy-Item -LiteralPath $project.FullName -Destination $evidence -Force
 }
 Copy-Item -LiteralPath (Join-Path $build 'generated/gua/build_config.h') -Destination $evidence -Force
+$binaries = @(Join-Path $build "native/gua-runtime/$Configuration/gua_runtime.dll")
+$godot = @(Get-ChildItem -LiteralPath (Join-Path $build 'stage') -Recurse -Filter 'gua_godot.windows.*.dll' -File -ErrorAction SilentlyContinue)
+$binaries += @($godot | ForEach-Object FullName)
+foreach ($binary in $binaries) {
+    $dependencies = @(& $dumpbin /dependents $binary)
+    if ($LASTEXITCODE) { throw "Dependency inspection failed: $binary" }
+    $dependencies | Set-Content -LiteralPath (Join-Path $evidence ((Split-Path $binary -Leaf) + '-dependencies.txt'))
+    if ($Remote -eq 'off' -and ($dependencies -match '^\s*WS2_32\.dll\s*$').Count) { throw 'Socket transport dependency in Shipping binary.' }
+}
 Write-Host "Verified compile/link graph and actual runtime objects: remote $Remote"

@@ -31,7 +31,7 @@ jobs:
       - name: Build and accept the actual variant
         shell: pwsh
         run: |
-          $args = @{ Flavor = '${{ matrix.flavor }}'; Remote = '${{ matrix.remote }}'; Configuration = '${{ matrix.configuration }}' }
+          $args = @{ Flavor = '${{ matrix.flavor }}'; Remote = '${{ matrix.remote }}'; Configuration = '${{ matrix.configuration }}'; BuildParallel = 4 }
           if ('${{ matrix.godot }}' -eq 'true') { $args.WithGodot = $true }
           scripts/test-remote-build-variant.ps1 @args
       - name: Reject invalid configuration combinations
@@ -117,4 +117,35 @@ jobs:
         with:
           name: static-web-${{ matrix.flavor }}-${{ github.sha }}
           path: build/web-release/stage/unity-web
+          if-no-files-found: error
+  portable-distribution:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        variant:
+          - { flavor: shipping, remote: 'off', optin: 'OFF' }
+          - { flavor: ai-player, remote: 'on', optin: 'ON' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - shell: pwsh
+        run: |
+          cmake -S . -B build/distribution -DCMAKE_BUILD_TYPE=Release -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_EXAMPLES=OFF -DGUA_DISTRIBUTION_FLAVOR=${{ matrix.variant.flavor }} -DGUA_ENABLE_REMOTE_AUTOMATION=${{ matrix.variant.optin }} -DGUA_BUILD_ID=${{ github.sha }}
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build/distribution --target gua gua-build-variant-tests --parallel 2
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir build/distribution -R '^gua-build-variant-tests$' --output-on-failure
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          scripts/stage-remote-build.ps1 -BuildDirectory build/distribution -OutputDirectory artifacts/package -Flavor '${{ matrix.variant.flavor }}' -Remote '${{ matrix.variant.remote }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portable-${{ matrix.os }}-${{ matrix.variant.flavor }}-${{ github.sha }}
+          path: |
+            artifacts/package
+            build/distribution/Testing/Temporary/LastTest.log
           if-no-files-found: error

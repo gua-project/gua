@@ -78,7 +78,7 @@ public sealed class GuaVariantBuildGuard : IPreprocessBuildWithReport
             (expected != "development" && info.GetProperty("configuration").GetString() != "Release") ||
             (expected == "shipping" && remote) || (expected != "shipping" && expected != "development" && !remote) ||
             ceiling != (!remote ? "none" : expected == "ai-player" ? "player" : "debug") ||
-            remote != GuaUnityCompiledBuild.RemoteEnabled || (ceiling == "player") != GuaUnityCompiledBuild.PlayerOnly)
+            remote != GuaUnityCompiledBuild.IsRemoteEnabled() || (ceiling == "player") != GuaUnityCompiledBuild.IsPlayerOnly())
             throw new InvalidDataException("Native/managed build purpose or compiled ceiling mismatch.");
     }
 

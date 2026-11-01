@@ -57,3 +57,25 @@ Web install import がすべて absent、Development/AI Player ではすべて p
 `artifacts/remote-validation/unity-editor-guard.log` の最初の失敗は修正後の成功ログへ更新した。
 
 追加した Web static probe/UPM多プラットフォーム検査と新 CI consumer job は、最終 HEAD CI の結果で判定する。
+
+## 実 consumer と回帰の追加検証
+
+`b4c8d74` 上のローカル作業ツリーで、Unity 6000.5.3f1 の既存ライセンスと
+隔離した新規 project を使い Shipping Release Player のビルド/実行を確認した。
+ログと実結果は `build/unity-variant-shipping-20261101T021555639/{editor.log,player.log,Player/result.json}`。
+検査するのは実配布 DLL の local API / Player 投影 / immutable identity / bridge 可否であり、
+GuaUnityRuntime の全 UI 反映経路の合格と拡大解釈しない。
+fixture の初期失敗は Editor 用 InputSystem DLL の Player 混入と依存 package 自体の NUnit テストだった。
+既存 package source を fixture 内へコピーして Player 用にコンパイルし、未使用の package test は除いた。
+AI Player の実ビルドで Editor guard の const inlining も検出し、runtime accessor 呼出しに修正した。
+同一 Editor guard と4つの native/managed variant の最終確認は実行中。
+
+通常 .NET selector/remote/Trace 回帰は `selector-regression-prepared.log` にて465/465合格。
+準備前の実行は450/465で、未構築の Trace viewer/MCP と deadline 失敗を含んだため合格とはしない。
+MCP/Trace を lockfile に従って構築し、Bun の PATH を揃えた実行で全件合格した。
+Windows Shipping の native runtime / embedded Godot object・link graph と最終 DLL の
+socket DLL 依存不在も再確認した。graph 検査は保存済み証拠 project を再探索しないようにし、再実行も合格。
+
+Draft PR は https://github.com/gua-project/gua/pull/186 。初回 CI は `b4c8d74` の PR merge snapshot。
+Web static identity の4構成、標準回帰の Windows/Linux/macOS native/managed lane は合格した。
+新たな実 WebAssembly variant acceptance と portable Shipping/AI Player CI は追加後 HEAD で評価する。
