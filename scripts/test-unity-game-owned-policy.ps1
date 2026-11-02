@@ -28,7 +28,7 @@ $meta=[regex]::Replace($meta,'(?ms)(Editor: Editor\r?\n\s+second:\r?\n\s+enabled
 if($meta -match '(?ms)Editor: Editor\r?\n\s+second:\r?\n\s+enabled: 1') {throw 'Player verifier must never be compatible with Editor.'}
 $meta | Set-Content -LiteralPath (Join-Path $gameNative 'GameSecurity_fixture.dll.meta') -Encoding utf8NoBOM
 Remove-Item -LiteralPath (Join-Path $fixture 'Assets/GuaVariantConsumer.cs')
-Copy-Item -LiteralPath (Join-Path $root 'bindings/unity/Tests/Fixtures/GameOwnedPolicyConsumer.cs') -Destination (Join-Path $fixture 'Assets/GameOwnedPolicyConsumer.cs')
+Copy-Item -LiteralPath (Join-Path $root 'bindings/unity/Tests~/Fixtures/GameOwnedPolicyConsumer.cs') -Destination (Join-Path $fixture 'Assets/GameOwnedPolicyConsumer.cs')
 if($Mode -ne 'off') {
     $defines=if($Mode -eq 'player') {'-define:GUA_REMOTE_AUTOMATION,GUA_PLAYER_ONLY'} else {'-define:GUA_REMOTE_AUTOMATION'}
     $defines | Set-Content -LiteralPath (Join-Path $fixture 'Assets/csc.rsp') -Encoding utf8NoBOM

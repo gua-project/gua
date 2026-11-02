@@ -64,13 +64,13 @@ foreach($adapter in 'Bootstrap','TMP') {
 }
 Copy-Item $PlayerTemplate -Destination (Join-Path $output 'Provider~/GamePolicyTemplate.dll')
 Copy-Item $EditorTemplate -Destination (Join-Path $output 'Provider~/EditorPolicyTemplate.dll')
-foreach($name in 'GameBootstrap.cs.txt','GameIntegrityEditor.cs.txt') {Copy-Item (Join-Path $root "bindings/unity/game-build/$name") -Destination (Join-Path $output 'Provider~')}
+foreach($name in 'GameBootstrap.cs.txt','GameIntegrityEditor.cs.txt') {Copy-Item (Join-Path $root "bindings/unity/game-build~/$name") -Destination (Join-Path $output 'Provider~')}
 $playerMeta=Get-Content (Join-Path $PSScriptRoot 'unity-meta/gua.dll.meta') -Raw
 $playerMeta=[regex]::Replace($playerMeta,'(?m)^guid:.*$','guid: /*GUID*/')
 $playerMeta=[regex]::Replace($playerMeta,'(?ms)(Editor: Editor\r?\n\s+second:\r?\n\s+enabled:) 1','$1 0')
 $playerMeta.Replace('isPreloaded: 0','isPreloaded: 1') | Set-Content (Join-Path $output 'Provider~/player-policy.meta.txt') -Encoding utf8NoBOM
 Copy-Item (Join-Path $root 'bindings/game-build/NativePolicyWriter.cs') -Destination (Join-Path $output 'Editor')
-Copy-Item (Join-Path $root 'bindings/unity/game-build/GuaGameBuildSetup.cs') -Destination (Join-Path $output 'Editor')
+Copy-Item (Join-Path $root 'bindings/unity/game-build~/GuaGameBuildSetup.cs') -Destination (Join-Path $output 'Editor')
 Copy-Item (Join-Path $root 'bindings/unity/Editor/GuaUnityEditorCommands.cs') -Destination (Join-Path $output 'Editor')
 '{"name":"Gua.GameBuild.Editor","includePlatforms":["Editor"],"references":["Unity.TextMeshPro"],"autoReferenced":true}' | Set-Content (Join-Path $output 'Editor/Gua.GameBuild.Editor.asmdef') -Encoding utf8NoBOM
 $package=Get-Content (Join-Path $root 'bindings/unity/package.json') -Raw | ConvertFrom-Json

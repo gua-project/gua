@@ -191,7 +191,7 @@ ordinary managed-file write denial while the lease host is alive, ON replacement
 refused before SDK load, preloaded SDK rejection, and a malformed Editor-template
 policy returning80 without terminating its host. The Editor template's no-exit
 behavior is compiled separately, not selected by a runtime permission flag.
-`bindings/unity/game-build/GameIntegrityEditor.cs.txt` is now generated into the
+`bindings/unity/game-build~/GameIntegrityEditor.cs.txt` is now generated into the
 game's Editor source for a fixture-level integration. It checks the game-owned,
 compile-time nonfatal Editor template when exiting Edit mode. Failure cancels
 Play and asks for restore/restart; it never terminates the Editor. Successful
@@ -263,6 +263,40 @@ The SDK currently requires Windows x64 Mono and unchanged prebuilt main-adapter
 bytes; unverified rewriting/stripping, IL2CPP, and Web builds fail explicitly.
 The validation package has not replaced the public release package or been
 published. Final release workflow integration remains open.
+
+Provider templates and fixtures are stored in Unity-ignored `game-build~` and
+`Tests~` directories. `unity-source-layout-20261102T071317801/results.json` records
+normal legacy source-package import and local API success, plus a deliberately
+imported provider source inside its Runtime asmdef being detected as the intended
+compiler violation. A bare package-root source without an asmdef was separately
+observed to be ignored already; that earlier placement was not demonstrated to
+break normal UPM import. The explicit ignored directories clarify packaging and
+keep those inputs out of assembly discovery.
+
+## Build-only delivery artifacts
+
+`package-game-build-candidates.ps1` packages the .NET developer SDK ZIP, its
+`Gua.GameBuild` NuGet, and the GDScript SDK ZIP only after validating the expected
+native source identity in all three modes. The Godot archive check requires its
+hidden `.variants/.gdignore` and all three provider manifests. Delivery metadata
+records native source, producer commit, clean/dirty producer status, filenames,
+sizes and SHA-256. This metadata is delivery evidence, not a runtime trust root.
+
+The Remote build variants PR workflow now produces a separate
+`game-build-candidates-<commit>` artifact after its acceptance steps. It neither
+publishes a release nor replaces the existing cross-platform public packages.
+Local packaging succeeded in `build/game-build-candidates-local`; its metadata
+explicitly records earlier native source4a and an uncommitted producer tree.
+An intentionally different source identity was refused before creating output.
+Hosted execution remains pending the authorized push and new-HEAD CI.
+
+The current formal release workflow builds one development-enabled native/Unity
+package for desktop/Web consumers. Replacing it with this Windows-only candidate
+would remove existing platform coverage. The remaining producer integration needs
+three versioned native modes and three managed adapter variants from the existing
+pinned Unity build route, followed by actual package acceptance, before changing
+the public release aggregation or NuGet publishing set. No publishing policy,
+credentials, tags or release runs were changed as part of these candidate steps.
 
 ## Local NuGet package integration
 

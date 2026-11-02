@@ -42,7 +42,7 @@ function Invoke-OwnedEditor([string]$Method,[string]$Log,[switch]$ExpectFailure,
 $configure=if($Mode -eq 'off') {'ConfigureOff'} elseif($Mode -eq 'testing') {'ConfigureTesting'} else {'ConfigurePlayer'}
 Invoke-OwnedEditor "Gua.Unity.Editor.GuaGameBuildSetup.$configure" (Join-Path $fixture 'prepare.log')
 $settings=Get-Content (Join-Path $fixture 'Assets/GameSecurity/build-settings.json') -Raw | ConvertFrom-Json
-$gameSource=(Get-Content (Join-Path $root 'bindings/unity/Tests/Fixtures/GameOwnedPolicyConsumer.cs') -Raw).Replace('GameSecurity_fixture','GameSecurity_'+$settings.id)
+$gameSource=(Get-Content (Join-Path $root 'bindings/unity/Tests~/Fixtures/GameOwnedPolicyConsumer.cs') -Raw).Replace('GameSecurity_fixture','GameSecurity_'+$settings.id)
 $pump='GuaUnityRuntime.RunFrame();'
 if(-not $gameSource.Contains($pump)) {throw 'Cannot remove the fixture frame pump; the SDK must supply its normal driver.'}
 $gameSource=$gameSource.Replace($pump,'// The packaged SDK Bootstrap drives frames; no fixture pump.')
@@ -90,7 +90,7 @@ try {
         $results.Add(@{case='official-sdk-swap';result='refused-before-native-load';evidence=$negative})
     }
     if($Mode -eq 'off') {
-        Copy-Item (Join-Path $root 'bindings/unity/Tests/Fixtures/GameIntegrityEditorFixture.cs') -Destination (Join-Path $fixture 'Assets/GameSecurity/Editor')
+        Copy-Item (Join-Path $root 'bindings/unity/Tests~/Fixtures/GameIntegrityEditorFixture.cs') -Destination (Join-Path $fixture 'Assets/GameSecurity/Editor')
         $beforeRefusal=$env:GUA_EDITOR_EXPECT_REFUSAL
         try {
             $env:GUA_EDITOR_EXPECT_REFUSAL='0'

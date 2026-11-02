@@ -34,11 +34,11 @@ try {
         $policy | ConvertTo-Json -Depth 10 | Set-Content $policyFile -Encoding utf8NoBOM
         & dotnet $writer embed-native $EditorTemplate $policyFile $checker
         if($LASTEXITCODE) {throw 'Cannot generate the nonfatal game-owned Editor checker.'}
-        $source=Get-Content -LiteralPath (Join-Path $root 'bindings/unity/game-build/GameIntegrityEditor.cs.txt') -Raw
+        $source=Get-Content -LiteralPath (Join-Path $root 'bindings/unity/game-build~/GameIntegrityEditor.cs.txt') -Raw
         $source=$source.Replace('/*CHECKER_PATH*/',($checker | ConvertTo-Json -Compress)).Replace('/*MODE*/','0')
         if($case -eq 'stale-mode') {$source="#define GUA_REMOTE_AUTOMATION`n"+$source}
         $source | Set-Content (Join-Path $gameEditor 'GameIntegrityEditor.cs') -Encoding utf8NoBOM
-        Copy-Item -LiteralPath (Join-Path $root 'bindings/unity/Tests/Fixtures/GameIntegrityEditorFixture.cs') -Destination $gameEditor
+        Copy-Item -LiteralPath (Join-Path $root 'bindings/unity/Tests~/Fixtures/GameIntegrityEditorFixture.cs') -Destination $gameEditor
         if($case -eq 'official-swap') {
             foreach($file in Get-ChildItem -LiteralPath (Join-Path $OfficialUnityPackage 'Runtime/Plugins/Managed') -Filter '*.dll' -File) {Copy-Item $file.FullName -Destination $managed -Force}
             foreach($name in 'gua.dll','gua_runtime.dll') {Copy-Item -LiteralPath (Join-Path $OfficialUnityPackage "Runtime/Plugins/Windows/x86_64/$name") -Destination $native -Force}
