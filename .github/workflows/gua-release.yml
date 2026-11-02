@@ -180,6 +180,20 @@ jobs:
           if (!$package) { throw 'Missing accepted game SDK native candidate.' }
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item -LiteralPath $package.FullName -Destination artifacts/game-native -Recurse
+      - name: Build game-owned verifier templates
+        if: matrix.mode == 'off'
+        shell: pwsh
+        run: |
+          cmake --build build/remote-shipping-off-Release --config Release --target gua-game-policy-template gua-editor-policy-template --parallel 2
+          if ($LASTEXITCODE) { throw 'Game verifier template compilation failed.' }
+          New-Item -ItemType Directory -Force artifacts/game-policy-templates | Out-Null
+          Copy-Item build/remote-shipping-off-Release/native/gua-game-policy/Release/*PolicyTemplate.dll artifacts/game-policy-templates
+      - uses: actions/upload-artifact@v4
+        if: matrix.mode == 'off'
+        with:
+          name: gua-game-policy-templates-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-policy-templates
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: gua-game-native-${{ matrix.mode }}-v${{ needs.windows-assets.outputs.version }}
@@ -188,7 +202,7 @@ jobs:
 
   game-sdk-candidates:
     name: Prepare Windows game SDK candidates (not published)
-    needs: [windows-assets, game-sdk-native-inputs]
+    needs: [windows-assets, game-sdk-native-inputs, unity-package]
     runs-on: windows-latest
     permissions:
       contents: read
@@ -201,6 +215,14 @@ jobs:
         with:
           pattern: gua-game-native-*-v${{ needs.windows-assets.outputs.version }}
           path: artifacts/game-inputs
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-game-managed-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-managed
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-game-policy-templates-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-policy-templates
       - name: Stage and accept developer SDK candidates
         shell: pwsh
         run: |
@@ -213,7 +235,8 @@ jobs:
           scripts/stage-game-build-bundle.ps1 @packages -OutputDirectory artifacts/game-sdk-dotnet
           scripts/test-game-build-nuget.ps1 -BundleRoot artifacts/game-sdk-dotnet
           scripts/stage-godot-game-sdk.ps1 @packages -OutputDirectory artifacts/game-sdk-godot
-          scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-dotnet -GodotSdkDirectory artifacts/game-sdk-godot -Version $version -RuntimeVersion $version -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-sdk-candidates
+          scripts/stage-unity-game-sdk.ps1 @packages -ManagedOff artifacts/game-managed/off -ManagedTesting artifacts/game-managed/testing -ManagedPlayer artifacts/game-managed/player -PlayerTemplate artifacts/game-policy-templates/GamePolicyTemplate.dll -EditorTemplate artifacts/game-policy-templates/EditorPolicyTemplate.dll -Version $version -OutputDirectory artifacts/game-sdk-unity
+          scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-dotnet -GodotSdkDirectory artifacts/game-sdk-godot -UnitySdkDirectory artifacts/game-sdk-unity -Version $version -RuntimeVersion $version -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-sdk-candidates
       - uses: actions/upload-artifact@v4
         with:
           name: gua-game-sdk-candidate-v${{ needs.windows-assets.outputs.version }}
@@ -632,9 +655,24 @@ jobs:
           unityVersion: 6000.5.3f1
           projectPath: examples/unity-smoke
           targetPlatform: StandaloneWindows64
-          buildMethod: Gua.Unity.Editor.GuaUnityEditorCommands.BuildPlayer
-          customParameters: -guaScene Assets/Scenes/GuaUnityFixture.unity -guaOutput /github/workspace/artifacts/unity-ci-player/GuaUnitySmoke.exe
+          buildMethod: Gua.Unity.Editor.GuaGameBuildProducer.BuildPlayerAndCaptureReferences
+          customParameters: -guaScene Assets/Scenes/GuaUnityFixture.unity -guaOutput /github/workspace/artifacts/unity-ci-player/GuaUnitySmoke.exe -guaGameBuildReferences /github/workspace/artifacts/private-unity-references
           allowDirtyBuild: true
+
+      - name: Compile and inspect three managed game SDK modes
+        shell: pwsh
+        run: scripts/build-unity-managed-variants.ps1 -ReferencesDirectory artifacts/private-unity-references -Version '${{ needs.windows-assets.outputs.version }}' -OutputDirectory artifacts/unity-game-managed
+
+      - name: Upload only redistributable Gua managed candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-managed-v${{ needs.windows-assets.outputs.version }}
+          path: |
+            artifacts/unity-game-managed/*/Gua.Core.dll
+            artifacts/unity-game-managed/*/Gua.Runtime.dll
+            artifacts/unity-game-managed/*/Gua.Unity.dll
+            artifacts/unity-game-managed/managed-variants.json
+          if-no-files-found: error
 
       - name: Package Unity UPM archive
         shell: pwsh

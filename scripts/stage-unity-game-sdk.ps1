@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory)][string]$ManagedPlayer,
     [Parameter(Mandatory)][string]$PlayerTemplate,
     [Parameter(Mandatory)][string]$EditorTemplate,
-    [Parameter(Mandatory)][string]$OutputDirectory
+    [Parameter(Mandatory)][string]$OutputDirectory,
+    [string]$Version
 )
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
@@ -18,6 +19,8 @@ $source=$null
 $cases=@(@{Mode='off';Flavor='shipping';Remote='off';Package=$ShippingPackage;Managed=$ManagedOff;Flags=@('!GUA_REMOTE_AUTOMATION')},@{Mode='testing';Flavor='qa';Remote='on';Package=$TestingPackage;Managed=$ManagedTesting;Flags=@('GUA_REMOTE_AUTOMATION','!GUA_PLAYER_ONLY')},@{Mode='player';Flavor='ai-player';Remote='on';Package=$PlayerPackage;Managed=$ManagedPlayer;Flags=@('GUA_REMOTE_AUTOMATION','GUA_PLAYER_ONLY')})
 foreach($case in $cases) {
     & (Join-Path $PSScriptRoot 'verify-remote-build.ps1') -Directory $case.Package -Flavor $case.Flavor -Remote $case.Remote
+    $managedIdentity=(& dotnet (Join-Path $root 'tools/Gua.ArtifactProbe/bin/Release/net10.0/Gua.ArtifactProbe.dll') managed (Join-Path $case.Managed 'Gua.Unity.dll')) | ConvertFrom-Json
+    if($LASTEXITCODE -or $managedIdentity.RemoteEnabled -ne ($case.Mode -ne 'off') -or $managedIdentity.PlayerOnly -ne ($case.Mode -eq 'player')) {throw 'Managed/native candidate modes do not match.'}
     $manifest=Get-Content (Join-Path $case.Package 'gua-build-manifest.json') -Raw | ConvertFrom-Json
     $source ??= $manifest.build.sourceCommit
     if($source -ne $manifest.build.sourceCommit) {throw 'Provider Unity modes have different source identities.'}
@@ -74,9 +77,11 @@ Copy-Item (Join-Path $root 'bindings/unity/game-build~/GuaGameBuildSetup.cs') -D
 Copy-Item (Join-Path $root 'bindings/unity/Editor/GuaUnityEditorCommands.cs') -Destination (Join-Path $output 'Editor')
 '{"name":"Gua.GameBuild.Editor","includePlatforms":["Editor"],"references":["Unity.TextMeshPro"],"autoReferenced":true}' | Set-Content (Join-Path $output 'Editor/Gua.GameBuild.Editor.asmdef') -Encoding utf8NoBOM
 $package=Get-Content (Join-Path $root 'bindings/unity/package.json') -Raw | ConvertFrom-Json
+if($Version) {$package.version=$Version}
 $package.displayName='Gua game-build SDK (Windows Mono validation)'
 $package.description='Provider-built modes selected by game compile flags, with game-owned native integrity verification. Windows Mono validation SDK; unsupported targets fail closed.'
 $package.PSObject.Properties.Remove('samples')
 $package | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'package.json') -Encoding utf8NoBOM
 Copy-Item (Join-Path $root 'LICENSE') -Destination $output
+& (Join-Path $PSScriptRoot 'copy-unity-package-notices.ps1') -AssetsFile (Join-Path $root 'bindings/dotnet/src/Gua.Runtime/obj/project.assets.json') -OutputDirectory $output
 Write-Host "Staged provider Unity game SDK: $output"

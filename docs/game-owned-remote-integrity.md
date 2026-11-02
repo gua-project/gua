@@ -295,9 +295,12 @@ package for desktop/Web consumers. Replacing it with this Windows-only candidate
 would remove existing platform coverage. The formal release definition now
 prepares three versioned native modes and build-only .NET/GDScript candidates in
 separate Windows jobs. Public release waits for those candidate checks, but the
-public asset aggregation and NuGet publishing set are unchanged. Three managed
-adapter variants from the existing pinned Unity route and actual archive
-acceptance still remain before the new Unity package can replace anything.
+public asset aggregation and NuGet publishing set are unchanged. The existing
+pinned Unity route now captures private compiler references, and a host-side
+producer builds and inspects all three managed adapter variants. The candidate
+job consumes those Gua-only outputs and native verifier templates to stage a
+separate Windows UPM archive. Hosted acceptance still remains before replacing
+any public package.
 No credentials, tags or release runs were changed or invoked. This job definition
 is not hosted CI execution evidence.
 
@@ -341,7 +344,7 @@ HEAD CI success, or release readiness.
 
 | Target | Current safe work and limitation |
 | --- | --- |
-| Formal producer | Three versioned native/candidate job definitions are prepared; hosted execution awaits push approval. Existing public platform assets remain. Unity managed-variant producer integration is pending. |
+| Formal producer | Three native and managed candidate producers are connected; local managed-output consumer regression passed. Hosted execution awaits push approval. Existing public platform assets remain. |
 | Windows C++ | Existing MSVC can validate the loader route. Normal imports load SDK code before main. A contract covering delay imports in every SDK-consuming module remains necessary; no complete C++ guard is shipped. |
 | Web | Installed Unity6000.5.3f1 includes Emscripten4.0.20-git. Native static inputs build locally without installation. Browser/engine startup and exchangeable JS/side-module paths still need a game-owned host; current SDK exporters refuse this target. |
 | Godot .NET | A dedicated engine and proof of managed initialization/native resolution before SDK/GDE startup are needed. The validation cache has the ordinary engine only; current paths refuse this host. |
@@ -367,3 +370,55 @@ initial default-sandbox-TEMP access failure was not counted as a pass.
 Wasm native profile/input/reset checks and archive manifests succeeding. These
 are real Wasm/Node checks, not browser, Unity Web Player, WebMCP bootstrap, or
 OFF-to-ON SDK replacement guarantees. IL2CPP remains uninstalled.
+
+## Managed producer and convergence
+
+`GuaGameBuildProducer.BuildPlayerAndCaptureReferences` extends the existing Unity
+CI build method. It captures engine API references and the compiled UI/Input
+references into a private build-only directory. `build-unity-managed-variants.ps1`
+uses the existing adapter compiler and verifies actual IL flags in off/testing/
+player. Output directories contain exactly Gua.Core, Gua.Runtime and Gua.Unity;
+engine reference DLLs remain private and are not uploaded or packed. SDK staging
+checks the managed mode again, preserves dependency notices, and the delivery
+manifest includes the optional Unity TGZ hash. The formal job DAG is acyclic.
+
+The exact capture/producer route succeeded locally with installed6000.5.3f1:
+`build/unity-formal-managed/managed-variants.json`. Its resulting SDK was used by
+ordinary Windows game builds, not the earlier hand-built managed inputs:
+
+- `unity-packaged-game-off-20261102T080907147/results.json`: local APIs, complete
+  official ON SDK replacement refused before native load, two actual Editor Play
+  and Edit cycles.
+- `unity-packaged-game-testing-20261102T080959015/results.json`: external UI action
+  consumed by the normal SDK driver and failed OFF rebuild removing the old EXE.
+- `unity-packaged-game-player-20261102T081058296/results.json`: permitted external
+  UI action, clock denial and local Debug-profile denial.
+
+These regressions deliberately reused the consistent earlier native source4a;
+managed producer/source and native input identities are distinct. They are not
+all-new-HEAD native/GDE or hosted Linux-capture evidence. Local candidate TGZ
+listing found no UnityEngine, UnityEditor or InputSystem reference DLL payload.
+`build/game-build-full-candidates/game-sdk-delivery.json` records all candidate
+archive hashes and its working-tree producer status. No public package changed.
+
+Remaining work within the existing game-build contract is automatic static Web
+input selection, a Windows C++ imported-target/delay-import guard, and .NET game
+assembly initialization for Godot. All must remain opt-in only and use provider
+prebuilts; none should require consumers to build Gua. These implementations are
+not present yet. Godot .NET needs the official4.7 .NET Windows engine in the
+validation environment before its initialization order can be accepted. OS-native
+loaders likewise require target runners; Windows evidence cannot stand in for
+Linux/macOS. No engine, container, OS service or IL2CPP was installed.
+
+User-facing design decisions arise if Godot Web must take over a custom HTML
+bootstrap, if a C++ integration must reject existing unguarded third-party import
+chains, or if a Windows-only candidate is to become a public supported package
+before other platforms reach parity. Those are proposals, not changes made here.
+The default is to keep unsupported routes disabled and preserve the existing
+public asset set, rather than build a new large host/custom engine or weaken the
+stated verifier boundary. This separates remaining code work, environment needs
+and product decisions; it is not an assertion that only push approval remains.
+The produced Unity TGZ was also extracted locally: all47 SDK files were byte-
+identical to the staged formal SDK (`build/unity-formal-archive-roundtrip/results.json`).
+The archive contains no captured engine/API reference DLLs. This validates its
+payload round trip; it does not claim the hosted capture job has executed.

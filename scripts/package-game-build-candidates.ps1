@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory)][string]$RuntimeVersion,
     [Parameter(Mandatory)][string]$ExpectedNativeSource,
     [Parameter(Mandatory)][string]$OutputDirectory,
-    [switch]$AllowWorkingTreeValidation
+    [switch]$AllowWorkingTreeValidation,
+    [string]$UnitySdkDirectory
 )
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
@@ -37,8 +38,20 @@ try {
         if(!$zip.GetEntry($required)) {throw "SDK archive lost a required provider input: $required"}
     }
 } finally {$zip.Dispose()}
+if($UnitySdkDirectory) {
+    foreach($mode in 'off','testing','player') {
+        $manifest=Get-Content (Join-Path $UnitySdkDirectory "Provider~/windows/$mode/gua-build-manifest.json") -Raw | ConvertFrom-Json
+        if($manifest.build.sourceCommit -ne $ExpectedNativeSource) {throw 'The Unity SDK has a different native source.'}
+    }
+    $tarRoot=Join-Path $root ('build/game-sdk-tar-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfff'))
+    New-Item -ItemType Directory $tarRoot | Out-Null
+    Copy-Item -LiteralPath $UnitySdkDirectory -Destination (Join-Path $tarRoot 'package') -Recurse
+    & tar -czf (Join-Path $output "com.link1345.gua-game-build-win-x64-$Version.tgz") -C $tarRoot package
+    if($LASTEXITCODE) {throw 'Cannot package the Windows Unity candidate.'}
+}
 Copy-Item (Join-Path $root 'LICENSE') -Destination $output
 $files=@(Get-ChildItem -LiteralPath $output -File | Sort-Object Name | ForEach-Object {@{path=$_.Name;bytes=$_.Length;sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}})
-@{schemaVersion=1;purpose='build-only candidate; not a public release';producerCommit=$producer;producerHasUncommittedChanges=$dirty;nativeSourceCommit=$ExpectedNativeSource;version=$Version;runtimePackageVersion=$RuntimeVersion;packages=@('standalone Windows x64 .NET10','Windows x64 Godot4.7 GDScript');files=$files} | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'game-sdk-delivery.json') -Encoding utf8NoBOM
+$hosts=@('standalone Windows x64 .NET10','Windows x64 Godot4.7 GDScript');if($UnitySdkDirectory){$hosts+='Windows x64 Unity Mono (candidate; hosted engine acceptance pending)'}
+@{schemaVersion=1;purpose='build-only candidate; not a public release';producerCommit=$producer;producerHasUncommittedChanges=$dirty;nativeSourceCommit=$ExpectedNativeSource;version=$Version;runtimePackageVersion=$RuntimeVersion;packages=$hosts;files=$files} | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'game-sdk-delivery.json') -Encoding utf8NoBOM
 Write-Host "Build-only SDK candidates: $output"
 $global:LASTEXITCODE=0
