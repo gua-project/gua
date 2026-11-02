@@ -42,8 +42,9 @@ secret. Publisher signatures alone cannot distinguish two legitimate Gua modes.
    exit79 means the no-preload contract was already violated.
 6. It loads the verified core first and runtime second by full path with
    `LOAD_LIBRARY_SEARCH_SYSTEM32`. Other dependency lookup does not consult
-   PATH, the working directory or application directory. The verified loaded core
-   satisfies runtime's core dependency. Windows/CLR/system dependencies remain
+   PATH, the working directory or application directory. This is verified-pair
+   ordering; runtime links its core implementation statically, rather than
+   depending dynamically on the separate core DLL. Windows/CLR/system dependencies remain
    part of the trusted platform, rather than an unverified Gua plug-in closure.
 7. Handles remain alive for the process lifetime. The .NET resolvers return the
    game-pinned handles, so `GUA_NATIVE_DIR`/`GUA_RUNTIME_NATIVE_DIR` cannot select a
@@ -163,7 +164,7 @@ those expectations with a runtime manifest. Source adapter initialization is now
 local-only; `StartRemoteForGame` is an explicit separate path and the game-owned
 bootstrap calls it only in the enabled compilation branch.
 
-`unity-game-policy-off-20261102T045242758/results.json` records actual Unity
+`unity-game-policy-off-20261102T053610153/results.json` records actual Unity
 6000.5.3f1 Windows Mono OFF local success and full official1.2 managed/native SDK
 replacement refused with exit78 and zero native SDK load events. The game queries
 the OS for checker-module presence before any checker P/Invoke, with a separate
