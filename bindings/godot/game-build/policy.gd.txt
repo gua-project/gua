@@ -11,6 +11,9 @@ func _enter_tree() -> void:
 	if OS.get_name() != "Windows" or not OS.has_feature("x86_64"):
 		_refuse("unsupported platform")
 		return
+	if ProjectSettings.has_setting("dotnet/project/assembly_name") or "C#" in ProjectSettings.get_setting("application/config/features", PackedStringArray()):
+		_refuse("unsupported Godot .NET host")
+		return
 	# For the legitimate Gua extension, class registration happens during DLL load.
 	# Reject legacy auto-loading before consulting any Gua API or starting a bridge.
 	if ClassDB.class_exists("GuaContext"):

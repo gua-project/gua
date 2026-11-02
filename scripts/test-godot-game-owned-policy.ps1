@@ -163,6 +163,11 @@ texture_format/bptc=false
             & $GodotExecutable --headless --editor --path $fixture --import *> $managedLog
             if ([string](Get-Content -LiteralPath $managedLog -Raw) -notmatch 'Godot .NET requires a separate verified managed/native host' -or (Get-FileHash -LiteralPath $guard -Algorithm SHA256).Hash -ne $guardHash) {throw 'An unsupported managed host was silently treated as protected.'}
             $results.Add(@{case='unsupported-godot-dotnet';result='refused-without-overwriting-policy';evidence=$managedLog})
+            (Get-Content -LiteralPath $settings -Raw).Replace('*res://other_policy.gd','*res://gua_generated/policy.gd') | Set-Content -LiteralPath $settings -Encoding utf8NoBOM
+            $runtimeManagedLog=Join-Path $fixture 'unsupported-managed-runtime.log'
+            $observed=Invoke-ObservedGodot $GodotExecutable @('--headless','--path',$fixture,'--quit-after','30') $runtimeManagedLog
+            if(@($observed.guaNativeLoads).Count -ne 0 -or [string](Get-Content $runtimeManagedLog -Raw) -notmatch 'unsupported Godot .NET host' -or [string](Get-Content $runtimeManagedLog -Raw) -match 'GAME_OWNED_GODOT_SUCCESS') {throw 'The unsupported managed host was not refused at game startup.'}
+            $results.Add(@{case='unsupported-godot-dotnet-runtime';result='refused-before-extension-load';evidence=$runtimeManagedLog})
         }
     }
 } finally { $env:APPDATA=$beforeData; $env:LOCALAPPDATA=$beforeLocal; $env:GUA_OBSERVATION_PROFILE=$beforeProfile }

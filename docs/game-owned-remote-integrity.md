@@ -1,9 +1,10 @@
 # Game-owned remote integrity: implementation and evidence
 
 This is an implementation work log, not a claim that the complete engine/package
-migration is finished. It describes the Windows x64 .NET and Godot GDScript paths. Unity,
-Godot .NET, Web, final NuGet/UPM distribution, and other operating systems still
-need their own integration and acceptance evidence. Existing public v1.2.0
+migration is finished. It describes locally tested Windows x64 .NET, Unity Mono
+and Godot GDScript paths. Godot .NET, Web, final release-workflow distribution,
+and other operating systems still need their own integration and acceptance
+evidence. Existing public v1.2.0
 binaries are reproduction inputs, not a recommended secure installation.
 
 ## Threat and trust boundary
@@ -137,7 +138,7 @@ new-HEAD native evidence. Evidence directories are under ignored `build/`:
   GDExtension replacement rejected before native load, and early-load mutation
   detected. The `.native-loads.json` files contain independent OS load events for
   the owned wrapper/engine tree; positives observed1, negatives0, mutation1.
-- `godot-game-policy-20261102T055300794/results.json`: all modes repeated with
+- `godot-game-policy-20261102T062418569/results.json`: all modes repeated with
   non-elidable Release checks, actual WebSocket public UI action consumption and
   Player clock denial. Failed OFF policy generation over an enabled destination
   returned a build error and removed the explicitly selected old EXE. Windows
@@ -146,6 +147,8 @@ new-HEAD native evidence. Evidence directories are under ignored `build/`:
   game-policy autoload is refused without overwriting the existing policy.
   A Godot .NET project is explicitly refused rather than silently claimed as
   protected by the GDScript-only host.
+  The generated runtime guard also refuses that unsupported host before native
+  extension load, independently of the editor's preparation failure.
 
 ## Unity native preload foundation (not yet normal package integration)
 
@@ -193,11 +196,12 @@ game's Editor source for a fixture-level integration. It checks the game-owned,
 compile-time nonfatal Editor template when exiting Edit mode. Failure cancels
 Play and asks for restore/restart; it never terminates the Editor. Successful
 native policies and file leases survive managed domain reload. The test in
-`unity-editor-policy-20261102T054939613/results.json` entered Play, exercised local
+`unity-editor-policy-20261102T061851338/results.json` entered Play, exercised local
 APIs, returned to Edit, and repeated that sequence in the same Editor. Full
 official SDK substitution cancelled Play with status78 and independently queried
-zero loaded native SDK modules. This is not normal UPM setup integration yet;
-the fixture generator embeds Editor expectations before launch, never on game
+zero loaded native SDK modules. A changed game compile mode with stale generated
+policy is refused with status84 before loading the checker or native SDK. The
+fixture generator embeds Editor expectations before launch, never on game
 startup. Project relocation or SDK/mode changes require explicit regeneration
 and, once native files were loaded/leased, Editor restart.
 No forced Editor termination was used. The owned disposable batch test Editors
@@ -206,7 +210,59 @@ timeouts leave the Editor running and report its PID.
 
 The installed6000.5.3f1 backend set contains Mono and WebGL support, but no Windows
 IL2CPP backend. No component/Editor was installed or upgraded. IL2CPP execution,
-Web startup and normal UPM integration remain unverified/incomplete.
+Web startup and production release packaging remain unverified/incomplete.
+
+## Local Unity UPM integration
+
+`stage-unity-game-sdk.ps1` now produces an embedded-package validation SDK. It
+contains provider-built native and managed variants. The developer selects
+Normal distribution, Development and testing, or AI player distribution under
+`Gua/Game build`; that sets the project's `GUA_REMOTE_AUTOMATION` and
+`GUA_PLAYER_ONLY` compiler symbols and prepares game-owned files. Direct changes
+to those project symbols also select the Player's prebuilt mode; Editor policy
+changes require explicit preparation and, after a loaded session, restart.
+Neither the game nor Editor startup regenerates failed integrity expectations.
+
+`GuaGameBuildSetup.cs` creates game-specific Player/Editor verifiers and game
+bootstrap source under `Assets/GameSecurity`. Common managed bindings remain
+prebuilt; Unity imports exactly one prebuilt adapter through define constraints.
+The ordinary Bootstrap and TMP adapter assemblies compile with the game. All
+three native inputs stay in ignored `Provider~/windows` directories: they cannot
+auto-load or collide as Unity native plugins. The game postprocessor emits only
+the selected native pair, checks the selected managed adapter bytes, then embeds
+the final managed/native hashes into the game-specific Player verifier. No
+consumer Gua native source build or manual DLL swap is used.
+
+The Player EXE is withheld under a pending name during finalization and promoted
+only after policy embedding. Failures handled by this builder remove the
+requested old EXE. General validation exceptions are converted to
+`BuildFailedException`: the fault test exposed that Unity could otherwise log an
+exception yet report success. This is not a claim that callbacks execute after
+every possible earlier compiler/Editor failure; packaging must consume successful
+builds from isolated outputs.
+
+Local actual6000.5.3f1 Mono evidence:
+
+- `unity-packaged-game-off-20261102T064415942/results.json`: normal UPM setup,
+  ordinary game build, local APIs, and full official SDK replacement refused
+  before native SDK load. Its `packaged-editor-play.log` and
+  `editor-policy-result.txt` additionally record two real Play/Edit cycles using
+  the packaged verifier, including leases on the SDK Bootstrap/TMP assemblies.
+- `unity-packaged-game-testing-20261102T063037131/results.json`: actual external
+  public UI action consumed using the SDK Bootstrap, with the test's manual frame
+  pump removed; a failed OFF rebuild over this enabled output returned failure
+  and removed its previous EXE. The initial independent frame-pump proof remains
+  a separate foundation test, not the sole packaged SDK evidence.
+- `unity-packaged-game-player-20261102T064458260/results.json`: the packaged
+  normal frame driver consumed the external public UI action; clock installation
+  and local Debug-profile elevation were refused.
+
+Initial native/managed component inputs retain the earlier source identities
+noted above. These UPM tests are local; they are not new-HEAD hosted Unity CI.
+The SDK currently requires Windows x64 Mono and unchanged prebuilt main-adapter
+bytes; unverified rewriting/stripping, IL2CPP, and Web builds fail explicitly.
+The validation package has not replaced the public release package or been
+published. Final release workflow integration remains open.
 
 ## Local NuGet package integration
 

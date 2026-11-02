@@ -12,9 +12,10 @@ New-Item -ItemType Directory $output | Out-Null
 $writer=Join-Path $root 'tools/Gua.GameBuild/bin/Release/net10.0/Gua.GameBuild.dll'
 $results=[Collections.Generic.List[object]]::new()
 $beforeNegative=$env:GUA_EDITOR_EXPECT_REFUSAL; $beforeProfile=$env:GUA_OBSERVATION_PROFILE
+$beforeStatus=$env:GUA_EDITOR_EXPECT_STATUS
 try {
     $env:GUA_OBSERVATION_PROFILE=$null
-    foreach($case in 'positive','official-swap') {
+    foreach($case in 'positive','official-swap','stale-mode') {
         $fixture=Join-Path $output $case; New-Item -ItemType Directory $fixture | Out-Null
         foreach($folder in 'Assets','Packages','ProjectSettings') {Copy-Item -LiteralPath (Join-Path $ExistingGameFixture $folder) -Destination $fixture -Recurse}
         $gameEditor=Join-Path $fixture 'Assets/GameSecurity/Editor'
@@ -34,13 +35,16 @@ try {
         & dotnet $writer embed-native $EditorTemplate $policyFile $checker
         if($LASTEXITCODE) {throw 'Cannot generate the nonfatal game-owned Editor checker.'}
         $source=Get-Content -LiteralPath (Join-Path $root 'bindings/unity/game-build/GameIntegrityEditor.cs.txt') -Raw
-        $source.Replace('/*CHECKER_PATH*/',($checker | ConvertTo-Json -Compress)).Replace('/*MODE*/','0') | Set-Content (Join-Path $gameEditor 'GameIntegrityEditor.cs') -Encoding utf8NoBOM
+        $source=$source.Replace('/*CHECKER_PATH*/',($checker | ConvertTo-Json -Compress)).Replace('/*MODE*/','0')
+        if($case -eq 'stale-mode') {$source="#define GUA_REMOTE_AUTOMATION`n"+$source}
+        $source | Set-Content (Join-Path $gameEditor 'GameIntegrityEditor.cs') -Encoding utf8NoBOM
         Copy-Item -LiteralPath (Join-Path $root 'bindings/unity/Tests/Fixtures/GameIntegrityEditorFixture.cs') -Destination $gameEditor
         if($case -eq 'official-swap') {
             foreach($file in Get-ChildItem -LiteralPath (Join-Path $OfficialUnityPackage 'Runtime/Plugins/Managed') -Filter '*.dll' -File) {Copy-Item $file.FullName -Destination $managed -Force}
             foreach($name in 'gua.dll','gua_runtime.dll') {Copy-Item -LiteralPath (Join-Path $OfficialUnityPackage "Runtime/Plugins/Windows/x86_64/$name") -Destination $native -Force}
         }
         $env:GUA_EDITOR_EXPECT_REFUSAL=if($case -eq 'positive') {'0'} else {'1'}
+        $env:GUA_EDITOR_EXPECT_STATUS=if($case -eq 'stale-mode') {'84'} else {'78'}
         $log=Join-Path $fixture 'editor.log'
         # An owned disposable batch Editor exits through its ordinary Editor API
         # after returning from Play. Timeout never kills it or any other Editor.
@@ -52,7 +56,7 @@ try {
         if($editor.ExitCode -ne 0 -or !(Test-Path $result) -or [string](Get-Content $result -Raw) -notmatch '^PASS:') {throw "Editor policy test failed: $log"}
         $results.Add(@{case=$case;result=(Get-Content $result -Raw);unityVersion='6000.5.3f1';evidence=$log})
     }
-} finally {$env:GUA_EDITOR_EXPECT_REFUSAL=$beforeNegative;$env:GUA_OBSERVATION_PROFILE=$beforeProfile}
+} finally {$env:GUA_EDITOR_EXPECT_REFUSAL=$beforeNegative;$env:GUA_OBSERVATION_PROFILE=$beforeProfile;$env:GUA_EDITOR_EXPECT_STATUS=$beforeStatus}
 $results | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'results.json') -Encoding utf8NoBOM
 Write-Host "Safe Editor policy evidence: $output"
 $global:LASTEXITCODE=0

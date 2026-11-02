@@ -46,7 +46,8 @@ public static class GameIntegrityEditorFixture
         }
         if(GameIntegrityEditor.Attempted) {
             bool none=GetModuleHandle("gua.dll")==IntPtr.Zero && GetModuleHandle("gua_runtime.dll")==IntPtr.Zero;
-            Finish(negative && !GameIntegrityEditor.Accepted && GameIntegrityEditor.LastStatus==78 && none,"play-cancelled; nativeLoaded="+(!none));
+            uint expected=uint.Parse(Environment.GetEnvironmentVariable("GUA_EDITOR_EXPECT_STATUS")??"78");
+            Finish(negative && !GameIntegrityEditor.Accepted && GameIntegrityEditor.LastStatus==expected && none,"play-cancelled; status="+GameIntegrityEditor.LastStatus+"; nativeLoaded="+(!none));
         }
     }
     [MethodImpl(MethodImplOptions.NoInlining)]
