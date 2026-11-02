@@ -60,3 +60,4 @@ try {
 } finally { $env:GUA_NATIVE_DIR=$beforeCore; $env:GUA_RUNTIME_NATIVE_DIR=$beforeRuntime; $env:GUA_OBSERVATION_PROFILE=$beforeProfile }
 $results | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $output 'results.json') -Encoding utf8NoBOM
 Write-Host "Automatic game build evidence: $output"
+$global:LASTEXITCODE=0 # Expected negative child exits are assertions, not a script failure.
