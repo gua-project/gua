@@ -91,6 +91,29 @@ jobs:
         run: |
           scripts/test-remote-package-mixing.ps1 -ShippingPackage artifacts/mixing/selected-shipping-${{ github.sha }} -QAPackage artifacts/mixing/selected-qa-${{ github.sha }} -AIPlayerPackage artifacts/mixing/selected-ai-player-${{ github.sha }}
           scripts/test-unity-package-mixing.ps1 -ShippingNativeDirectory artifacts/mixing/selected-shipping-${{ github.sha }} -QARuntimeLibrary artifacts/mixing/selected-qa-${{ github.sha }}/gua_runtime.dll
+      - name: Validate game-owned Windows native policy and automatic selection
+        shell: pwsh
+        run: |
+          $packages = @{
+            ShippingPackage = 'artifacts/mixing/selected-shipping-${{ github.sha }}'
+            TestingPackage = 'artifacts/mixing/selected-qa-${{ github.sha }}'
+            PlayerPackage = 'artifacts/mixing/selected-ai-player-${{ github.sha }}'
+          }
+          scripts/test-game-owned-native-policy.ps1 @packages
+          scripts/stage-game-build-bundle.ps1 @packages -OutputDirectory artifacts/game-sdk-win-x64
+          # Read the old official package only as a substitution-test input.
+          # A deprecated release is not a recommended game dependency.
+          New-Item -ItemType Directory -Force artifacts/official-repro | Out-Null
+          '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include="Gua.Runtime" Version="[1.2.0]" /></ItemGroup></Project>' | Set-Content artifacts/official-repro/repro.csproj
+          dotnet restore artifacts/official-repro/repro.csproj --packages artifacts/official-repro/packages
+          if ($LASTEXITCODE) { throw 'Cannot obtain the pinned official reproduction input.' }
+          $official = @{
+            OfficialCoreAssembly = 'artifacts/official-repro/packages/gua.core/1.2.0/lib/net10.0/Gua.Core.dll'
+            OfficialRuntimeAssembly = 'artifacts/official-repro/packages/gua.runtime/1.2.0/lib/net10.0/Gua.Runtime.dll'
+            OfficialCoreNative = 'artifacts/official-repro/packages/gua.core/1.2.0/runtimes/win-x64/native/gua.dll'
+            OfficialRuntimeNative = 'artifacts/official-repro/packages/gua.runtime/1.2.0/runtimes/win-x64/native/gua_runtime.dll'
+          }
+          scripts/test-automatic-game-build.ps1 -BundleRoot artifacts/game-sdk-win-x64 @official
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -98,6 +121,11 @@ jobs:
           path: |
             build/package-mixing-*/results.json
             build/unity-mixing-*/result.json
+            build/game-owned-native-*/**/*.log
+            build/game-owned-native-*/results.json
+            build/automatic-game-*/**/*.log
+            build/automatic-game-*/results.json
+            artifacts/game-sdk-win-x64/**
           if-no-files-found: error
   web-variants:
     runs-on: ubuntu-latest

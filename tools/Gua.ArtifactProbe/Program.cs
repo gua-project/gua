@@ -19,7 +19,7 @@ if(args[0]=="native") {
             Console.WriteLine(parsed.RootElement.GetRawText());
         } finally { Marshal.FreeHGlobal(data); }
     } finally { NativeLibrary.Free(library); }
-} else if(args[0]=="managed") {
+} else if(args[0]=="managed" || args[0]=="game") {
     using var stream=File.OpenRead(args[1]); using var pe=new PEReader(stream);
     var reader=pe.GetMetadataReader();
     var values=new Dictionary<string,object?>();
@@ -37,7 +37,11 @@ if(args[0]=="native") {
         if(reader.GetString(type.Name)=="GuaUnityRuntime")
             values["remoteCommandHandler"]=type.GetMethods().Any(m=>reader.GetString(reader.GetMethodDefinition(m).Name)=="HandleWebRequest");
     }
-    if(!values.ContainsKey("RemoteEnabled") || !values.ContainsKey("PlayerOnly")) throw new InvalidDataException("Missing compiled managed variant");
+    if(args[0]=="managed" && (!values.ContainsKey("RemoteEnabled") || !values.ContainsKey("PlayerOnly"))) throw new InvalidDataException("Missing compiled managed variant");
+    if(args[0]=="game") {
+        values["gameOwnedPolicy"]=reader.TypeDefinitions.Any(h=>reader.GetString(reader.GetTypeDefinition(h).Name)=="GuaGameNativePolicy");
+        if(!(bool)values["gameOwnedPolicy"]!) throw new InvalidDataException("Game assembly does not contain its own policy.");
+    }
     Console.WriteLine(JsonSerializer.Serialize(values));
 } else throw new ArgumentException("Unknown probe mode");
 

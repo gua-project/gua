@@ -1,0 +1,27 @@
+<Project>
+  <!-- Imported by an executable game, never by an exchangeable SDK assembly. -->
+  <PropertyGroup>
+    <GuaRemoteMode Condition="'$(GuaRemoteMode)' == ''">off</GuaRemoteMode>
+    <GuaGameBuildBundleRoot Condition="'$(GuaGameBuildBundleRoot)' == ''">$(MSBuildThisFileDirectory)</GuaGameBuildBundleRoot>
+    <GuaGamePolicySource>$(MSBuildProjectDirectory)/obj/gua-game-build/$(Configuration)/$(TargetFramework)/$(RuntimeIdentifier)/Gua.GameNativePolicy.g.cs</GuaGamePolicySource>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe'">
+    <Compile Include="$(GuaGamePolicySource)" />
+    <None Include="$(GuaGameBuildBundleRoot)$(GuaRemoteMode)/gua.dll;$(GuaGameBuildBundleRoot)$(GuaRemoteMode)/gua_runtime.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="Always" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+  <Target Name="GenerateGuaGameOwnedPolicy" BeforeTargets="CoreCompile" DependsOnTargets="ResolveReferences"
+          Condition="'$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe'">
+    <Error Condition="'$(GuaRemoteMode)' != 'off' And '$(GuaRemoteMode)' != 'testing' And '$(GuaRemoteMode)' != 'player'" Text="GuaRemoteMode must be off, testing, or player." />
+    <Error Condition="!$([MSBuild]::IsOSPlatform('Windows')) Or ('$(RuntimeIdentifier)' != '' And '$(RuntimeIdentifier)' != 'win-x64') Or ('$(PlatformTarget)' != '' And '$(PlatformTarget)' != 'AnyCPU' And '$(PlatformTarget)' != 'x64')" Text="Game-owned native verification currently requires a Windows x64 game. Other engines and platforms are not covered by this target." />
+    <Error Condition="'$(PublishSingleFile)' == 'true' Or '$(PublishAot)' == 'true' Or '$(PublishTrimmed)' == 'true'" Text="This verifier requires a normal managed game with separate verified native files; single-file, AOT, and trimming are not accepted." />
+    <Error Condition="!Exists('$(GuaGameBuildBundleRoot)$(GuaRemoteMode)/gua-build-manifest.json')" Text="The provider SDK is missing the selected prebuilt Gua mode. Do not rebuild Gua from the game project or fall back to another mode." />
+    <ItemGroup>
+      <_GuaGameManaged Include="@(ReferenceCopyLocalPaths)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('Gua.')) And '%(Extension)' == '.dll'" />
+    </ItemGroup>
+    <Exec Command="dotnet &quot;$(GuaGameBuildBundleRoot)tools/Gua.GameBuild.dll&quot; generate &quot;$(GuaGameBuildBundleRoot)$(GuaRemoteMode)&quot; $(GuaRemoteMode) &quot;$(GuaGamePolicySource)&quot; @(_GuaGameManaged->'&quot;%(FullPath)&quot;', ' ')" />
+    <PropertyGroup>
+      <DefineConstants Condition="'$(GuaRemoteMode)' != 'off'">$(DefineConstants);GUA_REMOTE_AUTOMATION</DefineConstants>
+      <DefineConstants Condition="'$(GuaRemoteMode)' == 'player'">$(DefineConstants);GUA_PLAYER_ONLY</DefineConstants>
+    </PropertyGroup>
+  </Target>
+</Project>
