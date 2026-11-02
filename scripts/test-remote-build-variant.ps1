@@ -7,6 +7,7 @@ param(
     [string]$GodotBuildProfile,
     [string]$PythonExecutable,
     [string]$BuildDirectory,
+    [string]$ProductVersion,
     [ValidateRange(1,16)][int]$BuildParallel = 1
 )
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,10 @@ if ($PythonExecutable) { $configure += "-DPython3_EXECUTABLE=$PythonExecutable" 
 $sourceCommit = (& git -C $root rev-parse HEAD).Trim()
 if ($LASTEXITCODE) { throw 'Cannot resolve source identity.' }
 $configure += "-DGUA_BUILD_ID=$sourceCommit"
+if ($ProductVersion) {
+    if($ProductVersion -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {throw 'ProductVersion must be an explicit semantic version.'}
+    $configure += "-DGUA_VERSION=$ProductVersion", "-DGUA_GODOT_PLUGIN_VERSION=$ProductVersion"
+}
 cmake @configure
 if ($LASTEXITCODE) { throw 'Variant configure failed.' }
 $targets = @('gua','gua-build-variant-tests')

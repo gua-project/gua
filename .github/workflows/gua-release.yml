@@ -151,6 +151,75 @@ jobs:
             examples/godot-gdscript/addons/gua/bin/gua_godot.windows.release.x86_64.dll
           if-no-files-found: error
 
+  game-sdk-native-inputs:
+    name: Build game SDK native candidate / ${{ matrix.mode }}
+    needs: windows-assets
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mode: 'off', flavor: shipping, remote: 'off' }
+          - { mode: 'testing', flavor: qa, remote: 'on' }
+          - { mode: 'player', flavor: ai-player, remote: 'on' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Build and accept versioned native inputs
+        shell: pwsh
+        run: |
+          scripts/test-remote-build-variant.ps1 -Flavor '${{ matrix.flavor }}' -Remote '${{ matrix.remote }}' -Configuration Release -WithGodot -ProductVersion '${{ needs.windows-assets.outputs.version }}' -BuildParallel 4
+          $package = Get-ChildItem 'build/remote-${{ matrix.flavor }}-${{ matrix.remote }}-Release' -Directory -Filter 'package-*' | Sort-Object Name | Select-Object -Last 1
+          if (!$package) { throw 'Missing accepted game SDK native candidate.' }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item -LiteralPath $package.FullName -Destination artifacts/game-native -Recurse
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-native-${{ matrix.mode }}-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-native
+          if-no-files-found: error
+
+  game-sdk-candidates:
+    name: Prepare Windows game SDK candidates (not published)
+    needs: [windows-assets, game-sdk-native-inputs]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gua-game-native-*-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-inputs
+      - name: Stage and accept developer SDK candidates
+        shell: pwsh
+        run: |
+          $version = '${{ needs.windows-assets.outputs.version }}'
+          $packages = @{
+            ShippingPackage = "artifacts/game-inputs/gua-game-native-off-v$version"
+            TestingPackage = "artifacts/game-inputs/gua-game-native-testing-v$version"
+            PlayerPackage = "artifacts/game-inputs/gua-game-native-player-v$version"
+          }
+          scripts/stage-game-build-bundle.ps1 @packages -OutputDirectory artifacts/game-sdk-dotnet
+          scripts/test-game-build-nuget.ps1 -BundleRoot artifacts/game-sdk-dotnet
+          scripts/stage-godot-game-sdk.ps1 @packages -OutputDirectory artifacts/game-sdk-godot
+          scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-dotnet -GodotSdkDirectory artifacts/game-sdk-godot -Version $version -RuntimeVersion $version -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-sdk-candidates
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-sdk-candidate-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-sdk-candidates
+          if-no-files-found: error
+
   portable-native:
     name: Build release native / ${{ matrix.rid }}
     needs: windows-assets
@@ -797,6 +866,7 @@ jobs:
     name: Publish Gua release
     needs:
       - windows-assets
+      - game-sdk-candidates
       - portable-native
       - native-package-smoke
       - unity-package

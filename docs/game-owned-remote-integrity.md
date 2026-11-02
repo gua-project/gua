@@ -292,11 +292,14 @@ Hosted execution remains pending the authorized push and new-HEAD CI.
 
 The current formal release workflow builds one development-enabled native/Unity
 package for desktop/Web consumers. Replacing it with this Windows-only candidate
-would remove existing platform coverage. The remaining producer integration needs
-three versioned native modes and three managed adapter variants from the existing
-pinned Unity build route, followed by actual package acceptance, before changing
-the public release aggregation or NuGet publishing set. No publishing policy,
-credentials, tags or release runs were changed as part of these candidate steps.
+would remove existing platform coverage. The formal release definition now
+prepares three versioned native modes and build-only .NET/GDScript candidates in
+separate Windows jobs. Public release waits for those candidate checks, but the
+public asset aggregation and NuGet publishing set are unchanged. Three managed
+adapter variants from the existing pinned Unity route and actual archive
+acceptance still remain before the new Unity package can replace anything.
+No credentials, tags or release runs were changed or invoked. This job definition
+is not hosted CI execution evidence.
 
 ## Local NuGet package integration
 
@@ -333,3 +336,34 @@ CI adds the same Windows tests after actual commit-specific native packages have
 been built. Final commit/run evidence must be recorded after those jobs complete.
 The current work does not establish complete engine/package migration, final
 HEAD CI success, or release readiness.
+
+## Remaining host boundaries
+
+| Target | Current safe work and limitation |
+| --- | --- |
+| Formal producer | Three versioned native/candidate job definitions are prepared; hosted execution awaits push approval. Existing public platform assets remain. Unity managed-variant producer integration is pending. |
+| Windows C++ | Existing MSVC can validate the loader route. Normal imports load SDK code before main. A contract covering delay imports in every SDK-consuming module remains necessary; no complete C++ guard is shipped. |
+| Web | Installed Unity6000.5.3f1 includes Emscripten4.0.20-git. Native static inputs build locally without installation. Browser/engine startup and exchangeable JS/side-module paths still need a game-owned host; current SDK exporters refuse this target. |
+| Godot .NET | A dedicated engine and proof of managed initialization/native resolution before SDK/GDE startup are needed. The validation cache has the ordinary engine only; current paths refuse this host. |
+| Non-Windows | Platform-specific pre-load verification and actual target runners are needed. Current WSL inventory returned-1 and Docker server discovery failed; neither established a usable local target environment. No service/configuration was changed. |
+
+`test-remote-build-variant.ps1 -ProductVersion 0.0.0-ci` was exercised locally for
+Release/off using native source3318, producing
+`build/versioned-game-native-shipping/package-20261102T073735623`. Native,
+managed, link-graph and packaged identity acceptance passed. CMake records both
+product and Godot plugin versions. Godot was disabled in this narrow local
+version-injection check; the formal matrix's three GDE builds await CI.
+
+`build/cpp-import-boundary/eager.json` observed gua.dll loaded at the first line
+of main before the first SDK call. The same program using MSVC delay import
+observed no module before that call and a module afterward (`delayed.json`).
+This proves the ordering issue and a linker mechanism, not a complete verifier,
+import-closure audit, or SDK-substitution guarantee for C++ consumers.
+
+`test-existing-unity-web-variants.ps1` reuses installed tools with the cache frozen
+and a process-local environment. Temporary files stay in the workspace. An
+initial default-sandbox-TEMP access failure was not counted as a pass.
+`build/existing-unity-web-20261102T075325376/results.json` records all three linked
+Wasm native profile/input/reset checks and archive manifests succeeding. These
+are real Wasm/Node checks, not browser, Unity Web Player, WebMCP bootstrap, or
+OFF-to-ON SDK replacement guarantees. IL2CPP remains uninstalled.
