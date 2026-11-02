@@ -25,6 +25,9 @@ func _build() -> bool:
 
 func _prepare() -> bool:
 	_write_failed = false
+	if ProjectSettings.has_setting("dotnet/project/assembly_name") or "C#" in ProjectSettings.get_setting("application/config/features", PackedStringArray()):
+		push_error("This game-build SDK supports GDScript only. Godot .NET requires a separate verified managed/native host.")
+		return false
 	var mode: String = ProjectSettings.get_setting(SETTING, "off")
 	if mode not in ["off", "testing", "player"]:
 		push_error("Gua remote_mode must be off, testing, or player.")

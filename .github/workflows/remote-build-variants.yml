@@ -101,6 +101,7 @@ jobs:
           }
           scripts/test-game-owned-native-policy.ps1 @packages
           scripts/stage-game-build-bundle.ps1 @packages -OutputDirectory artifacts/game-sdk-win-x64
+          scripts/test-game-build-nuget.ps1 -BundleRoot artifacts/game-sdk-win-x64
           # Read the old official package only as a substitution-test input.
           # A deprecated release is not a recommended game dependency.
           New-Item -ItemType Directory -Force artifacts/official-repro | Out-Null
@@ -153,6 +154,8 @@ jobs:
             build/game-owned-native-*/results.json
             build/automatic-game-*/**/*.log
             build/automatic-game-*/results.json
+            build/nuget-game-consumer-*/**/*.log
+            build/nuget-game-consumer-*/results.json
             artifacts/game-sdk-win-x64/**
             artifacts/godot-game-sdk/**
             build/godot-game-policy-*/**/*.log

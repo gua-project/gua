@@ -1,0 +1,7 @@
+<Project>
+  <!-- A consumer references Gua.GameBuild; no SDK source tree or manual Import. -->
+  <PropertyGroup>
+    <GuaGameBuildBundleRoot>$(MSBuildThisFileDirectory)../game-build/win-x64/</GuaGameBuildBundleRoot>
+  </PropertyGroup>
+  <Import Project="$(GuaGameBuildBundleRoot)Gua.GameBuild.targets" />
+</Project>

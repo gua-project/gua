@@ -158,6 +158,11 @@ texture_format/bptc=false
             & $GodotExecutable --headless --editor --path $fixture --import *> $collisionLog
             if ([string](Get-Content -LiteralPath $collisionLog -Raw) -notmatch 'GuaGamePolicy autoload is already assigned to another script' -or (Get-FileHash -LiteralPath $guard -Algorithm SHA256).Hash -ne $guardHash) { throw 'An autoload collision was not rejected before changing the game policy.' }
             $results.Add(@{case='autoload-collision';result='refused-without-overwriting-policy';evidence=$collisionLog})
+            Add-Content -LiteralPath $settings -Value "`n[dotnet]`nproject/assembly_name=`"UnsupportedManagedGame`""
+            $managedLog=Join-Path $fixture 'unsupported-managed-host.log'
+            & $GodotExecutable --headless --editor --path $fixture --import *> $managedLog
+            if ([string](Get-Content -LiteralPath $managedLog -Raw) -notmatch 'Godot .NET requires a separate verified managed/native host' -or (Get-FileHash -LiteralPath $guard -Algorithm SHA256).Hash -ne $guardHash) {throw 'An unsupported managed host was silently treated as protected.'}
+            $results.Add(@{case='unsupported-godot-dotnet';result='refused-without-overwriting-policy';evidence=$managedLog})
         }
     }
 } finally { $env:APPDATA=$beforeData; $env:LOCALAPPDATA=$beforeLocal; $env:GUA_OBSERVATION_PROFILE=$beforeProfile }

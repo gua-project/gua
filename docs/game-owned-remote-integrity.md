@@ -137,13 +137,15 @@ new-HEAD native evidence. Evidence directories are under ignored `build/`:
   GDExtension replacement rejected before native load, and early-load mutation
   detected. The `.native-loads.json` files contain independent OS load events for
   the owned wrapper/engine tree; positives observed1, negatives0, mutation1.
-- `godot-game-policy-20261102T053520109/results.json`: all modes repeated with
+- `godot-game-policy-20261102T055300794/results.json`: all modes repeated with
   non-elidable Release checks, actual WebSocket public UI action consumption and
   Player clock denial. Failed OFF policy generation over an enabled destination
   returned a build error and removed the explicitly selected old EXE. Windows
   supplies a `.tmp` export path to the plugin; cleanup maps it to its final `.exe`.
   The editor plugin directory is excluded from game exports. A conflicting
   game-policy autoload is refused without overwriting the existing policy.
+  A Godot .NET project is explicitly refused rather than silently claimed as
+  protected by the GDScript-only host.
 
 ## Unity native preload foundation (not yet normal package integration)
 
@@ -186,12 +188,56 @@ ordinary managed-file write denial while the lease host is alive, ON replacement
 refused before SDK load, preloaded SDK rejection, and a malformed Editor-template
 policy returning80 without terminating its host. The Editor template's no-exit
 behavior is compiled separately, not selected by a runtime permission flag.
-Actual Editor Play cancellation/restart/replay integration remains unimplemented.
-No forced Editor termination was used.
+`bindings/unity/game-build/GameIntegrityEditor.cs.txt` is now generated into the
+game's Editor source for a fixture-level integration. It checks the game-owned,
+compile-time nonfatal Editor template when exiting Edit mode. Failure cancels
+Play and asks for restore/restart; it never terminates the Editor. Successful
+native policies and file leases survive managed domain reload. The test in
+`unity-editor-policy-20261102T054939613/results.json` entered Play, exercised local
+APIs, returned to Edit, and repeated that sequence in the same Editor. Full
+official SDK substitution cancelled Play with status78 and independently queried
+zero loaded native SDK modules. This is not normal UPM setup integration yet;
+the fixture generator embeds Editor expectations before launch, never on game
+startup. Project relocation or SDK/mode changes require explicit regeneration
+and, once native files were loaded/leased, Editor restart.
+No forced Editor termination was used. The owned disposable batch test Editors
+closed through ordinary `EditorApplication.Exit` after completing their tests;
+timeouts leave the Editor running and report its PID.
 
 The installed6000.5.3f1 backend set contains Mono and WebGL support, but no Windows
 IL2CPP backend. No component/Editor was installed or upgraded. IL2CPP execution,
-Web startup and normal UPM/NuGet integration remain unverified/incomplete.
+Web startup and normal UPM integration remain unverified/incomplete.
+
+## Local NuGet package integration
+
+`scripts/pack-game-build-nuget.ps1` produces a new optional `Gua.GameBuild`
+package containing the provider's three Windows prebuilt modes and generator.
+It depends on the exact matching `Gua.Runtime` package version. Consumers add
+that package reference and set `GuaRemoteMode` to `testing` or `player` when
+needed; omission selects `off`. The buildTransitive import selects the native
+pair, excludes legacy Core/Runtime native assets, and compiles the expectations
+into the executable game. There is no manual target import, native DLL choice,
+or consumer Gua native source build. The normal game build remains necessary.
+This package integration currently targets standalone Windows x64 .NET10 games.
+Using `Gua.Core` or `Gua.Runtime` alone does not install a game-owned verifier;
+the optional game-build package and its generated game code are required.
+
+`nuget-game-consumer-20261102T055155534/results.json` records PackageReference-only
+publish/run in all three modes, OFF IL without a remote-start reference,
+exactly the selected native pair in each published directory, ON substitution
+refused before load, and explicit build refusal for an unsupported Godot host.
+Dependency packages in this local feed are clearly marked private test fixtures
+made from current managed assemblies, deliberately including legacy ON native
+assets to test their exclusion. They are not release packages. The new package
+has not been published or added to the release publishing workflow.
+
+The GDScript SDK and standalone .NET target now refuse Godot .NET projects
+explicitly: no Mono-enabled Godot engine exists in this validation environment,
+and its managed initialization/native dependency closure remains unverified.
+Web is also unsupported by the Windows GDScript exporter; Unity Web requires
+verified static-archive selection and a game-owned Web bootstrap before it can
+be counted. Existing static Web variant CI alone is not proof of consumer
+startup integrity.
 
 CI adds the same Windows tests after actual commit-specific native packages have
 been built. Final commit/run evidence must be recorded after those jobs complete.
