@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="GameGuard.cs.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../bindings/game-build/NativePolicyWriter.cs" Link="NativePolicyWriter.cs" />
   </ItemGroup>
 </Project>

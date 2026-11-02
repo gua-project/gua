@@ -1,8 +1,8 @@
 # Game-owned remote integrity: implementation and evidence
 
 This is an implementation work log, not a claim that the complete engine/package
-migration is finished. It describes the Windows x64 .NET foundation. Unity,
-Godot export, Web, final NuGet/UPM distribution, and other operating systems still
+migration is finished. It describes the Windows x64 .NET and Godot GDScript paths. Unity,
+Godot .NET, Web, final NuGet/UPM distribution, and other operating systems still
 need their own integration and acceptance evidence. Existing public v1.2.0
 binaries are reproduction inputs, not a recommended secure installation.
 
@@ -75,11 +75,30 @@ not a new replaceable `Gua.*.dll`.
   SDK-owned `GuaUnityCompiledBuild` constants are not a game trust root.
 - IL2CPP/WebGL fold managed/static code into game artifacts; their exact build
   validation and startup boundaries cannot be inferred from Mono tests.
-- Godot's normal extension list loads GDExtensions before game scripts. A small
-  Godot4.7 probe confirmed that a `.gdignore` directory can keep the Gua extension
-  unloaded until `GDExtensionManager.load_extension`, but export integration and
-  game-owned verification are still unimplemented. A Gua build-info call after
-  ordinary auto-load is not evidence of pre-load integrity checking.
+- Godot's normal extension list loads GDExtensions before game scripts. The new
+  game-build SDK keeps provider variants hidden and the selected DLL/descriptor in
+  `.gdignore` directories. Its game-owned first autoload verifies an embedded hash
+  and explicitly calls `GDExtensionManager.load_extension`. Export adds only the
+  selected native file and descriptor, with the game-owned policy in the PCK.
+  The adapter requires that policy and its OFF version has no native bridge-start
+  call. These changes are in `bindings/godot/game-build`; the existing automatically
+  loaded addon is not silently treated as equivalent.
+- Godot's `ClassDB` precondition detects registered extensions; it is not a general
+  OS module enumerator. Tests independently launch and observe the owned process
+  tree with Windows debug events, requiring one real native Gua load in positives,
+  zero in substitution negatives, and one in an early-load mutation. Godot's
+  console EXE is a wrapper: observing only that wrapper failed the required
+  positive load count, so it is not accepted as absence evidence.
+- Godot's Windows `OS.kill(self)` immediately prevents later autoload callbacks,
+  but reports exit0. Its tests require the exact refusal, no later game callback
+  and independently zero native load events; exit0 alone is not success. GDScript
+  does not retain Windows deny-write/delete leases, so active modification in the
+  hash-to-load interval is not covered. The proven case is DLL-set replacement
+  before startup with unchanged game code/data.
+- Godot's verifier and expectations are part of the game's PCK. Changing that
+  PCK or selecting different game data via engine arguments changes the trusted
+  game code/data and is outside DLL-only substitution protection; an unchanged
+  engine EXE alone is not the whole trust root.
 - Godot Web side modules and WebMCP registration require their own closure and
   startup validation. Native Windows results do not establish Web behavior.
 
@@ -112,6 +131,66 @@ new-HEAD native evidence. Evidence directories are under ignored `build/`:
   wrong native environment directories, and full official v1.2.0 managed/native
   replacement rejected before native load. Player's Debug environment startup
   request was rejected separately from its normal successful Player run.
+- `godot-game-policy-20261102T032656234/results.json`: Godot4.7 GDScript Editor
+  runs and actual Windows Release EXEs in all three modes, official v1.2.0
+  GDExtension replacement rejected before native load, and early-load mutation
+  detected. The `.native-loads.json` files contain independent OS load events for
+  the owned wrapper/engine tree; positives observed1, negatives0, mutation1.
+- `godot-game-policy-20261102T053520109/results.json`: all modes repeated with
+  non-elidable Release checks, actual WebSocket public UI action consumption and
+  Player clock denial. Failed OFF policy generation over an enabled destination
+  returned a build error and removed the explicitly selected old EXE. Windows
+  supplies a `.tmp` export path to the plugin; cleanup maps it to its final `.exe`.
+  The editor plugin directory is excluded from game exports. A conflicting
+  game-policy autoload is refused without overwriting the existing policy.
+
+## Unity native preload foundation (not yet normal package integration)
+
+The provider builds `GamePolicyTemplate.dll` and a distinct
+`EditorPolicyTemplate.dll` from `native/gua-game-policy`. The game build embeds
+its final expected native/managed file hashes in resource179 using
+`bindings/game-build/NativePolicyWriter.cs`. The output is a game-specific
+`GameSecurity_<game-id>.dll`, outside the Gua runtime DLL set. Its code and embedded
+policy are part of the unchanged game verifier/data assumption, just as the .NET
+game assembly is. Replacing this generated checker is outside that assumption.
+This is not a permission answer supplied by a replaceable Gua runtime DLL.
+
+Unity preloads the generated Player module (`isPreloaded=1`, Editor incompatible).
+It checks all expected files and retains their read/share leases before loading
+the native SDK pair from absolute paths with System32-only dependency lookup.
+Its resource contains mode, source and build identity; startup does not replace
+those expectations with a runtime manifest. Source adapter initialization is now
+local-only; `StartRemoteForGame` is an explicit separate path and the game-owned
+bootstrap calls it only in the enabled compilation branch.
+
+`unity-game-policy-off-20261102T045242758/results.json` records actual Unity
+6000.5.3f1 Windows Mono OFF local success and full official1.2 managed/native SDK
+replacement refused with exit78 and zero native SDK load events. The game queries
+the OS for checker-module presence before any checker P/Invoke, with a separate
+non-inlined call boundary, and requires Unity's preload callback to have run.
+This does not claim that CLR managed assembly metadata is never loaded first.
+
+`unity-game-policy-testing-20261102T051907249` and
+`unity-game-policy-player-20261102T052056670` contain actual Mono explicit-ON and
+Player runs. An external .NET10 client reads the real Unity UI tree and queues a
+public button click; the game requires exactly one consumed click before success.
+Clock installation succeeds only in testing. Player also rejects Debug profile
+selection through the local managed API. An earlier custom in-process Mono
+WebSocket test timed out; its cause is not established and it is not counted as
+success. External-client tests follow the intended tester/game deployment path.
+
+The native template tests are in
+`native-game-policy-20261102T042558021/results.json`: correct initialization,
+ordinary managed-file write denial while the lease host is alive, ON replacement
+refused before SDK load, preloaded SDK rejection, and a malformed Editor-template
+policy returning80 without terminating its host. The Editor template's no-exit
+behavior is compiled separately, not selected by a runtime permission flag.
+Actual Editor Play cancellation/restart/replay integration remains unimplemented.
+No forced Editor termination was used.
+
+The installed6000.5.3f1 backend set contains Mono and WebGL support, but no Windows
+IL2CPP backend. No component/Editor was installed or upgraded. IL2CPP execution,
+Web startup and normal UPM/NuGet integration remain unverified/incomplete.
 
 CI adds the same Windows tests after actual commit-specific native packages have
 been built. Final commit/run evidence must be recorded after those jobs complete.

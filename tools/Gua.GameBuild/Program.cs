@@ -1,5 +1,27 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Gua.GameBuild;
+using System.Runtime.InteropServices;
+
+if(args.Length>=2 && args[0] is "check-native" or "check-native-preloaded") {
+    if(args[0]=="check-native-preloaded") NativeLibrary.Load(Path.GetFullPath(args[2]));
+    nint library=NativeLibrary.Load(Path.GetFullPath(args[1]));
+    var status=Marshal.GetDelegateForFunctionPointer<ReadPolicyUInt>(NativeLibrary.GetExport(library,"GamePolicyStatus"));
+    var getMode=Marshal.GetDelegateForFunctionPointer<ReadPolicyUInt>(NativeLibrary.GetExport(library,"GamePolicyMode"));
+    Console.WriteLine(JsonSerializer.Serialize(new { status=status(), mode=getMode() }));
+    if(args.Length==3 && args[0]=="check-native") Thread.Sleep(int.Parse(args[2]));
+    return;
+}
+
+if(args.Length==4 && args[0]=="embed-native") {
+    using var input=JsonDocument.Parse(File.ReadAllBytes(args[2]));
+    var policy=input.RootElement;
+    var files=policy.GetProperty("files").EnumerateArray().Select(f=>new NativePolicyWriter.FileEntry(
+        f.GetProperty("path").GetString()!,f.GetProperty("source").GetString()!,f.GetProperty("native").GetBoolean()));
+    Console.WriteLine(NativePolicyWriter.Write(args[1],args[3],policy.GetProperty("kind").GetUInt32(),policy.GetProperty("mode").GetUInt32(),
+        policy.GetProperty("root").GetString()!,policy.GetProperty("sourceCommit").GetString()!,policy.GetProperty("buildId").GetString()!,files));
+    return;
+}
 
 // This runs on the developer/build machine. Never consult a runtime DLL to decide
 // what the game should trust, and never regenerate the policy on game startup.
@@ -66,3 +88,6 @@ string generated = template.Replace("/*EXPECTED_FILES*/", string.Join(",\n", exp
 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
 File.WriteAllText(output, generated);
 Console.WriteLine("Generated game-owned Windows native policy: " + mode + " / " + source);
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+delegate uint ReadPolicyUInt();
