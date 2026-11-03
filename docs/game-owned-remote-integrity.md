@@ -470,11 +470,11 @@ Focused acceptance mapping:
 | Do not load inside DLL initialization | declared DLL early Gua call exits86, loads0 | `early-plugin-initializer` |
 | Existing unrelated dependency behaviour | ordinary unrelated DLL plus delayed import with explicit notification forwarding both succeed | `unrelated-delay-fallback` |
 
-The C++ positive test starts/stops the existing loopback bridge; external-client
-wire/UI consumption is not retested in this bounded C++ unit. Windows MSVC
+The initial C++ unit starts/stops the existing loopback bridge; the subsequent
+archive-consumer unit below adds actual external wire/UI consumption. Windows MSVC
 19.51.36260.0 / SDK10.0.26100.0 / .NET10 is the local environment. Native SDK
 inputs remain the consistent earlier source4a trio, separately from the current
-game guard/tool/template source. Formal C++ release packaging, hosted CI,
+game guard/tool/template source. Public C++ package distribution, hosted CI,
 non-Windows, Web/Godot.NET/IL2CPP acceptance remain incomplete. The prior2/2
 foundation audit budget was not restarted: this follow-up is self-reviewed and
 locally tested, not independently audited. No push or publication is implied.
@@ -504,3 +504,53 @@ Final local evidence (2026-11-03 UTC):
   failed child exit code; the final script normalizes success and the final
   invocation itself exits0. None of these initial attempts is counted as final
   acceptance evidence. No Editor process was killed.
+
+### C++ candidate delivery and real input follow-up
+
+The shared `package-game-build-candidates.ps1` now accepts `CppSdkDirectory`,
+verifies its complete file inventory, source/build identity and both import
+library digests, and adds a hash-listed C++ ZIP to the build-only delivery.
+`stage-cpp-imports.ps1` ties provider import libraries to the accepted native DLL
+pair before producing separate input artifacts. Both the PR remote-variants and
+release candidate workflows stage, package and accept that ZIP; existing public
+asset names/publish set remain unchanged. Hosted execution is still pending
+push approval. This follow-up is self-reviewed, not a third foundation audit.
+
+Local command: stage SDK to `build/cpp-formal-sdk-20261103`; run the common
+packager with that directory, the existing .NET/GDScript/Unity SDKs, source
+`4a4debd735175df0e229c39aac33e9bf35c8db0b`, version/runtime `0.0.0-ci`, and explicit
+`AllowWorkingTreeValidation`, output `build/cpp-formal-delivery-20261103`; then:
+
+```powershell
+scripts/test-cpp-game-candidate.ps1 -CandidateDirectory build/cpp-formal-delivery-20261103 -OutputDirectory build/cpp-formal-consumer-20261103
+```
+
+All7 assertions passed, recorded in the consumer `results.json`: archive digest,
+44 byte-identical payload files; OFF/Test/Player compile/run using the extracted
+SDK; Test and Player external WebSocket `click_node` accepted and exactly1 request
+consumed/emitted successfully by the game; correct clock allowance/denial;
+OFF-to-provider-ON swap exit78/load0/no host entry; archived eager-import checker
+rejects an external legacy module. Detailed wire/host/OS-observer JSON is retained
+beside the result. This extends a3c4407's11-case unit proof without repeating
+its mutation/negative matrix. The input uses a distinct loopback port19573.
+`build/cpp-import-artifact-check/results.json` also confirms the downloaded-
+artifact input path yields all44 identical payload files and semantically equal
+inventory, and that an intentionally changed import library is refused before
+a complete SDK inventory is emitted. JSON property order is not a byte-identity
+contract for separately generated inventory metadata.
+
+An additional public1.2.0 reproduction swaps the cached NuGet Core/Runtime pair
+into that packaged OFF consumer, changing neither EXE nor game checker/data:
+`build/cpp-formal-public-v120-swap/result.json` and `observed.json` show exit78,
+native loads0, no game-host entry. Core SHA256 is
+`10e086ef508e14018bb87ef3f1e3958cccd17e05c9893b6871b2bf96bd29efb7`, runtime SHA256
+`600548d026ab657b023af6b98a67ac28b300c39542c042c872a885db19264b11`.
+The deprecated release is a negative-test input only, not a recommendation.
+The previous provider-source4a ON substitution and this actual published1.2.0
+substitution are distinct evidence.
+
+PowerShell AST parsing and workflow YAML parsing use existing installed tools;
+no parser/tool installation or hosted workflow run was performed. Windows-only
+candidate acceptance does not complete Godot.NET/Web/non-Windows/IL2CPP or grant
+publication approval. The expected hashes remain inside unchanged game-owned
+code/data; delivery inventory/SDK manifests never authorize a runtime substitution.

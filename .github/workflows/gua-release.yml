@@ -180,6 +180,12 @@ jobs:
           if (!$package) { throw 'Missing accepted game SDK native candidate.' }
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item -LiteralPath $package.FullName -Destination artifacts/game-native -Recurse
+          scripts/stage-cpp-imports.ps1 -BuildDirectory 'build/remote-${{ matrix.flavor }}-${{ matrix.remote }}-Release' -PackageDirectory $package.FullName -OutputDirectory artifacts/game-cpp-imports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-cpp-imports-${{ matrix.mode }}-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-cpp-imports
+          if-no-files-found: error
       - name: Build game-owned verifier templates
         if: matrix.mode == 'off'
         shell: pwsh
@@ -217,6 +223,10 @@ jobs:
           path: artifacts/game-inputs
       - uses: actions/download-artifact@v4
         with:
+          pattern: gua-game-cpp-imports-*-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-cpp-imports
+      - uses: actions/download-artifact@v4
+        with:
           name: gua-game-managed-v${{ needs.windows-assets.outputs.version }}
           path: artifacts/game-managed
       - uses: actions/download-artifact@v4
@@ -236,7 +246,15 @@ jobs:
           scripts/test-game-build-nuget.ps1 -BundleRoot artifacts/game-sdk-dotnet
           scripts/stage-godot-game-sdk.ps1 @packages -OutputDirectory artifacts/game-sdk-godot
           scripts/stage-unity-game-sdk.ps1 @packages -ManagedOff artifacts/game-managed/off -ManagedTesting artifacts/game-managed/testing -ManagedPlayer artifacts/game-managed/player -PlayerTemplate artifacts/game-policy-templates/GamePolicyTemplate.dll -EditorTemplate artifacts/game-policy-templates/EditorPolicyTemplate.dll -Version $version -OutputDirectory artifacts/game-sdk-unity
-          scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-dotnet -GodotSdkDirectory artifacts/game-sdk-godot -UnitySdkDirectory artifacts/game-sdk-unity -Version $version -RuntimeVersion $version -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-sdk-candidates
+          scripts/stage-cpp-game-sdk.ps1 -BundleRoot artifacts/game-sdk-dotnet -ShippingBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-off-v$version" -TestingBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-testing-v$version" -PlayerBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-player-v$version" -PlayerTemplate artifacts/game-policy-templates/GamePolicyTemplate.dll -OutputDirectory artifacts/game-sdk-cpp
+          scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-dotnet -GodotSdkDirectory artifacts/game-sdk-godot -UnitySdkDirectory artifacts/game-sdk-unity -CppSdkDirectory artifacts/game-sdk-cpp -Version $version -RuntimeVersion $version -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-sdk-candidates
+          scripts/test-cpp-game-candidate.ps1 -CandidateDirectory artifacts/game-sdk-candidates -OutputDirectory build/cpp-candidate-acceptance
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gua-game-cpp-evidence-v${{ needs.windows-assets.outputs.version }}
+          path: build/cpp-candidate-acceptance
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: gua-game-sdk-candidate-v${{ needs.windows-assets.outputs.version }}

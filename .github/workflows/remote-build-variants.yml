@@ -56,6 +56,15 @@ jobs:
           scripts/test-godot-remote-build.ps1 @args
           New-Item -ItemType Directory -Force artifacts/selected | Out-Null
           Copy-Item -LiteralPath $package.FullName -Destination artifacts/selected/package -Recurse
+          if ('${{ matrix.name }}' -in 'shipping','qa','ai-player') {
+            scripts/stage-cpp-imports.ps1 -BuildDirectory 'build/remote-${{ matrix.flavor }}-${{ matrix.remote }}-${{ matrix.configuration }}' -PackageDirectory $package.FullName -OutputDirectory artifacts/cpp-imports
+          }
+      - uses: actions/upload-artifact@v4
+        if: matrix.name == 'shipping' || matrix.name == 'qa' || matrix.name == 'ai-player'
+        with:
+          name: cpp-imports-${{ matrix.name }}-${{ github.sha }}
+          path: artifacts/cpp-imports
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: matrix.godot
         with:
@@ -87,6 +96,10 @@ jobs:
         with:
           pattern: selected-*-${{ github.sha }}
           path: artifacts/mixing
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cpp-imports-*-${{ github.sha }}
+          path: artifacts/cpp-imports
       - shell: pwsh
         run: |
           scripts/test-remote-package-mixing.ps1 -ShippingPackage artifacts/mixing/selected-shipping-${{ github.sha }} -QAPackage artifacts/mixing/selected-qa-${{ github.sha }} -AIPlayerPackage artifacts/mixing/selected-ai-player-${{ github.sha }}
@@ -145,7 +158,10 @@ jobs:
           scripts/test-godot-game-owned-policy.ps1 -SdkDirectory artifacts/godot-game-sdk -GodotExecutable "$PWD/artifacts/godot-game-editor/Godot_v4.7-stable_win64_console.exe" -ReleaseTemplate "$PWD/artifacts/godot-game-templates/templates/windows_release_x86_64.exe" -OfficialGodotExtension "$PWD/artifacts/official-godot/addons/gua/bin/gua_godot.windows.release.x86_64.dll"
       - name: Package build-only game SDK candidates
         shell: pwsh
-        run: scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-win-x64 -GodotSdkDirectory artifacts/godot-game-sdk -Version 0.0.0-ci -RuntimeVersion 0.0.0-ci -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-build-candidates
+        run: |
+          scripts/stage-cpp-game-sdk.ps1 -BundleRoot artifacts/game-sdk-win-x64 -ShippingBuild 'artifacts/cpp-imports/cpp-imports-shipping-${{ github.sha }}' -TestingBuild 'artifacts/cpp-imports/cpp-imports-qa-${{ github.sha }}' -PlayerBuild 'artifacts/cpp-imports/cpp-imports-ai-player-${{ github.sha }}' -PlayerTemplate build/game-policy-template/native/gua-game-policy/Release/GamePolicyTemplate.dll -OutputDirectory artifacts/cpp-game-sdk
+          scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-win-x64 -GodotSdkDirectory artifacts/godot-game-sdk -CppSdkDirectory artifacts/cpp-game-sdk -Version 0.0.0-ci -RuntimeVersion 0.0.0-ci -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-build-candidates
+          scripts/test-cpp-game-candidate.ps1 -CandidateDirectory artifacts/game-build-candidates -OutputDirectory build/cpp-candidate-acceptance
       - uses: actions/upload-artifact@v4
         with:
           name: game-build-candidates-${{ github.sha }}
@@ -166,6 +182,7 @@ jobs:
             build/nuget-game-consumer-*/results.json
             artifacts/game-sdk-win-x64/**
             artifacts/godot-game-sdk/**
+            build/cpp-candidate-acceptance/**
             build/godot-game-policy-*/**/*.log
             build/godot-game-policy-*/**/*.native-loads.json
             build/godot-game-policy-*/results.json
