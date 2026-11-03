@@ -402,17 +402,16 @@ listing found no UnityEngine, UnityEditor or InputSystem reference DLL payload.
 archive hashes and its working-tree producer status. No public package changed.
 
 Remaining work within the existing game-build contract is automatic static Web
-input selection, a Windows C++ imported-target/delay-import guard, and .NET game
-assembly initialization for Godot. All must remain opt-in only and use provider
-prebuilts; none should require consumers to build Gua. These implementations are
-not present yet. Godot .NET needs the official4.7 .NET Windows engine in the
+input selection and .NET game assembly initialization for Godot. They must use
+provider prebuilts and remain opt-in; consumers should not build Gua. These two
+implementations are not present yet. The Windows C++ guard is described below.
+Godot .NET needs the official4.7 .NET Windows engine in the
 validation environment before its initialization order can be accepted. OS-native
 loaders likewise require target runners; Windows evidence cannot stand in for
 Linux/macOS. No engine, container, OS service or IL2CPP was installed.
 
 User-facing design decisions arise if Godot Web must take over a custom HTML
-bootstrap, if a C++ integration must reject existing unguarded third-party import
-chains, or if a Windows-only candidate is to become a public supported package
+bootstrap, or if a Windows-only candidate is to become a public supported package
 before other platforms reach parity. Those are proposals, not changes made here.
 The default is to keep unsupported routes disabled and preserve the existing
 public asset set, rather than build a new large host/custom engine or weaken the
@@ -422,3 +421,86 @@ The produced Unity TGZ was also extracted locally: all47 SDK files were byte-
 identical to the staged formal SDK (`build/unity-formal-archive-roundtrip/results.json`).
 The archive contains no captured engine/API reference DLLs. This validates its
 payload round trip; it does not claim the hosted capture job has executed.
+
+### Windows C++ delay-load integration (follow-up to19474d7)
+
+The accepted follow-up adds `bindings/cpp/game-build/GuaCppGame.cmake` and
+`delay_guard.cpp` as GAME compilation inputs, not SDK DLL code. One
+`gua_protect_cpp_game(target MODE off|testing|player PLUGINS ...)` call selects
+provider prebuilts, adds MSVC delay imports, and runs `prepare-cpp` on ordinary
+ALL/package builds. Default mode is off, independently of Debug/Release. The
+consumer needs CMake/MSVC and .NET10 runtime for the provider-built generator;
+it does not compile Gua. This is a staged candidate, not an updated public SDK.
+
+Ordering: game compiled guard -> absolute game-specific checker -> lock/hash
+every SDK native member -> absolute/System32-only load -> delay thunk uses the
+verified module handle -> local SDK initialization -> explicitly compiled remote
+start path. `INIT_ONCE` retains each module's bootstrap result. Context creation
+keeps its existing API/lifetime. The checker resource holds expected file hashes,
+mode, source and build identity; no runtime manifest can replace expectations.
+Checker status publication is atomic so a dependent game DLL can safely query
+readiness without entering initialization or a mutex under the loader lock.
+The main EXE bootstraps before ordinary user global constructors. Declared DLLs
+refuse pre-bootstrap Gua calls from DllMain/global construction (86); they never
+attempt loading/hashing under that lock. Existing non-Gua delay hooks may be
+forwarded explicitly, and unrelated libraries retain their usual loading.
+
+`CppGameBuild.Check` inspects the EXE/declared module PE import closure before
+deployment, rejects direct/transitive regular Gua imports and unresolved startup
+dependencies, and accepts delayed Gua references. OS/API-set/CRT dependencies are
+trusted. The EXE is withheld during preparation and removed on check failure.
+Build failures before postprocessing can retain old outputs: distribute only a
+successful isolated ALL/package build, not a failed directory or a game-target-
+only no-op build. Undeclared dynamic modules and arbitrary custom loaders cannot
+be discovered from import tables. Declare SDK-consuming modules, and obtain
+compatible delayed builds for prebuilt external Gua-dependent DLLs. This does
+not impose a guard on unrelated libraries or claim arbitrary code-injection
+defence. Checker/EXE/resource replacement is outside the unchanged-game premise.
+Read leases cover ordinary write/delete replacement, not all privileged directory
+races. See the [consumer instructions](../bindings/cpp/game-build/README.md).
+
+Focused acceptance mapping:
+
+| Required behaviour | Fault/normal assertion | Evidence |
+| --- | --- | --- |
+| OFF/Test/Player remain usable | local UI API,16 API threads, bootstrap count1, global constructor Gua call, unrelated DLL; correct bridge availability, Player rejects Debug | `tests/cpp-game-policy/main.cpp` |
+| SDK swap cannot restore remote | replace both OFF DLLs with official Test pair; exit78 and OS-observed native loads0 | `scripts/test-cpp-game-policy.ps1`, `official-on-replacement` |
+| Missing input fails before SDK load | missing runtime/checker exit81 and loads0 | same script |
+| No import bypass before verifier | deliberately remove EXE/plugin delay option; build fails with specific import error and deploy EXE absent | `eager-game`, `eager-transitive-plugin` |
+| Do not load inside DLL initialization | declared DLL early Gua call exits86, loads0 | `early-plugin-initializer` |
+| Existing unrelated dependency behaviour | ordinary unrelated DLL plus delayed import with explicit notification forwarding both succeed | `unrelated-delay-fallback` |
+
+The C++ positive test starts/stops the existing loopback bridge; external-client
+wire/UI consumption is not retested in this bounded C++ unit. Windows MSVC
+19.51.36260.0 / SDK10.0.26100.0 / .NET10 is the local environment. Native SDK
+inputs remain the consistent earlier source4a trio, separately from the current
+game guard/tool/template source. Formal C++ release packaging, hosted CI,
+non-Windows, Web/Godot.NET/IL2CPP acceptance remain incomplete. The prior2/2
+foundation audit budget was not restarted: this follow-up is self-reviewed and
+locally tested, not independently audited. No push or publication is implied.
+
+Final local evidence (2026-11-03 UTC):
+
+* `scripts/stage-cpp-game-sdk.ps1` staged `build/cpp-game-sdk-final` from
+  `build/game-sdk-nuget-host-boundary`, source4a import libraries in
+  `../gua-remote-variants/build/remote-{shipping-off,qa-on,ai-player-on}-Release`,
+  and the current locally built `GamePolicyTemplate.dll`.
+* `scripts/test-cpp-game-policy.ps1 -SdkDirectory build/cpp-game-sdk-final
+  -OutputDirectory build/cpp-game-policy-20261103-final` passed all11 cases.
+  `build/cpp-game-policy-20261103-final/results.json` contains exact exit/load
+  counts; each `*-observed.json` records OS events from process creation.
+* OFF/Test/Player exit0 and load2 native SDK members, with the game verifier
+  first in the observed timeline. Official ON replacement exits78, missing
+  SDK/checker81, early plugin86, all with0 SDK loads. Direct/transitive eager
+  imports and the external legacy DLL are rejected by the specific import
+  assertion; direct/transitive deployment EXEs are absent. Unrelated delayed
+  import/fallback succeeds. `cpp-stage-final.log` reports0 warnings/errors in
+  the managed generator build; fixture linkers warn when a module does not
+  import one of the two requested delayed libraries, which is expected.
+* The initial parallel sandbox MSBuild stalled before compilation. Only its
+  identified owned process tree was stopped; serial `/nr:false` local builds
+  completed. An initial C++ fixture Windows-header macro conflict was removed
+  from the test source. The first completed script retained the last deliberately
+  failed child exit code; the final script normalizes success and the final
+  invocation itself exits0. None of these initial attempts is counted as final
+  acceptance evidence. No Editor process was killed.

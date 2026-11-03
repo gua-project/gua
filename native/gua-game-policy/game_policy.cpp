@@ -11,6 +11,7 @@
 #include <vector>
 #include <mutex>
 #include <algorithm>
+#include <atomic>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 namespace {
@@ -19,7 +20,8 @@ struct Entry { uint32_t role; std::filesystem::path path; std::array<unsigned ch
 std::mutex mutex;
 std::vector<HANDLE> leases;
 std::vector<HMODULE> modules;
-uint32_t status = 0, mode = 0;
+std::atomic<uint32_t> status{0};
+uint32_t mode = 0;
 bool plugin_preloaded = false;
 #if GAME_POLICY_EDITOR
 constexpr bool editor = true;

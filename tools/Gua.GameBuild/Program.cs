@@ -3,6 +3,13 @@ using System.Text.Json;
 using Gua.GameBuild;
 using System.Runtime.InteropServices;
 
+if(args.Length>=2 && args[0]=="check-cpp-imports") {
+    Console.WriteLine(JsonSerializer.Serialize(CppGameBuild.Check(args[1],args.Skip(2)))); return;
+}
+if(args.Length>=5 && args[0]=="prepare-cpp") {
+    CppGameBuild.Prepare(args[1],args[2],args[3],args[4],args.Skip(5).ToArray()); return;
+}
+
 if(args.Length>=2 && args[0] is "check-native" or "check-native-preloaded") {
     if(args[0]=="check-native-preloaded") NativeLibrary.Load(Path.GetFullPath(args[2]));
     nint library=NativeLibrary.Load(Path.GetFullPath(args[1]));
