@@ -252,7 +252,7 @@ func _execute(space: PhysicsDirectSpaceState3D, q: Dictionary, lease: int) -> Di
 	if q.kind != "raycast":
 		_prepare_shape(q.shape, policy)
 	var b := _prepared_bounds(q)
-	var checked := _host.check_engine_bounds(lease,b[0],b[1],b[2],b[3],b[4],b[5])
+	var checked: Dictionary = _host.check_engine_bounds(lease,b[0],b[1],b[2],b[3],b[4],b[5])
 	if checked.status != 0:
 		for key in ["coverage","truncated","hits"]:
 			r.erase(key)
