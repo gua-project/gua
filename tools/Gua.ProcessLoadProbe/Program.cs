@@ -16,6 +16,7 @@ var command = new StringBuilder(string.Join(" ", new[] { executable }.Concat(arg
 if (!CreateProcess(executable, command, 0, 0, false, 0x1 | 0x08000000, 0, null, ref startup, out var process))
     throw new Win32Exception(Marshal.GetLastWin32Error());
 var guaLoads = new List<string>();
+var guaPaths = new List<string>();
 var nativeNames = new List<string>();
 var timeline = new List<string>();
 bool exited = false;
@@ -57,7 +58,7 @@ try
                 nativeNames.Add(name);
                 if(name.StartsWith("GameSecurity_",StringComparison.OrdinalIgnoreCase)) timeline.Add("load:"+name);
                 if (name.Equals("gua.dll", StringComparison.OrdinalIgnoreCase) || name.Equals("gua_runtime.dll", StringComparison.OrdinalIgnoreCase) ||
-                    name.StartsWith("gua_godot.", StringComparison.OrdinalIgnoreCase)) { guaLoads.Add(name); timeline.Add("load:"+name); }
+                    name.StartsWith("gua_godot.", StringComparison.OrdinalIgnoreCase)) { guaLoads.Add(name); guaPaths.Add(path.ToString()); timeline.Add("load:"+name); }
             }
             else if (item.Code == 8 && item.DebugStringLength is > 0 and < 512) {
                 int length=item.DebugStringLength*(item.DebugStringUnicode!=0?2:1);
@@ -77,7 +78,7 @@ try
                 exited = active.Count == 0;
                 if(exited) {
                     Directory.CreateDirectory(Path.GetDirectoryName(result)!);
-                    File.WriteAllText(result, JsonSerializer.Serialize(new { childExitCode = exitCodes[process.ProcessId], processExitCodes = exitCodes.Values, guaNativeLoads = guaLoads, nativeModuleNames = nativeNames, timeline }, new JsonSerializerOptions { WriteIndented = true }));
+                    File.WriteAllText(result, JsonSerializer.Serialize(new { childExitCode = exitCodes[process.ProcessId], processExitCodes = exitCodes.Values, guaNativeLoads = guaLoads, guaNativePaths = guaPaths, nativeModuleNames = nativeNames, timeline }, new JsonSerializerOptions { WriteIndented = true }));
                 }
             }
             else if (item.Code == 1 && item.ExceptionCode != 0x80000003)

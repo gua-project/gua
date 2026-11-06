@@ -156,6 +156,16 @@ jobs:
           if ((Get-FileHash artifacts/official-godot.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'effcad4cfc6083528bee4e469e171047cd9d2d49547a09d16be04845fcda7873') { throw 'Official reproduction input digest changed.' }
           Expand-Archive artifacts/official-godot.zip artifacts/official-godot
           scripts/test-godot-game-owned-policy.ps1 -SdkDirectory artifacts/godot-game-sdk -GodotExecutable "$PWD/artifacts/godot-game-editor/Godot_v4.7-stable_win64_console.exe" -ReleaseTemplate "$PWD/artifacts/godot-game-templates/templates/windows_release_x86_64.exe" -OfficialGodotExtension "$PWD/artifacts/official-godot/addons/gua/bin/gua_godot.windows.release.x86_64.dll"
+      - name: Accept the actual Godot .NET game, export and Editor loader
+        shell: pwsh
+        run: |
+          scripts/get-godot-dotnet-test-tools.ps1 -OutputDirectory artifacts/godot-dotnet-tools
+          $engine = "$PWD/artifacts/godot-dotnet-tools/editor/Godot_v4.7-stable_mono_win64/Godot_v4.7-stable_mono_win64.exe"
+          $feeds = @(Get-ChildItem build -Directory -Filter 'nuget-game-consumer-*')
+          if ($feeds.Count -ne 1) { throw 'Require the one private fixture feed from this clean CI job.' }
+          scripts/test-godot-dotnet-game-policy.ps1 -BundleRoot artifacts/game-sdk-win-x64 -DependencyFeed "$($feeds[0].FullName)/feed" -GodotExecutable $engine -OutputDirectory build/godot-dotnet-game-acceptance
+          scripts/test-godot-dotnet-export.ps1 -MatrixDirectory build/godot-dotnet-game-acceptance -BundleRoot artifacts/game-sdk-win-x64 -GodotExecutable $engine -ReleaseTemplate artifacts/godot-dotnet-tools/windows_release_x86_64.exe -OutputDirectory build/godot-dotnet-export-acceptance -OfficialCoreAssembly artifacts/official-repro/packages/gua.core/1.2.0/lib/net10.0/Gua.Core.dll -OfficialRuntimeAssembly artifacts/official-repro/packages/gua.runtime/1.2.0/lib/net10.0/Gua.Runtime.dll
+          scripts/test-godot-dotnet-editor.ps1 -MatrixDirectory build/godot-dotnet-game-acceptance -BundleRoot artifacts/game-sdk-win-x64 -GodotExecutable $engine -OutputDirectory build/godot-dotnet-editor-acceptance
       - name: Package build-only game SDK candidates
         shell: pwsh
         run: |
@@ -180,6 +190,10 @@ jobs:
             build/automatic-game-*/results.json
             build/nuget-game-consumer-*/**/*.log
             build/nuget-game-consumer-*/results.json
+            build/godot-dotnet-*-acceptance/*.json
+            build/godot-dotnet-*-acceptance/*.log
+            build/godot-dotnet-*-acceptance/*.stdout
+            build/godot-dotnet-*-acceptance/*.stderr
             artifacts/game-sdk-win-x64/**
             artifacts/godot-game-sdk/**
             build/cpp-candidate-acceptance/**

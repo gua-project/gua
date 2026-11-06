@@ -2,7 +2,8 @@
 
 This is an implementation work log, not a claim that the complete engine/package
 migration is finished. It describes locally tested Windows x64 .NET, Unity Mono
-and Godot GDScript paths. Godot .NET, Web, final release-workflow distribution,
+and Godot GDScript paths. The Godot .NET follow-up is described at the end of
+this document. Web, final release-workflow distribution,
 and other operating systems still need their own integration and acceptance
 evidence. Existing public v1.2.0
 binaries are reproduction inputs, not a recommended secure installation.
@@ -327,9 +328,8 @@ made from current managed assemblies, deliberately including legacy ON native
 assets to test their exclusion. They are not release packages. The new package
 has not been published or added to the release publishing workflow.
 
-The GDScript SDK and standalone .NET target now refuse Godot .NET projects
-explicitly: no Mono-enabled Godot engine exists in this validation environment,
-and its managed initialization/native dependency closure remains unverified.
+The GDScript SDK still refuses Godot .NET projects. The common .NET target now
+has a distinct Godot.NET.Sdk 4.7.0 Windows host; see the follow-up below.
 Web is also unsupported by the Windows GDScript exporter; Unity Web requires
 verified static-archive selection and a game-owned Web bootstrap before it can
 be counted. Existing static Web variant CI alone is not proof of consumer
@@ -347,7 +347,7 @@ HEAD CI success, or release readiness.
 | Formal producer | Three native and managed candidate producers are connected; local managed-output consumer regression passed. Hosted execution awaits push approval. Existing public platform assets remain. |
 | Windows C++ | Existing MSVC can validate the loader route. Normal imports load SDK code before main. A contract covering delay imports in every SDK-consuming module remains necessary; no complete C++ guard is shipped. |
 | Web | Installed Unity6000.5.3f1 includes Emscripten4.0.20-git. Native static inputs build locally without installation. Browser/engine startup and exchangeable JS/side-module paths still need a game-owned host; current SDK exporters refuse this target. |
-| Godot .NET | A dedicated engine and proof of managed initialization/native resolution before SDK/GDE startup are needed. The validation cache has the ordinary engine only; current paths refuse this host. |
+| Godot .NET | A dedicated Windows x64 Godot.NET.Sdk 4.7.0 host is implemented and tested below. Mixed Gua GDE/managed integrations and other versions/platforms are refused. |
 | Non-Windows | Platform-specific pre-load verification and actual target runners are needed. Current WSL inventory returned-1 and Docker server discovery failed; neither established a usable local target environment. No service/configuration was changed. |
 
 `test-remote-build-variant.ps1 -ProductVersion 0.0.0-ci` was exercised locally for
@@ -401,14 +401,11 @@ listing found no UnityEngine, UnityEditor or InputSystem reference DLL payload.
 `build/game-build-full-candidates/game-sdk-delivery.json` records all candidate
 archive hashes and its working-tree producer status. No public package changed.
 
-Remaining work within the existing game-build contract is automatic static Web
-input selection and .NET game assembly initialization for Godot. They must use
-provider prebuilts and remain opt-in; consumers should not build Gua. These two
-implementations are not present yet. The Windows C++ guard is described below.
-Godot .NET needs the official4.7 .NET Windows engine in the
-validation environment before its initialization order can be accepted. OS-native
-loaders likewise require target runners; Windows evidence cannot stand in for
-Linux/macOS. No engine, container, OS service or IL2CPP was installed.
+Automatic static Web input selection still needs a game-owned host. The later
+Godot .NET section covers its implemented managed initialization. Consumers use
+provider prebuilts; they do not build Gua. Windows evidence cannot stand in for
+Linux/macOS loaders. The official portable Godot .NET test engine/templates are
+workspace inputs; no OS service or IL2CPP installation was made.
 
 User-facing design decisions arise if Godot Web must take over a custom HTML
 bootstrap, or if a Windows-only candidate is to become a public supported package
@@ -554,3 +551,85 @@ no parser/tool installation or hosted workflow run was performed. Windows-only
 candidate acceptance does not complete Godot.NET/Web/non-Windows/IL2CPP or grant
 publication approval. The expected hashes remain inside unchanged game-owned
 code/data; delivery inventory/SDK manifests never authorize a runtime substitution.
+
+## Godot .NET follow-up: Windows x64 / Godot 4.7
+
+This section supersedes the earlier checkpoint's unsupported Godot .NET status.
+The common `Gua.GameBuild` package now recognizes a real
+`Godot.NET.Sdk/4.7.0` game. It accepts net10.0 Windows x64 with separate normal
+managed/native files; other SDK versions, platforms, single-file, AOT and trimming
+are refused. A plain library with a `project.godot` file is not a valid substitute.
+The developer references the provider candidate package in the game's project and
+builds/exports the game normally. `GuaRemoteMode=off` is the default; explicit
+`testing` or `player` selects that provider prebuilt, independently of Debug or
+Release. No consumer Gua source build or manual DLL selection is required. This
+does not claim that a new public package has been released.
+
+The [MSBuild target](../bindings/dotnet/Gua.GameBuild.targets) passes the selected
+native pair and actual managed references to the generator. The expected hashes,
+mode and source/build identity are compiled into the GAME assembly, together with
+the protected managed Godot adapter source supplied by the provider. The OFF
+adapter has its native remote-start call removed by conditional compilation; local
+UI reflection stays available. The Player prebuilt enforces the native ceiling.
+
+The [game module initializer](../tools/Gua.GameBuild/GodotGameGuard.cs.txt) checks
+all SDK managed/native hashes under retained deny-write/delete file handles BEFORE
+loading either native member. It rejects already loaded Gua modules and reparse
+points, loads absolute native paths with System32-only dependency search, and
+pins both module handles for the managed resolvers. Runtime environment paths
+cannot select another SDK. The exchangeable runtime manifest never supplies new
+expectations. This is file/loader enforcement, not a Gua DLL capability self-report.
+
+The verifier is outside the four exchangeable Gua DLLs. Godot's Editor loads game
+assemblies from streams, leaving `Assembly.Location` empty. Only in that case the
+guard reads the trusted ENGINE's `GodotPlugins.PluginLoadContext.AssemblyLoadedPath`.
+See the official 4.7 [loader](https://github.com/godotengine/godot/blob/4.7-stable/modules/mono/glue/GodotSharp/GodotPlugins/PluginLoadContext.cs)
+and [project initialization](https://github.com/godotengine/godot/blob/4.7-stable/modules/mono/glue/GodotSharp/GodotPlugins/Main.cs).
+The exported game's normal assembly location is its verification root. Replacing
+the engine, CLR, game assembly or generated expectations is outside the threat model.
+
+On Editor reload, an exact game path/mode/provider/hash stamp may reuse retained
+verified streams and module handles. The shared record contains framework types
+only, so it does not root the collectible game assembly. The builder skips copying
+identical native files while the Editor retains its locks; changing SDK/mode needs
+an Editor restart. Failure poisons game assembly initialization and never terminates
+the Editor. Build checks reject known cached/visible legacy Gua GDExtensions,
+the separate GDScript policy and duplicate managed adapter. Unrelated extensions
+are not globally constrained by this host.
+
+Failure handling must not call Godot native APIs before the exported game's
+callback table exists. The guard identifies the 4.7 engine's collectible Editor
+loader or the observed noncollectible CLR component loader without a Godot API
+call. Only a confirmed game is terminated with 78/79; unknown contexts get an
+initialization exception rather than process termination. The Editor acceptance
+fixture uses its own ordinary quit callback and never kills an Editor.
+
+Path-specific acceptance is in [actual SDK games](../scripts/test-godot-dotnet-game-policy.ps1),
+[actual Release exports and full SDK substitution](../scripts/test-godot-dotnet-export.ps1),
+and [Editor build/reload/refusal survival](../scripts/test-godot-dotnet-editor.ps1).
+The external OS observer requires verification-before-native-load ordering.
+Negative cases require policy entry, specific refusal, zero Gua native loads and
+no game callback, rather than listener absence alone. The corresponding
+[Windows CI step](../.github/workflows/remote-build-variants.yml) records execution
+evidence; local results and final-HEAD hosted results must be reported separately.
+Official NuGet 1.2.0 is a substitution reproduction input, not a recommendation.
+
+This managed adapter retains the existing UI surface; it does not claim native
+GDE spatial support. Godot Web custom HTML remains a pending design decision.
+Non-Windows game-owned loaders remain unsupported and IL2CPP remains uninstalled
+and untested. Native Linux/macOS CI success is not evidence for these game loaders.
+
+Local acceptance on 2026-11-06 used the official portable Godot .NET 4.7,
+.NET SDK10.0.401/runtime10.0.12. Three SDK games and three real Release exports
+passed; Testing/Player consumed one external input each, with Player clock/Debug
+escalation refused. Native-pair, full managed/native SDK plus manifest, and
+managed-only substitutions each exited78 with zero native loads and no game
+callback. The actual Editor rebuilt/unloaded/reopened the game, and survived a
+specific refusal before normal quit. Five host build refusals passed. Native
+inputs reused consistent CI source77d966aae50f62c4c21437e603017df5c225ee84;
+the game guard/tool changes are this working-tree scope. These are not final-HEAD
+native build results. Two bounded independent Godot.NET review passes reported
+no actionable findings; the reviewer independently exercised locked identical
+native sync (no rewrite) and a locked mode change (clean refusal). This did not
+restart the earlier foundation2/2 review gate. Final hosted CI is reported
+separately in the PR.

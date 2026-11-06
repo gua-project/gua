@@ -11,6 +11,7 @@
 | Windows .NET | ゲーム assembly に生成するコード | 正例、権限、公式 DLL 一式交換、CI |
 | Windows Godot GDScript | ゲーム PCK 内の最初の autoload | Editor からの起動と Release EXE、実通信、公式 GDExtension 交換 |
 | Windows Unity Mono | ゲーム固有の検証 DLL と、その内部リソース | 実 Player の通常版／テスト用／Player 用、通常版からの公式 SDK 一式交換 |
+| Windows Godot .NET 4.7 | ゲーム assembly 内に生成する初期化コード・期待値 | 末尾の Godot .NET 追加対応を参照。GDScript 用とは別の初期化経路 |
 
 Unity の検証 DLL は提供側で作った雛形に、ゲームのビルド時に期待値を埋めたものです。通常の Gua SDK DLL 一式には入らない、ゲーム固有の名前で出力します。この検証 DLL 自体のコードやデータまで交換する場合は、今回の「ゲーム側の検証コード・データは変更しない」という条件から外れます。
 
@@ -52,7 +53,7 @@ Unity のローカル検証用 UPM では、`Gua/Game build` メニューから�
 
 .NET は、新しい任意導入の `Gua.GameBuild` NuGet に３構成と生成ツールを梱包する実装を追加しました。ゲーム側はこのパッケージを参照し、`GuaRemoteMode` を `testing`／`player` にしたときだけ明示的に有効になります。省略時は `off` です。別の DLL を選ぶ作業や Gua 本体のソースビルドは不要で、通常のゲームのビルドで選択・期待値生成を行います。ローカルフィードからの参照だけで３構成の publish・実行・差し替え拒否を確認しました。公開・リリースワークフローへの追加はしていません。
 
-IL2CPP は現在の Editor に未導入のため実行未検証です。Web、Godot .NET、その他のプラットフォーム、正式配布への統合は未完了です。Godot .NET 用エンジンも検証環境にないため、現行の GDScript SDK と通常 .NET 設定ではそのプロジェクトを明示的に拒否します。GDScript の実行時にも非対応ホストを拒否します。Windows Mono の成功を、それらの保証の証拠として扱いません。
+IL2CPP は現在の Editor に未導入のため実行未検証です。Web、その他のプラットフォーム、正式公開までの移行は未完了です。Godot .NET は専用の Windows 4.7 ホストを追加しました（末尾参照）。GDScript 用 SDK との混用は拒否します。Windows Mono の成功を、それらの保証の証拠として扱いません。
 
 PR の CI には、試験を通った .NET／GDScript 用 SDK をアーカイブ・NuGet として受け取る候補成果物の生成を追加しています。３構成の native source が期待値と一致するか検査し、ファイル名・サイズ・SHA-256 と生成元を記録します。この配布用検査情報自体を実行時の信頼点にはしません。ローカルの生成は成功していますが、新 HEAD の hosted CI は push 承認待ちです。既存の正式配布は Linux／macOS／Web も含むため、Windows 用候補でそのまま置き換えてはいません。
 
@@ -64,7 +65,7 @@ Web は既存 Unity 内の Emscripten 4.0.20-git を使い、通常版・テス�
 
 Unity managed ３構成の正式生成元も候補ジョブへ接続しました。既存の Unity CI ビルドから API 参照を一時的に取り出し、ホスト側で３構成をコンパイルして実 IL のフラグを検査します。Unity 本体の参照 DLL は非公開のビルド入力に留め、SDK の出力は Gua の３ DLL と検査情報だけに限定します。同じ経路を既存の Windows Editor で実行し、その生成物を使った通常版・テスト用・Player 用のゲームビルド、実通信、交換拒否、Editor 復帰の回帰が成功しました。native 入力は以前の一貫した source4a の組を再利用しており、最新 HEAD の native 全構成 CI と同一視していません。
 
-既存の通常ゲームビルド契約内で進められる残りは、Web 静的入力の自動選択と Godot .NET のゲーム assembly 初期化です。実装と環境検証がまだ必要です。Godot Web で独自 HTML の起動を SDK が担うこと、Windows だけを先行して正式サポートとする範囲は未決です。新しい大規模ホスト／カスタムエンジンを作ったり、先行公開したりはしていません。未対応経路の停止と既存の公開対象の維持を既定にしています。
+Web 静的入力の自動選択にはゲーム側ホストが引き続き必要です。Godot .NET のゲーム assembly 初期化は末尾で追加対応を説明します。Godot Web で独自 HTML の起動を SDK が担うこと、Windows だけを先行して正式サポートとする範囲は未決です。新しい大規模ホスト／カスタムエンジンを作ったり、先行公開したりはしていません。未対応経路の停止と既存の公開対象の維持を既定にしています。
 
 ## C++ の順序保証と利用方法
 
@@ -89,3 +90,27 @@ Unity managed ３構成の正式生成元も候補ジョブへ接続しました
 同じ候補から作った通常版のゲームで、Gua DLL ２本だけを遠隔 ON 版に置換しました。候補内の正規テスト用 DLL の組と、既存キャッシュにあった公開済み NuGet 1.2.0 の DLL の組をそれぞれ試し、どちらもハッシュ不一致78で終了、Gua native ロード０件、ゲームの入力受付へ未到達でした。1.2.0 はこの否定試験の再現入力としてのみ使い、利用推奨を意味しません。
 
 ゲーム固有の検証 DLL、そのリソース、EXE まで差し替えた場合は保証対象外です。候補のファイル一覧や同梱 manifest は提供側の梱包検査に使う情報であり、実行時にゲームが信頼する期待ハッシュを置き換える権限を持ちません。通常のゲームビルドで生成したゲーム側の期待値を固定することが、正規 ON DLL への単純交換を拒否する根拠です。
+
+## Godot .NET の追加対応（Windows x64、Godot 4.7）
+
+以下は上記の初期チェックポイント以降の実装です。GDScript 用アドオンを読み込ませる方式とは別に、実際の `Godot.NET.Sdk/4.7.0` プロジェクトを共通の `Gua.GameBuild` パッケージで扱います。現在は `net10.0`、Windows x64、通常の分離ファイルによる .NET ゲームだけを受け付けます。別バージョン、Linux／macOS／Web、AOT／単一ファイル／トリミングはビルドで拒否します。通常の .NET ライブラリに `project.godot` を置くだけでは利用できません。
+
+利用者が行うのは、提供側の候補パッケージをゲームの `.csproj` から参照し、必要なときだけ `<GuaRemoteMode>testing</GuaRemoteMode>` または `<GuaRemoteMode>player</GuaRemoteMode>` を指定して通常どおりゲームをビルド・エクスポートすることです。省略は `off`（通常配布用・遠隔操作なし）です。Debug／Release とは別の設定で、Gua 本体の再ビルドや DLL の手動交換は不要です。この候補パッケージを公開済みの製品としては扱いません。公開 NuGet 1.2.0 は差し替え否定試験の入力であり、推奨先ではありません。
+
+[ビルド設定](../bindings/dotnet/Gua.GameBuild.targets)が選択した native 2本と実際に参照した managed 2本の SHA-256、生成元・構成を、[生成ツール](../tools/Gua.GameBuild/Program.cs)がゲーム assembly にコンパイルするコードへ固定します。[保護した Godot アダプターのソース](../scripts/stage-game-build-bundle.ps1)もゲーム側のコンパイル入力です。`off` ではその遠隔開始呼び出し自体を条件付きコンパイルで除きます。ローカル UI 反映は残します。Player 上限は選択した native のコンパイル制限も併用します。
+
+実行順序は[ゲーム側の module initializer](../tools/Gua.GameBuild/GodotGameGuard.cs.txt)による期待値検査 → 絶対パスから native をロード → Gua の初期化です。Gua DLL が自分の種類を回答して許可する経路ではありません。各ファイルを共有書き込み・削除を許さず開き、全 managed／native のハッシュが一致した後にだけ `gua.dll`、`gua_runtime.dll` を読み込みます。Gua が既にロード済みなら拒否します。検索対象は絶対パスと OS の System32 に制限し、ディレクトリーと対象ファイルの reparse point は拒否します。読み取りハンドルと native handle は実行中保持するため、検査後の通常の上書き・削除を許しません。環境変数による別ディレクトリー指定は、この検証済み handle を置き換えません。
+
+検証主体は交換対象の Gua 4本から独立したゲーム assembly です。Editor では Godot が assembly をストリームから読み込むため `Assembly.Location` が空になります。その場合だけ、Gua DLL ではないエンジンの `GodotPlugins.PluginLoadContext.AssemblyLoadedPath` を参照します。この根拠は Godot 4.7 の [ローダー](https://github.com/godotengine/godot/blob/4.7-stable/modules/mono/glue/GodotSharp/GodotPlugins/PluginLoadContext.cs)と[初期化処理](https://github.com/godotengine/godot/blob/4.7-stable/modules/mono/glue/GodotSharp/GodotPlugins/Main.cs)です。Release ゲームの検証元はエクスポート先のゲーム assembly のパスです。SDK 内の書き換え可能な manifest は、起動時の期待値を更新する権限を持ちません。
+
+Editor の再読み込みでは、同じ検証済み SDK・ゲームの場所・構成・生成元・期待ハッシュの場合だけ、プロセス内に保持した検証済み handle を再利用します。共通 CLR 型だけの記録とし、古いゲーム assembly を保持しません。同一内容の DLL はビルド時に上書きしないため、ロックを保ったまま C# の通常再ビルドができます。SDK や構成を変える場合は Editor の再起動が必要です。検査失敗時はゲーム assembly の初期化を失敗させ、Editor を終了しません。旧 Gua GDExtension の自動ロード、GDScript 用 policy autoload、旧 managed アダプターとの混在は[ビルド時検査](../tools/Gua.GameBuild/GodotHost.cs)で拒否します。無関係な拡張機能のロード管理は変更しません。
+
+Release の module initializer は Godot の native callback 表が初期化される前に呼ばれ得るため、拒否処理は Godot API を呼びません。Godot 4.7 が Editor 用に作る collectible loader と、実ゲームの CLR component loader を区別し、確認できたゲームだけを終了コード 78／79 で停止します。未知のローダーは Editor と同様に例外で初期化を止め、プロセスの強制終了対象にしません。Editor の未保存作業を失わせる終了処理は実装・試験とも行いません。
+
+試験入口は [3構成・実通信・混在拒否](../scripts/test-godot-dotnet-game-policy.ps1)、[Release 書き出しと DLL 一式交換](../scripts/test-godot-dotnet-export.ps1)、[Editor 再読み込みと拒否後の生存](../scripts/test-godot-dotnet-editor.ps1)です。独立した OS ロード観測で「検査開始 → 一致 → native ロード」の順序を確認し、負例は単なる listener 不在ではなく、検査到達・具体的な拒否・native ロード0件・ゲーム callback 未到達を要求します。CI は [Remote build variants](../.github/workflows/remote-build-variants.yml) に同じ試験を接続します。実行済み結果と最終 HEAD の CI は PR の報告で区別します。
+
+ここでの対象は「ゲームとエンジンが変更されず、Gua DLL 一式だけが交換された場合」です。ゲーム assembly／期待値、エンジンや CLR、OS まで改変された場合の完全防御ではありません。managed アダプターは既存の UI 用 API を対象とし、native GDExtension の空間機能まで対応したとは扱いません。Godot Web 独自 HTML は判断待ち、非 Windows のゲーム側ローダーは未対応、IL2CPP は未導入・未検証です。これらを従来の native CI の成功で代用しません。
+
+2026-11-06 のローカル受入では、公式 portable Godot .NET 4.7、.NET SDK 10.0.401／runtime 10.0.12 を使用しました。3構成のゲーム起動と Release 書き出し、テスト用・Player 用の実入力1件、Player の時計・Debug 昇格拒否が成功しました。通常版の native 2本交換、managed・manifest まで含む交換、native を通常版のままにした managed のみの交換は、それぞれ終了78・nativeロード0件・ゲーム処理未到達でした。Editor の通常ビルド／解放／再読み込み、拒否後の生存・正常終了と、5種類の具体的なビルド拒否も確認しています。native 入力は以前の CI の一貫した source `77d966aae50f62c4c21437e603017df5c225ee84`、ゲーム側コード・生成ツールは今回の差分です。最終 HEAD native を使った hosted CI と同一視しません。
+
+Godot .NET の新規範囲では独立レビューを2回行い、対応すべき指摘はありませんでした。レビュー側でも、同一 DLL はロックしたまま上書きせず、構成変更はロックを解かずビルドで拒否することを確認しました。以前の基盤監査2回とは別の限定範囲であり、既存全体の監査を繰り返したものではありません。ローカル成果と最終 HEAD CI の結果は PR に分けて記載します。

@@ -64,7 +64,7 @@ try {
     'config_version=5' | Set-Content (Join-Path $unsupported 'project.godot')
     $unsupportedLog=Join-Path $unsupported 'unsupported-godot-host.log'
     dotnet build (Join-Path $unsupported 'Game.csproj') -c Release --no-restore --nologo -v quiet -m:1 -nr:false *> $unsupportedLog
-    if($LASTEXITCODE -eq 0 -or [string](Get-Content $unsupportedLog -Raw) -notmatch 'Godot .NET needs its own verified host') {throw 'The standalone package silently claimed to protect a Godot host.'}
+    if($LASTEXITCODE -eq 0 -or [string](Get-Content $unsupportedLog -Raw) -notmatch 'actual Godot.NET.Sdk game project') {throw 'The standalone package silently claimed to protect a Godot host.'}
     $results.Add(@{case='unsupported-godot-host';result='build-refused';evidence=$unsupportedLog})
 } finally {$env:GUA_OBSERVATION_PROFILE=$beforeProfile}
 $results | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'results.json') -Encoding utf8NoBOM

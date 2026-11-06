@@ -27,8 +27,22 @@ foreach ($case in @(@{Mode='off';Package=$ShippingPackage},@{Mode='testing';Pack
 }
 $tools = Join-Path $output 'tools'
 New-Item -ItemType Directory -Path $tools | Out-Null
-foreach ($name in 'Gua.GameBuild.dll','Gua.GameBuild.deps.json','Gua.GameBuild.runtimeconfig.json','GameGuard.cs.txt') {
+foreach ($name in 'Gua.GameBuild.dll','Gua.GameBuild.deps.json','Gua.GameBuild.runtimeconfig.json','GameGuard.cs.txt','GodotGameGuard.cs.txt') {
     Copy-Item -LiteralPath (Join-Path $root "tools/Gua.GameBuild/bin/Release/net10.0/$name") -Destination $tools
 }
 Copy-Item -LiteralPath (Join-Path $root 'bindings/dotnet/Gua.GameBuild.targets') -Destination $output
+New-Item -ItemType Directory (Join-Path $output 'godot') | Out-Null
+$adapter=Get-Content (Join-Path $root 'examples/dotnet-godot/addons/gua/GuaGodotRuntime.cs') -Raw
+$oldConstructor=@'
+        System.Environment.SetEnvironmentVariable(
+            "GUA_RUNTIME_NATIVE_DIR",
+            ProjectSettings.GlobalizePath("res://addons/gua/bin"));
+'@
+$adapter=$adapter.Replace("`r`n","`n")
+if(!$adapter.Contains($oldConstructor.Replace("`r`n","`n"))){throw 'Godot managed adapter constructor changed; update the protected producer.'}
+$adapter=$adapter.Replace($oldConstructor.Replace("`r`n","`n"),'        GuaGameNativePolicy.RequireVerified();')
+$oldStart='        return _runtime!.StartInspectorBridge(port);'
+if(!$adapter.Contains($oldStart)){throw 'Godot managed adapter remote-start boundary changed.'}
+$adapter=$adapter.Replace($oldStart,"#if GUA_REMOTE_AUTOMATION`n$oldStart`n#else`n        return false;`n#endif")
+("using System;`nusing System.Collections.Generic;`nusing System.Linq;`n"+$adapter)|Set-Content (Join-Path $output 'godot/GuaGodotRuntime.cs') -Encoding utf8NoBOM
 Write-Host "Staged provider-built game SDK (no game-side Gua source build): $output"

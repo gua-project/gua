@@ -3,6 +3,18 @@ using System.Text.Json;
 using Gua.GameBuild;
 using System.Runtime.InteropServices;
 
+if(args.Length==2 && args[0]=="check-godot-host") {RunGodotBuildCheck(()=>GodotHost.Check(args[1]));return;}
+if(args.Length==4 && args[0]=="sync-godot-native") {RunGodotBuildCheck(()=>GodotHost.SynchronizeNative(args[1],args[2],args[3]));return;}
+static void RunGodotBuildCheck(Action check)
+{
+    try {check();}
+    catch(Exception error) when(error is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or JsonException) {
+        // An ordinary rejected host is a build error, not an unhandled CLR
+        // crash. MSBuild must show the actionable reason even at quiet verbosity.
+        Console.Error.WriteLine("error GUA1001: "+error.Message);
+        Environment.ExitCode=1;
+    }
+}
 if(args.Length>=2 && args[0]=="check-cpp-imports") {
     Console.WriteLine(JsonSerializer.Serialize(CppGameBuild.Check(args[1],args.Skip(2)))); return;
 }
@@ -32,7 +44,7 @@ if(args.Length==4 && args[0]=="embed-native") {
 
 // This runs on the developer/build machine. Never consult a runtime DLL to decide
 // what the game should trust, and never regenerate the policy on game startup.
-if (args.Length < 4 || args[0] != "generate" || args[2] is not ("off" or "testing" or "player"))
+if (args.Length < 4 || args[0] is not ("generate" or "generate-godot") || args[2] is not ("off" or "testing" or "player"))
     throw new ArgumentException("generate <verified-provider-package> <off|testing|player> <game-owned-source.cs> [managed-assembly ...]");
 string package = Path.TrimEndingDirectorySeparator(Path.GetFullPath(args[1]));
 string output = Path.GetFullPath(args[3]);
@@ -77,7 +89,7 @@ foreach (string name in new[] { "gua.dll", "gua_runtime.dll" })
     if (!entries.ContainsKey(name)) throw new InvalidDataException("Missing Windows native pair: " + name);
 if (entries.Keys.Any(p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) && p is not ("gua.dll" or "gua_runtime.dll")))
     throw new InvalidDataException("This generator requires a native-pair package; managed/engine closure is not yet supported.");
-string template = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "GameGuard.cs.txt"));
+string template = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, args[0]=="generate-godot" ? "GodotGameGuard.cs.txt" : "GameGuard.cs.txt"));
 var expectedFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 foreach (string name in new[] { "gua.dll", "gua_runtime.dll" }) expectedFiles.Add(name, entries[name].ToLowerInvariant());
 foreach (string managed in args.Skip(4))
