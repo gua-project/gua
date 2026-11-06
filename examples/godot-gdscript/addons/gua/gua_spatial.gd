@@ -4,7 +4,7 @@ extends RefCounted
 ## _physics_process boundary. No live node/collider settings are modified.
 ## Dispose before origin changes or World3D destruction; use a fresh spaceEpoch.
 
-var _host: GuaSpatialHost
+var _host: Object
 var _world: World3D
 var _registration: Dictionary
 var _policies: Dictionary
@@ -17,7 +17,11 @@ var _box := BoxShape3D.new()
 var _shape_query := PhysicsShapeQueryParameters3D.new()
 var _ray_query := PhysicsRayQueryParameters3D.new()
 
-func configure(host: GuaSpatialHost, world: World3D, registration: Dictionary, policies: Dictionary) -> int:
+func configure(host: Object, world: World3D, registration: Dictionary, policies: Dictionary) -> int:
+	# Native classes are deliberately unavailable until the game-owned loader has
+	# verified the extension. Keep editor/import parsing independent of native load.
+	if host == null or not host.is_class("GuaSpatialHost"):
+		return 1
 	if provider != 0 or world == null or OS.get_thread_caller_id() != OS.get_main_thread_id():
 		return 1
 	# Freeze host dictionaries; masks, trigger flags and exclusions never come
@@ -43,7 +47,7 @@ func configure(host: GuaSpatialHost, world: World3D, registration: Dictionary, p
 			return 5 # Nonzero margin could expand the authorized query volume.
 	_host = host
 	_world = world
-	var result := host.register_provider(JSON.stringify(_registration, "", true, true))
+	var result: Dictionary = host.register_provider(JSON.stringify(_registration, "", true, true))
 	if result.status == 0:
 		provider = result.handle
 	return result.status
@@ -53,7 +57,7 @@ func dispose() -> int:
 		return 11
 	if provider == 0:
 		return 0
-	var result := _host.unregister_provider(provider)
+	var result: Dictionary = _host.unregister_provider(provider)
 	provider = 0
 	_world = null
 	return result.status
@@ -65,14 +69,14 @@ func pump() -> int:
 	# Real physics callback counter; no World snapshot inferred from it.
 	var boundary := {"schemaVersion":"spatial-host-r1", "documentType":"boundary",
 		"physicsSampleId":"godot:%s:%s" % [provider, _sample], "tick":Engine.get_physics_frames()}
-	var begin := _host.begin(provider, JSON.stringify(boundary, "", true, true))
+	var begin: Dictionary = _host.begin(provider, JSON.stringify(boundary, "", true, true))
 	if begin.status != 0:
 		return begin.status
 	_pumping = true
 	var status := 0
 	var space := _world.direct_space_state
 	while true:
-		var taken := _host.take(begin.handle)
+		var taken: Dictionary = _host.take(begin.handle)
 		if taken.status == 10:
 			break
 		if taken.status != 0:
@@ -87,14 +91,14 @@ func pump() -> int:
 			status = completed
 			break
 	# Mandatory cleanup even when native validation/deadlines reject a result.
-	var ended := _host.end(begin.handle)
+	var ended: Dictionary = _host.end(begin.handle)
 	_pumping = false
 	return status if status != 0 else (0 if ended.status == 11 else ended.status)
 
 func _complete_item(lease: int, execution: Dictionary) -> int:
 	var wire := JSON.stringify(execution,"",true,true)
 	for _attempt in range(2):
-		var completed := _host.complete(lease,wire)
+		var completed: Dictionary = _host.complete(lease,wire)
 		if completed.status == 10:
 			# One retry releases retained terminal correlation. Already released
 			# items cannot consume another query because no next Take occurred.
@@ -248,7 +252,7 @@ func _execute(space: PhysicsDirectSpaceState3D, q: Dictionary, lease: int) -> Di
 	if q.kind != "raycast":
 		_prepare_shape(q.shape, policy)
 	var b := _prepared_bounds(q)
-	var checked := _host.check_engine_bounds(lease,b[0],b[1],b[2],b[3],b[4],b[5])
+	var checked: Dictionary = _host.check_engine_bounds(lease,b[0],b[1],b[2],b[3],b[4],b[5])
 	if checked.status != 0:
 		for key in ["coverage","truncated","hits"]:
 			r.erase(key)

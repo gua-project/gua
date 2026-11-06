@@ -39,6 +39,7 @@ internal static unsafe partial class Native
     private static nint Resolve(string name, Assembly assembly, DllImportSearchPath? searchPath)
     {
         if (name != "gua_runtime") return 0;
+        if (AppContext.GetData("Gua.GameVerifiedRuntime") is nint verified && verified != 0) return verified;
         var file = OperatingSystem.IsWindows() ? "gua_runtime.dll" : OperatingSystem.IsMacOS() ? "libgua_runtime.dylib" : "libgua_runtime.so";
         foreach (var directory in CandidateDirectories(assembly))
         {

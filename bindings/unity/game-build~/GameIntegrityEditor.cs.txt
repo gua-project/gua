@@ -1,0 +1,54 @@
+// Generated into GAME Assets/GameSecurity/Editor, outside replaceable Gua DLLs.
+#if UNITY_EDITOR_WIN
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using UnityEditor;
+using UnityEngine;
+
+[InitializeOnLoad]
+internal static class GameIntegrityEditor
+{
+    private const string CheckerPath = /*CHECKER_PATH*/;
+    private const uint ExpectedMode = /*MODE*/;
+#if GUA_REMOTE_AUTOMATION
+#if GUA_PLAYER_ONLY
+    private const uint CompiledMode = 2;
+#else
+    private const uint CompiledMode = 1;
+#endif
+#else
+    private const uint CompiledMode = 0;
+#endif
+    internal static bool Attempted, Accepted;
+    internal static uint LastStatus;
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate uint Query();
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] private static extern IntPtr LoadLibraryEx(string path, IntPtr file, uint flags);
+    static GameIntegrityEditor() { EditorApplication.playModeStateChanged += OnState; }
+    private static void OnState(PlayModeStateChange state)
+    {
+        if(state != PlayModeStateChange.ExitingEditMode) return;
+        Attempted=true; Accepted=false;
+        try {
+            if(CompiledMode!=ExpectedMode) {LastStatus=84;}
+            else {
+            // The checker is GAME code/data. It is not selected from SDK files or
+            // a mutable SDK manifest. Its Editor build never terminates a host.
+            IntPtr checker=GetModuleHandle(Path.GetFileName(CheckerPath));
+            if(checker==IntPtr.Zero) checker=LoadLibraryEx(CheckerPath,IntPtr.Zero,0x800);
+            if(checker==IntPtr.Zero) throw new InvalidOperationException("Game verifier could not load.");
+            LastStatus=Marshal.GetDelegateForFunctionPointer<Query>(GetProcAddress(checker,"GamePolicyStatus"))();
+            uint mode=Marshal.GetDelegateForFunctionPointer<Query>(GetProcAddress(checker,"GamePolicyMode"))();
+            Accepted=LastStatus==1 && mode==ExpectedMode;
+            if(LastStatus==1 && !Accepted) LastStatus=84; // stale game policy: restart/reconfigure.
+            }
+        } catch(Exception) {LastStatus=81;}
+        if(!Accepted) {
+            EditorApplication.isPlaying=false;
+            Debug.LogError("GAME_EDITOR_POLICY_REFUSED: " + LastStatus + ". Play cancelled; restore the selected SDK and restart the Editor. Unsaved work is retained.");
+        } else Debug.Log("GAME_EDITOR_POLICY_VERIFIED");
+    }
+    [DllImport("kernel32.dll",CharSet=CharSet.Ansi,ExactSpelling=true)] private static extern IntPtr GetProcAddress(IntPtr module,string name);
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string name);
+}
+#endif

@@ -263,6 +263,11 @@ internal static partial class Native
             return nint.Zero;
         }
 
+        // A game-owned initializer can pin a verified module. In that case never
+        // fall back to environment variables, working directory, or loader search.
+        if (AppContext.GetData("Gua.GameVerifiedCore") is nint verified && verified != 0)
+            return verified;
+
         var fileName = OperatingSystem.IsWindows()
             ? "gua.dll"
             : OperatingSystem.IsMacOS()

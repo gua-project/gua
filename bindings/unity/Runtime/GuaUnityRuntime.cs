@@ -77,7 +77,39 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
                     (build.RootElement.GetProperty("remotePermissionCeiling").GetString() == "player") != GuaUnityCompiledBuild.PlayerOnly)
                     throw new InvalidOperationException("Gua Unity managed/native build variants do not match.");
             }
+            activeRuntime = this;
+        }
+        catch (Exception error)
+        {
+            UnsubscribeGameInputSceneEvents();
+            Debug.LogError("Failed to initialize the Gua Unity adapter: " + error);
+            try { runtime?.Dispose(); }
+            catch (Exception cleanupError) { Debug.LogError("Failed to dispose the partially initialized Gua Unity runtime: " + cleanupError); }
+            finally { runtime = null; }
+            try { DisposeGameInput(); }
+            catch (Exception cleanupError) { Debug.LogError("Failed to remove partially initialized Gua Unity input devices: " + cleanupError); }
+            enabled = false;
+        }
+    }
+
+    /// <summary>Called by the generated GAME bootstrap after game-owned verification.
+    /// Local adapter initialization alone never starts a remote transport.</summary>
+    public static void StartRemoteForGame()
+    {
 #if GUA_REMOTE_AUTOMATION
+        EnsureStarted();
+        if (activeRuntime == null || activeRuntime.runtime == null) throw new InvalidOperationException("The local Gua adapter did not initialize.");
+        activeRuntime.StartRemote();
+#else
+        throw new InvalidOperationException("Remote automation was not compiled into this game's Unity adapter.");
+#endif
+    }
+
+#if GUA_REMOTE_AUTOMATION
+    private void StartRemote()
+    {
+            if (runtime == null) throw new InvalidOperationException("The local Gua adapter did not initialize.");
+            if (webInstalled || runtime.InspectorBridgeRunning) return;
             bool remoteEnabled = true;
             if (remoteEnabled && Application.platform == RuntimePlatform.WebGLPlayer)
             {
@@ -94,21 +126,8 @@ public sealed partial class GuaUnityRuntime : MonoBehaviour
                 if (!runtime.StartInspectorBridge(port)) throw new InvalidOperationException($"Failed to start Gua Inspector bridge on port {port}.");
                 Debug.Log($"Gua Unity adapter listening on {runtime.InspectorBridgeUrl}.");
             }
-#endif
-            activeRuntime = this;
-        }
-        catch (Exception error)
-        {
-            UnsubscribeGameInputSceneEvents();
-            Debug.LogError("Failed to initialize the Gua Unity adapter: " + error);
-            try { runtime?.Dispose(); }
-            catch (Exception cleanupError) { Debug.LogError("Failed to dispose the partially initialized Gua Unity runtime: " + cleanupError); }
-            finally { runtime = null; }
-            try { DisposeGameInput(); }
-            catch (Exception cleanupError) { Debug.LogError("Failed to remove partially initialized Gua Unity input devices: " + cleanupError); }
-            enabled = false;
-        }
     }
+#endif
 
     private IEnumerator Start()
     {

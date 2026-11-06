@@ -1,0 +1,82 @@
+// Generated on the game developer's machine. Compile into the GAME assembly.
+// Do not put this verifier or its expectations into a replaceable Gua assembly.
+#nullable enable
+using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Collections.Generic;
+
+internal static class GuaGameNativePolicy
+{
+    internal const string RemoteMode = /*MODE*/;
+    internal const string ProviderSource = /*SOURCE*/;
+    internal const string ProviderBuild = /*BUILD*/;
+    private sealed record ExpectedFile(string Name, string Sha256);
+    private static readonly ExpectedFile[] Files = {
+/*EXPECTED_FILES*/
+    };
+    // Windows share modes deny writes/deletes while the game is using these files.
+    // Retain handles and module references for the lifetime of the process.
+    private static readonly List<FileStream> Leases = new();
+    private static readonly List<nint> Modules = new();
+
+    [ModuleInitializer]
+    internal static void Initialize()
+    {
+        try { VerifyAndLoad(); }
+        catch (Exception) {
+            // Do not continue into game code, other initializers, or legacy remote
+            // startup after a failure. Exit does not unwind into an SDK callback.
+            bool loaded = OperatingSystem.IsWindows() && (GetModuleHandle("gua.dll") != 0 || GetModuleHandle("gua_runtime.dll") != 0);
+            Console.Error.WriteLine("Gua game integrity verification failed; nativeLoaded=" + loaded.ToString().ToLowerInvariant() + ".");
+            Environment.Exit(loaded ? 79 : 78);
+        }
+    }
+
+    private static void VerifyAndLoad()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+            throw new PlatformNotSupportedException("This game policy requires Windows x64.");
+        string directory = Path.GetFullPath(AppContext.BaseDirectory);
+        // Refuse a preloaded Gua module, including one loaded through PATH or another
+        // directory. No Gua entry point has been called by this verifier at this point.
+        foreach (var file in Files)
+        {
+            if (file.Name != "gua.dll" && file.Name != "gua_runtime.dll") continue;
+            if (GetModuleHandle(file.Name) != 0) throw new InvalidOperationException("Gua was loaded before its game policy.");
+        }
+        for (string? current = directory; current != null; current = Path.GetDirectoryName(current))
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("The game native directory traverses a reparse point.");
+        foreach (var file in Files)
+        {
+            string path = Path.Combine(directory, file.Name);
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("A native file is a reparse point.");
+            var lease = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            Leases.Add(lease);
+            string actual = Convert.ToHexStringLower(SHA256.HashData(lease));
+            if (!string.Equals(actual, file.Sha256, StringComparison.Ordinal))
+                throw new InvalidDataException("Native file hash differs from the compiled game policy.");
+        }
+        // Every file is locked and checked BEFORE loading either member of the pair.
+        // Core is loaded first. Runtime can bind that verified, already loaded core.
+        // Other dependencies come from System32, never PATH/current/app directories.
+        foreach (var file in Files)
+        {
+            if (file.Name != "gua.dll" && file.Name != "gua_runtime.dll") continue;
+            nint module = LoadLibraryEx(Path.Combine(directory, file.Name), 0, 0x800);
+            if (module == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            Modules.Add(module);
+            AppContext.SetData(file.Name == "gua.dll" ? "Gua.GameVerifiedCore" : "Gua.GameVerifiedRuntime", module);
+        }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint LoadLibraryEx(string path, nint file, uint flags);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string name);
+}
