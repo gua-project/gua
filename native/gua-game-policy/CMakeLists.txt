@@ -1,3 +1,14 @@
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_library(gua-godot-policy-template SHARED godot_policy_linux.cpp)
+    set_target_properties(gua-godot-policy-template PROPERTIES OUTPUT_NAME "GodotPolicyTemplate"
+        PREFIX "" CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+    target_compile_definitions(gua-godot-policy-template PRIVATE _GNU_SOURCE)
+    target_link_libraries(gua-godot-policy-template PRIVATE ${CMAKE_DL_LIBS})
+    target_link_options(gua-godot-policy-template PRIVATE -static-libgcc -static-libstdc++
+        "LINKER:--exclude-libs,ALL" "LINKER:-z,now" "LINKER:-z,relro")
+    return()
+endif()
+
 add_library(gua-game-policy-template SHARED game_policy.cpp)
 set_target_properties(gua-game-policy-template PROPERTIES OUTPUT_NAME "GamePolicyTemplate")
 add_library(gua-editor-policy-template SHARED game_policy.cpp)

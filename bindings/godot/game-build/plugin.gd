@@ -16,8 +16,12 @@ func _enter_tree() -> void:
 	_exporter = preload("export.gd").new()
 	_exporter.prepare = _prepare
 	add_export_plugin(_exporter)
-	if FileAccess.file_exists(ROOT + ".variants/" + str(ProjectSettings.get_setting(SETTING, "off")) + "/gua-build-manifest.json"):
+	if OS.get_name() == "Linux" and FileAccess.file_exists(ROOT + ".linux_variants/" + str(ProjectSettings.get_setting(SETTING, "off")) + "/gua-build-manifest.json"):
+		_prepare("linux")
+	elif FileAccess.file_exists(ROOT + ".variants/" + str(ProjectSettings.get_setting(SETTING, "off")) + "/gua-build-manifest.json"):
 		_prepare()
+	elif FileAccess.file_exists(ROOT + ".linux_variants/" + str(ProjectSettings.get_setting(SETTING, "off")) + "/gua-build-manifest.json"):
+		_prepare("linux")
 	elif FileAccess.file_exists(ROOT + ".web_variants/" + str(ProjectSettings.get_setting(SETTING, "off")) + "/gua-build-manifest.json"):
 		_prepare("web")
 
@@ -27,8 +31,11 @@ func _exit_tree() -> void:
 func _build() -> bool:
 	return _prepare()
 
-func _prepare(target: String = "windows") -> bool:
+func _prepare(target: String = "") -> bool:
 	_write_failed = false
+	if target.is_empty():
+		var linux_only := not DirAccess.dir_exists_absolute(ROOT + ".variants") and DirAccess.dir_exists_absolute(ROOT + ".linux_variants")
+		target = "linux" if OS.get_name() == "Linux" or linux_only else "windows"
 	if ProjectSettings.has_setting("dotnet/project/assembly_name") or "C#" in ProjectSettings.get_setting("application/config/features", PackedStringArray()):
 		push_error("This game-build SDK supports GDScript only. Godot .NET requires a separate verified managed/native host.")
 		return false
@@ -44,7 +51,10 @@ func _prepare(target: String = "windows") -> bool:
 		return false
 	if target == "web":
 		return _prepare_web(mode)
-	var package := ROOT + ".variants/" + mode + "/"
+	if target not in ["windows", "linux"]:
+		return false
+	var linux := target == "linux"
+	var package := ROOT + (".linux_variants/" if linux else ".variants/") + mode + "/"
 	var manifest: Variant = JSON.parse_string(FileAccess.get_file_as_string(package + "gua-build-manifest.json"))
 	if not manifest is Dictionary or not manifest.get("build") is Dictionary:
 		push_error("The provider SDK is missing the selected prebuilt Gua mode.")
@@ -65,7 +75,7 @@ func _prepare(target: String = "windows") -> bool:
 		if entries.has(path) or path.is_absolute_path() or ".." in path.split("/") or "\\" in path:
 			return false
 		entries[path] = entry.sha256
-		if path.begins_with("addons/gua/bin/") and path.ends_with(".windows.release.x86_64.dll"):
+		if path.begins_with("addons/gua/bin/") and path.ends_with(".linux.release.x86_64.so" if linux else ".windows.release.x86_64.dll"):
 			if native != "":
 				return false
 			native = path
@@ -77,17 +87,19 @@ func _prepare(target: String = "windows") -> bool:
 	DirAccess.make_dir_recursive_absolute("res://gua_generated/native")
 	_write("res://gua-native/.gdignore", "")
 	_write("res://gua_generated/native/.gdignore", "")
-	if (not FileAccess.file_exists("res://gua-native/gua.dll") or FileAccess.get_sha256("res://gua-native/gua.dll") != native_hash) and DirAccess.copy_absolute(package + native, "res://gua-native/gua.dll") != OK:
+	var native_path := "res://gua-native/" + ("gua.so" if linux else "gua.dll")
+	if (not FileAccess.file_exists(native_path) or FileAccess.get_sha256(native_path) != native_hash) and DirAccess.copy_absolute(package + native, native_path) != OK:
 		return false
-	var verifier: String = preload("native_guard.gd").new().generate(native_hash, mode, str(build.sourceCommit), str(build.buildId))
+	var verifier: String = preload("native_guard.gd").new().generate(native_hash, mode, str(build.sourceCommit), str(build.buildId), target)
 	if verifier.is_empty():
 		return false
 	_exporter.set_meta("gua_native_guard_path", verifier)
-	var descriptor := "[configuration]\nentry_symbol=\"game_policy_godot_init\"\ncompatibility_minimum=\"4.7\"\n[libraries]\nwindows.x86_64=" + JSON.stringify(verifier) + "\n"
+	var descriptor := "[configuration]\nentry_symbol=\"game_policy_godot_init\"\ncompatibility_minimum=\"4.7\"\n[libraries]\n" + target + ".x86_64=" + JSON.stringify(verifier) + "\n"
 	_write("res://gua_generated/native/gua.gdextension", descriptor)
 	var guard := FileAccess.get_file_as_string(ROOT + "editor/policy.gd.txt")
 	guard = guard.replace("/*MODE*/", JSON.stringify(mode)).replace("/*HASH*/", JSON.stringify(native_hash))
 	guard = guard.replace("/*SOURCE*/", JSON.stringify(build.sourceCommit)).replace("/*BUILD*/", JSON.stringify(build.buildId))
+	guard = guard.replace("/*HOST*/", JSON.stringify("Linux" if linux else "Windows"))
 	_write(POLICY, guard)
 	for name: String in ["gua_auto_adapter.gd", "gua_observe_owner.gd", "gua_spatial.gd"]:
 		var path := "addons/gua/" + name

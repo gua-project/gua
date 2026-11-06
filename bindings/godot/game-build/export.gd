@@ -6,6 +6,7 @@ var _original_autoload: Variant
 var _original_order := 0
 var _failed_target := ""
 var _web_target := false
+var _linux_target := false
 var _autoload_swapped := false
 var _web := preload("web_export.gd").new()
 
@@ -17,6 +18,7 @@ func _export_begin(features: PackedStringArray, _debug: bool, _path: String, _fl
 	_failed_target = _path if _path.is_absolute_path() else ProjectSettings.globalize_path(_path if _path.begins_with("res://") else "res://" + _path)
 	_autoload_swapped = false
 	_web_target = features.has("web")
+	_linux_target = features.has("linux") and features.has("x86_64")
 	set_meta("gua_web_manifest", {})
 	var valid := false
 	if _web_target:
@@ -24,14 +26,16 @@ func _export_begin(features: PackedStringArray, _debug: bool, _path: String, _fl
 			push_error("The Web output basename gua is reserved for the Gua SDK module.")
 		valid = _path.get_file().get_basename().to_lower() != "gua" and _web.validate_options(self) and prepare.call("web")
 	elif features.has("windows") and features.has("x86_64"):
-		valid = prepare.call()
+		valid = prepare.call("windows")
+	elif _linux_target:
+		valid = prepare.call("linux")
 	if not valid:
 		_failed = true
 		_failed_target = _path if _path.is_absolute_path() else ProjectSettings.globalize_path(_path if _path.begins_with("res://") else "res://" + _path)
 		# Windows exports stage the executable at <name>.tmp and only promote it
 		# on success. Its matching final .exe is the explicitly selected product.
-		if features.has("windows") and _failed_target.to_lower().ends_with(".tmp"):
-			_failed_target = _failed_target.get_basename() + ".exe"
+		if (features.has("windows") or _linux_target) and _failed_target.to_lower().ends_with(".tmp"):
+			_failed_target = _failed_target.get_basename() + ("" if _linux_target else ".exe")
 		get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Gua game build", "A supported native/Web target and successful game-owned policy generation are required.")
 		# The exporter can still create files after an error. Never package a stale
 		# previously enabled policy, even when the destination has old native files.
@@ -60,8 +64,9 @@ func _export_begin(features: PackedStringArray, _debug: bool, _path: String, _fl
 			var bridge := "res://addons/gua/gua_webmcp_bridge.gd"
 			add_file(bridge, FileAccess.get_file_as_bytes(bridge), false)
 	else:
-		add_shared_object("res://gua-native/gua.dll", PackedStringArray(["windows", "x86_64"]), "gua-native")
-		add_shared_object(str(get_meta("gua_native_guard_path", "")), PackedStringArray(["windows", "x86_64"]), "gua-native")
+		var tags := PackedStringArray(["linux" if _linux_target else "windows", "x86_64"])
+		add_shared_object("res://gua-native/" + ("gua.so" if _linux_target else "gua.dll"), tags, "gua-native")
+		add_shared_object(str(get_meta("gua_native_guard_path", "")), tags, "gua-native")
 	var descriptor := "res://gua_generated/native/gua.gdextension"
 	add_file(descriptor, FileAccess.get_file_as_bytes(descriptor), false)
 	var policy := "res://gua_generated/web_policy.gd" if _web_target else "res://gua_generated/policy.gd"
@@ -84,6 +89,10 @@ func _export_end() -> void:
 			for product: String in [_failed_target, _failed_target.get_basename() + ".pck"]:
 				if FileAccess.file_exists(product) and DirAccess.remove_absolute(product) != OK:
 					get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Gua game build", "Failed output could not be removed; do not use the previous build.")
+		elif _linux_target:
+			for product: String in [_failed_target, _failed_target.get_basename() + ".pck"]:
+				if FileAccess.file_exists(product) and DirAccess.remove_absolute(product) != OK:
+					get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Gua game build", "Failed Linux output could not be removed; do not use the previous build.")
 		elif _failed_target.to_lower().ends_with(".html"):
 			for product: String in [_failed_target, _failed_target.get_basename() + ".pck"]:
 				if FileAccess.file_exists(product) and DirAccess.remove_absolute(product) != OK:
@@ -93,5 +102,5 @@ func _export_file(path: String, _type: String, _features: PackedStringArray) -> 
 	if (_failed and path in ["res://gua_generated/policy.gd", "res://gua_generated/web_policy.gd"]) or (_web_target and path == "res://gua_generated/policy.gd") or (not _web_target and path == "res://gua_generated/web_policy.gd"):
 		skip()
 		return
-	if path.begins_with("res://addons/gua/.variants/") or path.begins_with("res://addons/gua/.web_variants/") or path.begins_with("res://addons/gua/editor/") or path == "res://addons/gua/plugin.cfg" or (path.ends_with("gua_webmcp_bridge.gd") and (not _web_target or str(get_meta("gua_web_mode", "off")) == "off")):
+	if path.begins_with("res://addons/gua/.variants/") or path.begins_with("res://addons/gua/.linux_variants/") or path.begins_with("res://addons/gua/.web_variants/") or path.begins_with("res://addons/gua/editor/") or path == "res://addons/gua/plugin.cfg" or (path.ends_with("gua_webmcp_bridge.gd") and (not _web_target or str(get_meta("gua_web_mode", "off")) == "off")):
 		skip()

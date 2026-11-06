@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$OutputDirectory)
+param([Parameter(Mandatory)][string]$OutputDirectory,[switch]$IncludeLinuxDesktop)
 $ErrorActionPreference='Stop'
 if(Test-Path $OutputDirectory){throw 'Use a new portable test-tools directory.'}
 $out=(New-Item -ItemType Directory $OutputDirectory).FullName
@@ -16,4 +16,9 @@ try{
     $entries=@($archive.Entries|Where-Object FullName -CEQ 'templates/web_dlink_nothreads_release.zip')
     if($entries.Count -ne 1){throw 'Missing/duplicate official single-thread Web template.'}
     [IO.Compression.ZipFileExtensions]::ExtractToFile($entries[0],(Join-Path $out 'web-release-dlink.zip'))
+    if($IncludeLinuxDesktop){
+        $linux=@($archive.Entries|Where-Object FullName -CEQ 'templates/linux_release.x86_64')
+        if($linux.Count -ne 1){throw 'Missing/duplicate official Linux Release template.'}
+        [IO.Compression.ZipFileExtensions]::ExtractToFile($linux[0],(Join-Path $out 'linux-release.x86_64'))
+    }
 }finally{$archive.Dispose()}

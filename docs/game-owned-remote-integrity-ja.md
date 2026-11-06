@@ -109,7 +109,7 @@ Release の module initializer は Godot の native callback 表が初期化さ�
 
 試験入口は [3構成・実通信・混在拒否](../scripts/test-godot-dotnet-game-policy.ps1)、[Release 書き出しと DLL 一式交換](../scripts/test-godot-dotnet-export.ps1)、[Editor 再読み込みと拒否後の生存](../scripts/test-godot-dotnet-editor.ps1)です。独立した OS ロード観測で「検査開始 → 一致 → native ロード」の順序を確認し、負例は単なる listener 不在ではなく、検査到達・具体的な拒否・native ロード0件・ゲーム callback 未到達を要求します。CI は [Remote build variants](../.github/workflows/remote-build-variants.yml) に同じ試験を接続します。実行済み結果と最終 HEAD の CI は PR の報告で区別します。
 
-ここでの対象は「ゲームとエンジンが変更されず、Gua DLL 一式だけが交換された場合」です。ゲーム assembly／期待値、エンジンや CLR、OS まで改変された場合の完全防御ではありません。managed アダプターは既存の UI 用 API を対象とし、native GDExtension の空間機能まで対応したとは扱いません。Godot Web は次節の範囲で追加しています。非 Windows のゲーム側 native ローダーは未対応、IL2CPP は未導入・未検証です。これらを従来の native CI の成功で代用しません。
+ここでの対象は「ゲームとエンジンが変更されず、Gua DLL 一式だけが交換された場合」です。ゲーム assembly／期待値、エンジンや CLR、OS まで改変された場合の完全防御ではありません。managed アダプターは既存の UI 用 API を対象とし、native GDExtension の空間機能まで対応したとは扱いません。Godot Web は次節の範囲で追加しています。この managed 経路の非 Windows 用ローダーは未対応で、GDScript の Linux 経路は後述します。IL2CPP は未導入・未検証です。これらを従来の native CI の成功で代用しません。
 
 2026-11-06 のローカル受入では、公式 portable Godot .NET 4.7、.NET SDK 10.0.401／runtime 10.0.12 を使用しました。3構成のゲーム起動と Release 書き出し、テスト用・Player 用の実入力1件、Player の時計・Debug 昇格拒否が成功しました。通常版の native 2本交換、managed・manifest まで含む交換、native を通常版のままにした managed のみの交換は、それぞれ終了78・nativeロード0件・ゲーム処理未到達でした。Editor の通常ビルド／解放／再読み込み、拒否後の生存・正常終了と、5種類の具体的なビルド拒否も確認しています。native 入力は以前の CI の一貫した source `77d966aae50f62c4c21437e603017df5c225ee84`、ゲーム側コード・生成ツールは今回の差分です。最終 HEAD native を使った hosted CI と同一視しません。
 
@@ -148,3 +148,25 @@ Godot 4.7 の `JavaScriptBridge.eval` は JavaScript の真偽値を整数とし
 [競合試験](../scripts/test-godot-native-lease.ps1)は、独立した Windows デバッグ観測器で「SDK を開く前」と「hash 完了・SDK load 前」の実境界を止めます。製品の環境変数でチェックを飛ばす方式ではありません。前者では SDK フォルダーとプロジェクトの名前変更を拒否し、検査前の DLL 上書きは後の hash 不一致・native load0件で拒否しました。後者では3構成とも DLL 上書き・名前変更・SDK フォルダー変更を拒否しました。テスト用・Player 用の実入力、Player の既存上限、通常のセーブも維持しています。属性だけのディレクトリ handle では名前変更が成功する反例も、この試験が検出してから修正しています。
 
 この追加対応の実行済みローカル入力は一貫した CI source `169733fa32d92299d2f96efabbf2b3b823516fd7` の3構成で、検証器と生成処理は今回の差分です。実 Release 書き出し3構成と起動前交換も回帰しました。最終コミットの CI は PR に別途記録します。Linux/macOS の native ローダーへこの Windows 保証を流用しません。
+
+## Linux x86_64 の GDScript：検証した内容を固定して読み込む
+
+Linux 用の候補 SDK も、設定は `gua/remote_mode=off|testing|player`、操作は通常の Godot 書き出しです。off は通常配布用（遠隔操作なし）、testing は開発・エディター・テスト用、player は AI プレイヤー対応の配布用（Player 上限固定）です。利用者に Gua のソースビルドや C++ コンパイラーを要求しません。提供者側が３構成と[ゲーム用の検証テンプレート](../native/gua-game-policy/godot_policy_linux.cpp)をビルドします。[同梱処理](../scripts/stage-godot-linux-game-sdk.py)が native の実情報、共通 source/build ID、ファイルのハッシュ、依存物を検査します。依存先は OS・コンパイラーの標準ランタイムに限定し、SDK 独自の検索パス・監査用モジュール・転送先の指定は拒否します。
+
+書き出し時、GDScript がテンプレートの上限付き領域へ、選んだ SDK の期待ハッシュと構成情報を書き込みます。この結果の GameSecurity モジュールと PCK は、交換される Gua SDK とは別の、信頼するゲーム側のコード・データです。実行時の認可を SDK 自身の回答や書換可能な manifest に任せません。
+
+1. ゲーム側の検証モジュールが、正規 SDK の先行ロードを検査します。名前を変えた正規 GDE SDK も、実際の公開関数から検出して拒否します。
+2. SDK の内容を新しいメモリファイルへコピーし、カーネルに「書き換え・拡張・縮小・封印解除」をすべて禁止させます。Linux の通常のファイルロックだけでは、書き込みを強制的に防げないためです。
+3. 封印が成功した後、その固定した内容の SHA-256 をカーネルの暗号処理で計算し、ゲーム側の期待値と比較します。AF_ALG の socket はカーネル暗号のためのローカル API で、TCP・WebSocket の待受ではありません。
+4. 一致したメモリファイルの handle を保持し、その同じ内容を `/proc/self/fd` から読み込みます。検査後に元の SDK ファイル名を読み直しません。
+5. 検証済み SDK の GDE 初期化関数へ、元の Godot library 情報を渡します。検証は一度だけ行い、失敗時は初期化を渡しません。Editor は終了しません。
+
+[実 Release 試験](../scripts/test-godot-linux-game-policy.py)では、[独立した syscall 観測器](../scripts/linux_game_load_observer.py)を使います。既存の Ubuntu26.04／WSL2／Linux6.6.114.1、公式 Godot4.7 テンプレートで、９ケースが成功しました。通常版・テスト用・Player 用でセーブを維持し、有効な２構成では相関 ID の付いた実 WebSocket 入力を各１件消費しました。Player では初期化後の Debug setter でも上限を越えません。
+
+起動前の正規 ON 交換は、SDK mapping０件・ゲーム処理未到達で拒否しました。検査後・読み込み直前に止めた試験では、元ファイルの ON 上書き自体は成功しますが、封印した内容への書き込み・拡張・縮小は失敗し、実際に map されたハッシュは OFF のままでした。元パスから読む実装へ戻した使い捨て変異では、ON が読み込まれて実入力が成立し、通常版の受入が失敗しました。別名で先行ロードした正規 SDK は１件と数え、起動を拒否しました。観測器は全 mapping の ELF 公開関数の実定義を調べます。当初の memfd だけを数える方式では最後のケースを０件と誤認し得たため、レビュー指摘を受けて修正しています。古い有効版への通常版再生成が失敗した場合は、指定した古い EXE・PCK が除去されることも確認しました。同梱側の拒否９件では、実 ELF の検索パス混入、native の改変、構成・source の不一致、一覧にない native ファイルを検出しています。
+
+Player に環境変数 `GUA_OBSERVATION_PROFILE=debug` を渡した場合は、既存 native が runtime の生成を拒否します。これは安全側の失敗で、正常起動の証拠とは分けます。正常系は profile 環境変数を未設定にし、ビルドで Player 用を選んで起動した後の API 昇格拒否を調べています。今回のローカル native 入力は同一 source `7671a982…`、検証器・生成処理は今回の作業ツリーです。最終 HEAD の CI は PR に別記します。
+
+この追加は Linux の GDScript 用です。Linux の .NET／Unity／C++／Godot.NET の保護ローダーを有効にしたものではありません。macOS の保護ローダーは未実装、IL2CPP は未導入・未検証です。必要なカーネル機能や実行可能メモリファイルを使えない環境では、弱い検査へ戻さず初期化を拒否します。サンドボックス付きの別の Linux 配布環境へ、今回の成功を拡張しません。ゲーム側の検証モジュール・期待値・PCK、エンジン・OS 自体を変えた場合も保証の範囲外です。以前の WSL 読取り失敗は sandbox 内の結果で、後に承認範囲の host 実行から検証できました。
+
+PR の CI は Linux 用候補を別アーカイブとして作り、source・同梱情報・ハッシュを記録します。release workflow も候補生成まで接続していますが、実際のタグ実行は未実施です。公開ジョブはこの候補を取得せず、既存の公開パッケージは置き換えません。

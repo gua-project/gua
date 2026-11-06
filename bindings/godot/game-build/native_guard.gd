@@ -5,19 +5,26 @@ const MARKER := "GUAGDPOLICYSLOT1"
 
 # Provider code + game-owned expected data. This never runs the SDK to decide
 # whether it should be trusted, and requires no external compiler/build runtime.
-func generate(native_hash: String, mode: String, source: String, build: String) -> String:
+func generate(native_hash: String, mode: String, source: String, build: String, target: String = "windows") -> String:
 	var root := "res://addons/gua/editor/"
-	var metadata: Variant = JSON.parse_string(FileAccess.get_file_as_string(root + "native-guard-template.json"))
-	var template := root + "GodotPolicyTemplate.dll"
+	var linux := target == "linux"
+	var metadata: Variant = JSON.parse_string(FileAccess.get_file_as_string(root + ("linux-guard-template.json" if linux else "native-guard-template.json")))
+	var template := root + ("GodotPolicyTemplate.so" if linux else "GodotPolicyTemplate.dll")
 	if not metadata is Dictionary or metadata.get("schemaVersion") != 1 or FileAccess.get_sha256(template) != metadata.get("sha256"):
 		push_error("The provider SDK is missing or has modified its game verification template.")
 		return ""
 	var image := FileAccess.get_file_as_bytes(template)
-	if image.size() < 256 or image.decode_u16(0) != 0x5a4d:
+	if image.size() < 256:
 		return ""
-	var pe := image.decode_u32(0x3c)
-	if pe > image.size() - 24 or image.decode_u32(pe) != 0x4550 or image.decode_u16(pe + 4) != 0x8664:
-		return ""
+	if linux:
+		if image.decode_u32(0) != 0x464c457f or image[4] != 2 or image[5] != 1 or image.decode_u16(16) != 3 or image.decode_u16(18) != 62:
+			return ""
+	else:
+		if image.decode_u16(0) != 0x5a4d:
+			return ""
+		var pe := image.decode_u32(0x3c)
+		if pe > image.size() - 24 or image.decode_u32(pe) != 0x4550 or image.decode_u16(pe + 4) != 0x8664:
+			return ""
 	var slot := -1
 	var search := 0
 	var marker := MARKER.to_ascii_buffer()
@@ -42,7 +49,7 @@ func generate(native_hash: String, mode: String, source: String, build: String) 
 	_text(payload, build)
 	_u32(payload, 1)
 	_u32(payload, 0) # Native member, also rejected if already loaded.
-	_text(payload, "gua.dll")
+	_text(payload, "gua.so" if linux else "gua.dll")
 	payload.append_array(native_hash.hex_decode())
 	if payload.size() > SLOT_SIZE - 20:
 		return ""
@@ -52,7 +59,7 @@ func generate(native_hash: String, mode: String, source: String, build: String) 
 	var image_hash := _sha256(image)
 	if image_hash.length() != 64:
 		return ""
-	var path := "res://gua-native/GameSecurity_Godot_" + image_hash.left(24) + ".dll"
+	var path := "res://gua-native/GameSecurity_Godot_" + image_hash.left(24) + (".so" if linux else ".dll")
 	if FileAccess.file_exists(path) and FileAccess.get_sha256(path) == image_hash:
 		return path
 	var output := FileAccess.open(path, FileAccess.WRITE)
