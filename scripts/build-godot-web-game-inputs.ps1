@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$BuildDirectory,
     [string]$GodotCppSource,
     [string]$GodotBuildProfile,
-    [string]$PythonExecutable
+    [string]$PythonExecutable,
+    [string]$ProductVersion
 )
 # Provider/CI producer only. A consumer selects these prebuilts at game export.
 $ErrorActionPreference='Stop'
@@ -16,6 +17,10 @@ $source=(& git -C $root rev-parse HEAD).Trim()
 if($LASTEXITCODE){throw 'Cannot resolve provider source.'}
 foreach($case in @(@{mode='off';flavor='shipping';remote='OFF'},@{mode='testing';flavor='qa';remote='ON'},@{mode='player';flavor='ai-player';remote='ON'})) {
     $config=@('-S',$root,'-B',$build,'-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DGUA_BUILD_EXAMPLES=OFF','-DGUA_BUILD_GODOT=ON','-DGUA_GODOT_CONFIGURATION=Release','-DGUA_STAGE_IN_SAMPLE=OFF',"-DGUA_DISTRIBUTION_FLAVOR=$($case.flavor)","-DGUA_ENABLE_REMOTE_AUTOMATION=$($case.remote)","-DGUA_BUILD_ID=$source")
+    if($ProductVersion){
+        if($ProductVersion -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$'){throw 'ProductVersion must be an explicit semantic version.'}
+        $config+="-DGUA_VERSION=$ProductVersion","-DGUA_GODOT_PLUGIN_VERSION=$ProductVersion"
+    }
     if($GodotCppSource){$config+="-DFETCHCONTENT_SOURCE_DIR_GODOT-CPP=$GodotCppSource"}
     if($GodotBuildProfile){$config+="-DGODOTCPP_BUILD_PROFILE=$GodotBuildProfile"}
     if($PythonExecutable){$config+="-DPython3_EXECUTABLE=$PythonExecutable"}

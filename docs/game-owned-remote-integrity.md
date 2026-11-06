@@ -3,7 +3,7 @@
 This is an implementation work log, not a claim that the complete engine/package
 migration is finished. It describes locally tested Windows x64 .NET, Unity Mono
 and Godot GDScript paths. The Godot .NET follow-up is described at the end of
-this document. Web, final release-workflow distribution,
+this document, followed by the Godot Web game-page verifier. Final release-workflow distribution,
 and other operating systems still need their own integration and acceptance
 evidence. Existing public v1.2.0
 binaries are reproduction inputs, not a recommended secure installation.
