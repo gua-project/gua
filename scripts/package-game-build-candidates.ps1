@@ -23,6 +23,14 @@ foreach($mode in 'off','testing','player') {
         $manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         if($manifest.build.sourceCommit -ne $ExpectedNativeSource) {throw 'SDK inputs came from a different native source.'}
     }
+    $webManifest=Join-Path $GodotSdkDirectory "addons/gua/.web_variants/$mode/gua-build-manifest.json"
+    if(Test-Path $webManifest){
+        $manifest=Get-Content $webManifest -Raw|ConvertFrom-Json
+        if($manifest.build.sourceCommit -ne $ExpectedNativeSource){throw 'Godot Web candidate source differs from the native candidate.'}
+        foreach($entry in $manifest.files){
+            if((Get-FileHash (Join-Path (Split-Path $webManifest) $entry.path)).Hash.ToLowerInvariant() -ne $entry.sha256){throw 'Godot Web candidate input digest mismatch.'}
+        }
+    }
 }
 New-Item -ItemType Directory $output | Out-Null
 & (Join-Path $PSScriptRoot 'pack-game-build-nuget.ps1') -BundleRoot $DotnetSdkDirectory -Version $Version -RuntimeVersion $RuntimeVersion -OutputDirectory $output
@@ -78,6 +86,7 @@ if($CppSdkDirectory) {
 Copy-Item (Join-Path $root 'LICENSE') -Destination $output
 $files=@(Get-ChildItem -LiteralPath $output -File | Sort-Object Name | ForEach-Object {@{path=$_.Name;bytes=$_.Length;sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}})
 $hosts=@('standalone Windows x64 .NET10','Windows x64 Godot4.7 GDScript');if($UnitySdkDirectory){$hosts+='Windows x64 Unity Mono (candidate; hosted engine acceptance pending)'}
+if(Test-Path (Join-Path $GodotSdkDirectory 'addons/gua/.web_variants')){$hosts+='Godot4.7 single-thread Web; standard and supplied reviewed custom shell'}
 if($CppSdkDirectory){$hosts+='Windows x64 MSVC C++ (candidate; local acceptance)'}
 @{schemaVersion=1;purpose='build-only candidate; not a public release';producerCommit=$producer;producerHasUncommittedChanges=$dirty;nativeSourceCommit=$ExpectedNativeSource;version=$Version;runtimePackageVersion=$RuntimeVersion;packages=$hosts;files=$files} | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $output 'game-sdk-delivery.json') -Encoding utf8NoBOM
 Write-Host "Build-only SDK candidates: $output"

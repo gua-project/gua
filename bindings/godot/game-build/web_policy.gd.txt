@@ -1,0 +1,37 @@
+# Generated GAME policy; the Web SDK module never supplies these expectations.
+extends Node
+const REMOTE_MODE := /*MODE*/
+const PROVIDER_SOURCE := /*SOURCE*/
+const PROVIDER_BUILD := /*BUILD*/
+var verified := false
+var stage := "not-entered"
+
+func _enter_tree() -> void:
+	stage = "entered"
+	if not OS.has_feature("web"):
+		stage = "unsupported-host"
+		push_error("This exported Gua policy requires its verified Web startup page.")
+		get_tree().quit(78)
+		return
+	stage = "building-page-call"
+	var expression := "globalThis.__guaGameIntegrity && globalThis.__guaGameIntegrity.acceptGame(" + JSON.stringify(REMOTE_MODE) + "," + JSON.stringify(PROVIDER_SOURCE) + "," + JSON.stringify(PROVIDER_BUILD) + ") === true"
+	stage = "evaluating-page"
+	# Godot 4.7's eval BOOL union member is an integer. Serialize the exact JS
+	# boolean instead of treating an arbitrary truthy Variant as authorization.
+	var accepted: Variant = JavaScriptBridge.eval("JSON.stringify((" + expression + ") === true)", true)
+	if typeof(accepted) != TYPE_STRING or accepted != "true":
+		stage = "page-refused"
+		push_error("Gua Web game policy refused the startup page.")
+		get_tree().quit(78)
+		return
+	stage = "page-accepted"
+	# The engine has preloaded the checked response bytes. Web dlopen uses the
+	# basename of the already loaded side module, not a second network read.
+	stage = "native-init"
+	if GDExtensionManager.load_extension("res://gua_generated/native/gua.gdextension") != GDExtensionManager.LOAD_STATUS_OK:
+		push_error("The verified Web extension did not initialize.")
+		get_tree().quit(78)
+		return
+	verified = true
+	stage = "ready"
+	print("Gua game policy verified: ", REMOTE_MODE)

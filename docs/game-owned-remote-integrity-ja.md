@@ -109,8 +109,25 @@ Release の module initializer は Godot の native callback 表が初期化さ�
 
 試験入口は [3構成・実通信・混在拒否](../scripts/test-godot-dotnet-game-policy.ps1)、[Release 書き出しと DLL 一式交換](../scripts/test-godot-dotnet-export.ps1)、[Editor 再読み込みと拒否後の生存](../scripts/test-godot-dotnet-editor.ps1)です。独立した OS ロード観測で「検査開始 → 一致 → native ロード」の順序を確認し、負例は単なる listener 不在ではなく、検査到達・具体的な拒否・native ロード0件・ゲーム callback 未到達を要求します。CI は [Remote build variants](../.github/workflows/remote-build-variants.yml) に同じ試験を接続します。実行済み結果と最終 HEAD の CI は PR の報告で区別します。
 
-ここでの対象は「ゲームとエンジンが変更されず、Gua DLL 一式だけが交換された場合」です。ゲーム assembly／期待値、エンジンや CLR、OS まで改変された場合の完全防御ではありません。managed アダプターは既存の UI 用 API を対象とし、native GDExtension の空間機能まで対応したとは扱いません。Godot Web 独自 HTML は判断待ち、非 Windows のゲーム側ローダーは未対応、IL2CPP は未導入・未検証です。これらを従来の native CI の成功で代用しません。
+ここでの対象は「ゲームとエンジンが変更されず、Gua DLL 一式だけが交換された場合」です。ゲーム assembly／期待値、エンジンや CLR、OS まで改変された場合の完全防御ではありません。managed アダプターは既存の UI 用 API を対象とし、native GDExtension の空間機能まで対応したとは扱いません。Godot Web は次節の範囲で追加しています。非 Windows のゲーム側 native ローダーは未対応、IL2CPP は未導入・未検証です。これらを従来の native CI の成功で代用しません。
 
 2026-11-06 のローカル受入では、公式 portable Godot .NET 4.7、.NET SDK 10.0.401／runtime 10.0.12 を使用しました。3構成のゲーム起動と Release 書き出し、テスト用・Player 用の実入力1件、Player の時計・Debug 昇格拒否が成功しました。通常版の native 2本交換、managed・manifest まで含む交換、native を通常版のままにした managed のみの交換は、それぞれ終了78・nativeロード0件・ゲーム処理未到達でした。Editor の通常ビルド／解放／再読み込み、拒否後の生存・正常終了と、5種類の具体的なビルド拒否も確認しています。native 入力は以前の CI の一貫した source `77d966aae50f62c4c21437e603017df5c225ee84`、ゲーム側コード・生成ツールは今回の差分です。最終 HEAD native を使った hosted CI と同一視しません。
 
 Godot .NET の新規範囲では独立レビューを2回行い、対応すべき指摘はありませんでした。レビュー側でも、同一 DLL はロックしたまま上書きせず、構成変更はロックを解かずビルドで拒否することを確認しました。以前の基盤監査2回とは別の限定範囲であり、既存全体の監査を繰り返したものではありません。ローカル成果と最終 HEAD CI の結果は PR に分けて記載します。
+
+## Godot Web：ページ側で検証してから読み込む
+
+ゲーム開発者が指定する設定は GDScript 版と同じ `gua/remote_mode=off|testing|player` です。省略時は通常配布用の `off`、テスト用は `testing`、AIプレイヤー対応の配布用は `player` を選びます。提供者が用意する3構成から書き出し処理が自動選択するため、利用者による Gua のソースビルドやモジュールの手動交換は不要です。現在の対応は Godot 4.7 の GDExtension 対応・単一スレッドの Release Web テンプレートです。
+
+1. 書き出し時に SDK のファイルと構成を検査し、選択した `gua.wasm` の期待 SHA-256・生成元・用途を**ゲームの HTML**へ埋め込みます。交換対象の SDK 内 manifest を実行時の信頼根にしません。
+2. エクスポーターは HTML の最初のスクリプトに検証コードを置き、Godot の起動処理をゲーム側の検証用 factory 経由に変更します。ページのセキュリティ設定で検証スクリプトがブロックされても、この factory が存在しないため起動しません。
+3. `fetch` で得た SDK の実バイト列を SHA-256 で比較し、一致した内容を非公開のバッファーへ保持します。ローダーへ渡すのはそのコピーであり、検査後にもう一度ファイルを取得しません。異なる配信元・クエリ付きの同名モジュールや XHR への迂回は拒否します。
+4. ゲーム PCK の先頭 autoload がページ側の検証完了・用途・生成元を確認した後、隠した GDExtension の登録を進めます。通常版では遠隔開始処理と WebMCP bridge をゲームから除きます。Player の権限上限は native 側にも固定されています。
+
+Godot 4.7 の `JavaScriptBridge.eval` は JavaScript の真偽値を整数として返す経路があるため、ハンドシェイクは厳密な比較結果を JSON 文字列にし、GDScript 側で文字列型かつ `"true"` と一致する場合だけ許可します。単なる truthy 判定ではありません。
+
+標準の起動ページと、SDK に付属する確認済み `web-custom-shell.html` が対象です。他の独自 HTML は安全と推測せず、実際の起動順序の確認とブラウザー試験後に対応します。現時点では書き出しを拒否します。PWA・スレッド版・出力名 `gua.html` も拒否し、指定出力先に以前の ON 版 HTML／PCK がある場合は、その2ファイルを除きます。出力先フォルダー全体やゲームの保存データは削除しません。
+
+この方式は Windows の DLL 検査とは異なり、ページから渡す検証済みバイト列に読み込み対象を固定します。ブラウザー、Godot のエンジン JS／Wasm、ゲーム HTML／PCK／検証コードは信頼する前提です。それらも変更された場合や、任意の別ページ・カスタムエンジンで同じ保証をするものではありません。既存のローカル API は維持し、ゲーム自身の時計操作を Player の遠隔制限と混同しません。
+
+試験は [書き出しと具体的な拒否理由・古い成果物除去](../scripts/test-godot-web-game-policy.ps1)、[実ブラウザーと WebMCP 入力](../scripts/verify-godot-web-game-policy.ts)、[検査迂回を意図的に入れた検出確認](../scripts/test-godot-web-game-guard.test.ts)です。ローカルでは公式 Godot 4.7・Chrome 156 で3構成と付属独自 HTML の起動、テスト用／Player 用それぞれ入力1件、Player Debug 昇格拒否、ON Wasm 交換時の検証済み0件・ゲーム未起動・遠隔ポートなし、検証スクリプトをブロックした場合の SDK 取得0件を確認しました。ローカル native 入力は source `a50bd054e5af3c766d4defdc4e0bd7e6168b5907` です。Linux 上の実ブラウザーと最終 HEAD の結果は CI で別途記録し、未実行の段階では成功扱いしません。

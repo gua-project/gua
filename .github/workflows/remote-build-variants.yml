@@ -85,7 +85,7 @@ jobs:
             build/cfg-*/**
           if-no-files-found: error
   package-mixing:
-    needs: windows-variants
+    needs: [windows-variants, godot-web-game]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,6 +100,10 @@ jobs:
         with:
           pattern: cpp-imports-*-${{ github.sha }}
           path: artifacts/cpp-imports
+      - uses: actions/download-artifact@v4
+        with:
+          name: godot-web-provider-${{ github.sha }}
+          path: artifacts/godot-web-provider
       - shell: pwsh
         run: |
           scripts/test-remote-package-mixing.ps1 -ShippingPackage artifacts/mixing/selected-shipping-${{ github.sha }} -QAPackage artifacts/mixing/selected-qa-${{ github.sha }} -AIPlayerPackage artifacts/mixing/selected-ai-player-${{ github.sha }}
@@ -147,7 +151,8 @@ jobs:
             TestingPackage = 'artifacts/mixing/selected-qa-${{ github.sha }}'
             PlayerPackage = 'artifacts/mixing/selected-ai-player-${{ github.sha }}'
           }
-          scripts/stage-godot-game-sdk.ps1 @packages -OutputDirectory artifacts/godot-game-sdk
+          scripts/stage-godot-game-sdk.ps1 @packages -OutputDirectory artifacts/godot-native-game-sdk
+          scripts/stage-godot-web-game-sdk.ps1 -ProviderInputs artifacts/godot-web-provider -NativeSdkDirectory artifacts/godot-native-game-sdk -OutputDirectory artifacts/godot-game-sdk
           Invoke-WebRequest 'https://github.com/godotengine/godot-builds/releases/download/4.7-stable/Godot_v4.7-stable_win64.exe.zip' -OutFile artifacts/godot-game-editor.zip
           Invoke-WebRequest 'https://github.com/godotengine/godot-builds/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz' -OutFile artifacts/godot-game-templates.zip
           Expand-Archive artifacts/godot-game-editor.zip artifacts/godot-game-editor
@@ -203,6 +208,48 @@ jobs:
             build/native-game-policy-*/**/*.log
             build/native-game-policy-*/**/*.native-loads.json
             build/native-game-policy-*/results.json
+          if-no-files-found: error
+  godot-web-game:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: 4.0.20
+          actions-cache-folder: emsdk-cache
+      - shell: pwsh
+        run: |
+          bun test scripts/test-godot-web-game-guard.test.ts
+          if ($LASTEXITCODE) { throw 'Web guard unit acceptance failed.' }
+          scripts/build-godot-web-game-inputs.ps1 -OutputDirectory artifacts/godot-web-provider -BuildDirectory build/godot-web-provider
+          scripts/stage-godot-web-game-sdk.ps1 -ProviderInputs artifacts/godot-web-provider -OutputDirectory artifacts/godot-web-game-sdk
+          scripts/get-godot-web-test-tools.ps1 -OutputDirectory artifacts/godot-web-tools
+          scripts/test-godot-web-game-policy.ps1 -SdkDirectory artifacts/godot-web-game-sdk -GodotExecutable artifacts/godot-web-tools/editor/Godot_v4.7-stable_linux.x86_64 -ReleaseTemplate artifacts/godot-web-tools/web-release-dlink.zip -OutputDirectory build/godot-web-game-acceptance
+          foreach ($case in 'off','testing','player','custom','swap','csp') {
+            $folder = if ($case -in 'swap','csp') { 'off' } else { $case }
+            $mode = if ($case -eq 'custom') { 'off' } else { $case }
+            bun scripts/verify-godot-web-game-policy.ts "build/godot-web-game-acceptance/$folder" $mode artifacts/godot-web-provider/testing/gua.wasm
+            if ($LASTEXITCODE) { throw "Real browser Web acceptance failed: $case" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot-web-provider-${{ github.sha }}
+          path: artifacts/godot-web-provider
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: godot-web-acceptance-${{ github.sha }}
+          path: |
+            build/godot-web-game-acceptance/**/*.json
+            build/godot-web-game-acceptance/*.stdout
+            build/godot-web-game-acceptance/*.stderr
+            artifacts/godot-web-provider/*.log
           if-no-files-found: error
   web-variants:
     runs-on: ubuntu-latest

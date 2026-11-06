@@ -19,7 +19,7 @@ foreach ($case in @(@{Mode='off';Flavor='shipping';Remote='off';Package=$Shippin
     if ($sourceIdentity -ne $manifest.build.sourceCommit) { throw 'Godot SDK modes have different source identities.' }
     Copy-Item -LiteralPath $case.Package -Destination (Join-Path $addon ".variants/$($case.Mode)") -Recurse
 }
-foreach ($name in 'plugin.gd','export.gd','policy.gd.txt') {
+foreach ($name in 'plugin.gd','export.gd','policy.gd.txt','web_export.gd','web_guard.js.txt','web_policy.gd.txt','web-custom-shell.html') {
     New-Item -ItemType Directory -Force (Join-Path $addon 'editor') | Out-Null
     Copy-Item -LiteralPath (Join-Path $root "bindings/godot/game-build/$name") -Destination (Join-Path $addon 'editor')
 }
