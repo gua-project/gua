@@ -9,8 +9,17 @@ using System.Text.Json;
 if (!OperatingSystem.IsWindows() || IntPtr.Size != 8 || args.Length < 2) throw new ArgumentException("Windows64: <executable> <result.json> [child arguments]");
 string executable = Path.GetFullPath(args[0]);
 string result = Path.GetFullPath(args[1]);
+string? readyBarrier=null, resumeBarrier=null;
+string barrierMessage="GamePolicy: locked files verified before SDK load.";
+int childStart=2;
+if(args.Length>2 && args[2] is "--pause-before-sdk" or "--pause-before-sdk-open") {
+    if(args.Length<5)throw new ArgumentException("The test barrier requires ready/resume paths.");
+    readyBarrier=Path.GetFullPath(args[3]);resumeBarrier=Path.GetFullPath(args[4]);childStart=5;
+    if(args[2]=="--pause-before-sdk-open")barrierMessage="GamePolicy: game directories pinned before SDK open.";
+    if(File.Exists(readyBarrier)||File.Exists(resumeBarrier))throw new ArgumentException("Use fresh barrier files.");
+}
 var startup = new StartupInfo { Size = Marshal.SizeOf<StartupInfo>() };
-var command = new StringBuilder(string.Join(" ", new[] { executable }.Concat(args.Skip(2)).Select(Quote)));
+var command = new StringBuilder(string.Join(" ", new[] { executable }.Concat(args.Skip(childStart)).Select(Quote)));
 // DEBUG_PROCESS follows this owned child tree: Godot's console EXE is a wrapper
 // that starts the actual engine. Observing only the wrapper cannot prove absence.
 if (!CreateProcess(executable, command, 0, 0, false, 0x1 | 0x08000000, 0, null, ref startup, out var process))
@@ -67,7 +76,17 @@ try
                     string message=(item.DebugStringUnicode!=0?Encoding.Unicode:Encoding.ASCII).GetString(bytes);
                     int terminator=message.IndexOf('\0');
                     if(terminator>=0) message=message[..terminator];
-                    if(message is "GameSource: before first policy call." or "GamePolicy: integrity verification refused." or "GamePolicy: verification succeeded before SDK initialization.") timeline.Add(message);
+                    if(message is "GameSource: before first policy call." or "GamePolicy: integrity verification refused." or "GamePolicy: verification succeeded before SDK initialization." or "GamePolicy: locked files verified before SDK load." or "GamePolicy: game directories pinned before SDK open.") timeline.Add(message);
+                    if(message==barrierMessage && readyBarrier!=null) {
+                        // Debug events suspend this owned GAME before any SDK load.
+                        // No test timing hook or environment switch exists in the product.
+                        File.WriteAllText(readyBarrier,JsonSerializer.Serialize(new{nativeLoads=guaLoads.Count,stage=args[2]=="--pause-before-sdk-open"?"namespace-before-sdk":"locked-before-sdk"}));
+                        var barrierTimer=Stopwatch.StartNew();
+                        while(!File.Exists(resumeBarrier)) {
+                            if(barrierTimer.Elapsed>TimeSpan.FromSeconds(20))throw new TimeoutException("The controller did not release the owned game barrier.");
+                            Thread.Sleep(10);
+                        }
+                    }
                 }
             }
             else if (item.Code == 5) // EXIT_PROCESS_DEBUG_EVENT

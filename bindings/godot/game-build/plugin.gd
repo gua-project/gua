@@ -77,9 +77,13 @@ func _prepare(target: String = "windows") -> bool:
 	DirAccess.make_dir_recursive_absolute("res://gua_generated/native")
 	_write("res://gua-native/.gdignore", "")
 	_write("res://gua_generated/native/.gdignore", "")
-	if DirAccess.copy_absolute(package + native, "res://gua-native/gua.dll") != OK:
+	if (not FileAccess.file_exists("res://gua-native/gua.dll") or FileAccess.get_sha256("res://gua-native/gua.dll") != native_hash) and DirAccess.copy_absolute(package + native, "res://gua-native/gua.dll") != OK:
 		return false
-	var descriptor := "[configuration]\nentry_symbol=\"gua_godot_library_init\"\ncompatibility_minimum=\"4.7\"\n[libraries]\nwindows.x86_64=\"res://gua-native/gua.dll\"\n"
+	var verifier: String = preload("native_guard.gd").new().generate(native_hash, mode, str(build.sourceCommit), str(build.buildId))
+	if verifier.is_empty():
+		return false
+	_exporter.set_meta("gua_native_guard_path", verifier)
+	var descriptor := "[configuration]\nentry_symbol=\"game_policy_godot_init\"\ncompatibility_minimum=\"4.7\"\n[libraries]\nwindows.x86_64=" + JSON.stringify(verifier) + "\n"
 	_write("res://gua_generated/native/gua.gdextension", descriptor)
 	var guard := FileAccess.get_file_as_string(ROOT + "editor/policy.gd.txt")
 	guard = guard.replace("/*MODE*/", JSON.stringify(mode)).replace("/*HASH*/", JSON.stringify(native_hash))

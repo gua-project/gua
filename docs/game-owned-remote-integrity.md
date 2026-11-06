@@ -63,8 +63,10 @@ not a new replaceable `Gua.*.dll`.
 
 - Windows share handles reject ordinary in-place writes/deletes of the verified
   files while held. These checks are not a general hostile filesystem or kernel
-  race defense. Directory rename races, privileged memory modification, injected
-  code and altered platform dependencies are outside the current proven boundary.
+  race defense. The later Windows GDScript follow-up adds ordered ancestor pins;
+  it does not establish equivalent directory-race coverage for other hosts.
+  Privileged memory modification, injected code and altered platform dependencies
+  are outside the current proven boundary.
 - Managed Gua assemblies may already have been resolved by the CLR. The current
   guarantee is before **native Gua load and game entry**, not before managed
   metadata/assembly loading. Arbitrary malicious managed module initializers are
@@ -647,3 +649,15 @@ Godot 4.7's JavaScriptBridge can marshal a JavaScript boolean as a GDScript inte
 The standard page and supplied reviewed `web-custom-shell.html` are supported. Other custom shells require a focused startup review and real-browser acceptance before their digest is accepted. Threads, PWA and the reserved `gua.html` output basename are refused. A failed export removes only the selected HTML/PCK, including a stale previously enabled game, not the output directory or saves. Game HTML/PCK, engine JS/Wasm, browser and verifier are trusted; modifying those is outside the SDK-only replacement threat. This is byte pinning, not a claim to control arbitrary browser loaders or modified engines.
 
 Acceptance entry points are [actual export/refusal/stale-output tests](../scripts/test-godot-web-game-policy.ps1), [real Chrome/WebMCP consumer tests](../scripts/verify-godot-web-game-policy.ts) and [unit mutation-detection tests](../scripts/test-godot-web-game-guard.test.ts). Local official Godot 4.7/Chrome156 acceptance passed off/testing/player and the supplied custom page, exactly one correlated input in each enabled game, Player Debug-client refusal, legitimate ON-Wasm substitution with verified count0/no game/no port, and blocked verifier with SDK fetch count0. Local native input source is `a50bd054e5af3c766d4defdc4e0bd7e6168b5907`. Hosted Linux/browser, combined native/Web SDK and final-HEAD evidence are tracked separately; pending jobs are not successes. Non-Windows native game-owned loaders and IL2CPP remain outside this verified set.
+
+## Windows GDScript native verification and the check/load race
+
+The former pathname-hash-then-load sequence was reproduced with a controlled pause after the hash. A compatibility caller which receives the OFF native API failure stub could instead start a real WebSocket bridge and complete an input after a legitimate ON DLL replaced the checked pathname. The caller remained the same; the pause widened only the original gap. Such timing code is test-only.
+
+The new provider-built Godot verification template has a bounded64KiB PE data slot. The ordinary GDScript export patches game-owned expected hash/mode/source data into that slot, names the resulting `GameSecurity_Godot_...dll` from the patched image digest and points the game-PCK extension descriptor at it. Consumers need no Gua source build, compiler or extra managed runtime. The selected Gua DLL remains a separate SDK member; the generated verifier is game code/data outside the SDK-only replacement set.
+
+The native verifier opens ancestors from root to leaf with directory list/read-attribute access, denies shared write/delete and rejects reparse points using actual handle information. Attribute-only directory handles were insufficient in a real counterexample because they do not participate in share-access accounting. Each subsequent directory open therefore either pins the namespace or rejects a substituted reparse point. The SDK leaf is opened with `FILE_SHARE_READ` and `OPEN_REPARSE_POINT`, checked through its handle and hashed while retained. A pre-existing writer makes that open fail. All leases remain held for process lifetime. It then uses constrained absolute-path loading with System32 dependency search and forwards the SDK's GDE initialization through the same Godot library identity. Godot does not perform another SDK-descriptor pathname load. Failure in this slot-based native verifier never terminates an Editor, and the GDScript refusal path also checks Editor hint.
+
+[The race test](../scripts/test-godot-native-lease.ps1) independently pauses the owned GAME on fixed OS debugger events: before the SDK is opened, and after hashing/before SDK loading. Product environment flags cannot bypass verification. The first boundary rejects SDK/project directory renames; replacing the SDK bytes before the hash is then rejected with native load0. The second rejects overwriting, leaf rename and SDK directory rename in all three modes. Real enabled input, the Player ceiling and normal save-file I/O remain valid. A pre-existing writer is rejected before SDK load/game callbacks. The old-sequence oracle and the attribute-only-directory counterexample demonstrate violation detection.
+
+Local execution used the coherent native source169733fa trio and the current working-tree verifier/tooling, separately from final-HEAD CI. Three actual Release exports and startup substitutions also passed. CI builds the template, stages it into the SDK and runs the lease suite; final job results are recorded in the PR. This Windows implementation does not extend native loader guarantees to Linux/macOS or to modified game verifier/data/engine/OS.

@@ -190,7 +190,7 @@ jobs:
         if: matrix.mode == 'off'
         shell: pwsh
         run: |
-          cmake --build build/remote-shipping-off-Release --config Release --target gua-game-policy-template gua-editor-policy-template --parallel 2
+          cmake --build build/remote-shipping-off-Release --config Release --target gua-game-policy-template gua-editor-policy-template gua-godot-policy-template --parallel 2
           if ($LASTEXITCODE) { throw 'Game verifier template compilation failed.' }
           New-Item -ItemType Directory -Force artifacts/game-policy-templates | Out-Null
           Copy-Item build/remote-shipping-off-Release/native/gua-game-policy/Release/*PolicyTemplate.dll artifacts/game-policy-templates
@@ -248,7 +248,7 @@ jobs:
           }
           scripts/stage-game-build-bundle.ps1 @packages -OutputDirectory artifacts/game-sdk-dotnet
           scripts/test-game-build-nuget.ps1 -BundleRoot artifacts/game-sdk-dotnet
-          scripts/stage-godot-game-sdk.ps1 @packages -OutputDirectory artifacts/game-sdk-godot-native
+          scripts/stage-godot-game-sdk.ps1 @packages -PolicyTemplate artifacts/game-policy-templates/GodotPolicyTemplate.dll -OutputDirectory artifacts/game-sdk-godot-native
           scripts/stage-godot-web-game-sdk.ps1 -ProviderInputs artifacts/game-web-provider -NativeSdkDirectory artifacts/game-sdk-godot-native -OutputDirectory artifacts/game-sdk-godot
           scripts/stage-unity-game-sdk.ps1 @packages -ManagedOff artifacts/game-managed/off -ManagedTesting artifacts/game-managed/testing -ManagedPlayer artifacts/game-managed/player -PlayerTemplate artifacts/game-policy-templates/GamePolicyTemplate.dll -EditorTemplate artifacts/game-policy-templates/EditorPolicyTemplate.dll -Version $version -OutputDirectory artifacts/game-sdk-unity
           scripts/stage-cpp-game-sdk.ps1 -BundleRoot artifacts/game-sdk-dotnet -ShippingBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-off-v$version" -TestingBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-testing-v$version" -PlayerBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-player-v$version" -PlayerTemplate artifacts/game-policy-templates/GamePolicyTemplate.dll -OutputDirectory artifacts/game-sdk-cpp

@@ -37,7 +37,7 @@ foreach($case in @(@{mode='off';flavor='shipping';ceiling='none'},@{mode='testin
     Copy-Item $package (Join-Path $variants $case.mode) -Recurse
 }
 $editor=(New-Item -ItemType Directory (Join-Path $addon 'editor') -Force).FullName
-foreach($name in 'plugin.gd','export.gd','policy.gd.txt','web_export.gd','web_guard.js.txt','web_policy.gd.txt','web-custom-shell.html'){Copy-Item (Join-Path $root "bindings/godot/game-build/$name") $editor -Force}
+foreach($name in 'plugin.gd','export.gd','policy.gd.txt','native_guard.gd','web_export.gd','web_guard.js.txt','web_policy.gd.txt','web-custom-shell.html'){Copy-Item (Join-Path $root "bindings/godot/game-build/$name") $editor -Force}
 Set-Content (Join-Path $editor '.gdignore') ''
 foreach($name in 'gua_auto_adapter.gd','gua_observe_owner.gd','gua_spatial.gd'){Copy-Item (Join-Path $root "examples/godot-gdscript/addons/gua/$name") $addon -Force}
 @'

@@ -95,7 +95,7 @@ texture_format/bptc=false
                 $observed=Invoke-ObservedGodot $exportExe @('--headless','--quit-after','30') $exportNegative
                 $exitCode=$observed.childExitCode
                 $text=Get-Content -LiteralPath $exportNegative -Raw
-                if (@($observed.guaNativeLoads).Count -ne 0 -or $text -notmatch 'native hash mismatch; nativeLoaded=false' -or $text -match 'GAME_OWNED_GODOT_SUCCESS') { Get-Content -LiteralPath $exportNegative; throw 'Exported OFF game accepted a replaced ON GDExtension.' }
+                if (@($observed.guaNativeLoads).Count -ne 0 -or $observed.timeline -notcontains 'GamePolicy: integrity verification refused.' -or $text -notmatch 'game-owned verifier could not initialize Gua' -or $text -match 'GAME_OWNED_GODOT_SUCCESS') { Get-Content -LiteralPath $exportNegative; throw 'Exported OFF game accepted a replaced ON GDExtension.' }
                 $results.Add(@{case='release-exe-off-to-on-gdextension';result='rejected-before-extension-load';exitCode=$exitCode;evidence=$exportNegative})
             }
             if ($mode -eq 'testing') {
@@ -134,13 +134,17 @@ texture_format/bptc=false
             $negativeText=Get-Content -LiteralPath $negative -Raw
             # Godot's Windows OS.kill(self) terminates immediately with code0.
             # Require the specific rejection and absence of the later game callback.
-            if (@($observed.guaNativeLoads).Count -ne 0 -or $negativeText -notmatch 'native hash mismatch; nativeLoaded=false' -or $negativeText -match 'GAME_OWNED_GODOT_SUCCESS') { Get-Content -LiteralPath $negative; throw 'Godot OFF-to-ON swap was not rejected before load.' }
+            if (@($observed.guaNativeLoads).Count -ne 0 -or $observed.timeline -notcontains 'GamePolicy: integrity verification refused.' -or $negativeText -notmatch 'game-owned verifier could not initialize Gua' -or $negativeText -match 'GAME_OWNED_GODOT_SUCCESS') { Get-Content -LiteralPath $negative; throw 'Godot OFF-to-ON swap was not rejected before load.' }
             $results.Add(@{case='off-to-on-gdextension';result='rejected-before-extension-load';exitCode=$exitCode;evidence=$negative})
             $policyFile=Join-Path $fixture 'gua_generated/policy.gd'
             $policy=(Get-Content -LiteralPath $policyFile -Raw).Replace("`r`n","`n")
             $marker="func _enter_tree() -> void:`n"
             if (-not $policy.Contains($marker)) { throw 'Cannot apply Godot early-load mutation.' }
-            $policy.Replace($marker,$marker+"`tGDExtensionManager.load_extension(DESCRIPTOR)`n") | Set-Content -LiteralPath $policyFile -Encoding utf8NoBOM
+            # Deliberately bypass the GAME checker through an unprotected test
+            # descriptor. Loading the protected descriptor can no longer create
+            # this mutation: the native verifier rejects the substituted SDK.
+            '[configuration]'+"`n"+'entry_symbol="gua_godot_library_init"'+"`n"+'compatibility_minimum="4.7"'+"`n"+'[libraries]'+"`n"+'windows.x86_64="res://gua-native/gua.dll"' | Set-Content (Join-Path $fixture 'gua_generated/native/unprotected-test.gdextension')
+            $policy.Replace($marker,$marker+"`tGDExtensionManager.load_extension(`"res://gua_generated/native/unprotected-test.gdextension`")`n") | Set-Content -LiteralPath $policyFile -Encoding utf8NoBOM
             $mutationLog=Join-Path $fixture 'early-load-mutation.log'
             $observed=Invoke-ObservedGodot $GodotExecutable @('--headless','--path',$fixture,'--quit-after','30') $mutationLog
             $mutationText=Get-Content -LiteralPath $mutationLog -Raw

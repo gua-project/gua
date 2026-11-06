@@ -61,6 +61,7 @@ func _export_begin(features: PackedStringArray, _debug: bool, _path: String, _fl
 			add_file(bridge, FileAccess.get_file_as_bytes(bridge), false)
 	else:
 		add_shared_object("res://gua-native/gua.dll", PackedStringArray(["windows", "x86_64"]), "gua-native")
+		add_shared_object(str(get_meta("gua_native_guard_path", "")), PackedStringArray(["windows", "x86_64"]), "gua-native")
 	var descriptor := "res://gua_generated/native/gua.gdextension"
 	add_file(descriptor, FileAccess.get_file_as_bytes(descriptor), false)
 	var policy := "res://gua_generated/web_policy.gd" if _web_target else "res://gua_generated/policy.gd"

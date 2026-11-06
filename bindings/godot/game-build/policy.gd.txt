@@ -19,18 +19,19 @@ func _enter_tree() -> void:
 	if ClassDB.class_exists("GuaContext"):
 		_refuse("Gua was loaded before game verification; nativeLoaded=true")
 		return
-	var file := ProjectSettings.globalize_path("res://gua-native/gua.dll")
-	if FileAccess.get_sha256(file) != EXPECTED_SHA256:
-		_refuse("native hash mismatch; nativeLoaded=false")
-		return
+	# The GAME verifier contains the expected hash, denies writes/deletes and
+	# retains its handles while loading the SDK. A separate GDScript pathname
+	# check would leave a check/load race and is intentionally not authoritative.
 	if GDExtensionManager.load_extension(DESCRIPTOR) != GDExtensionManager.LOAD_STATUS_OK:
-		_refuse("verified extension did not load")
+		_refuse("game-owned verifier could not initialize Gua")
 		return
 	verified = true
 	print("Gua game policy verified: ", REMOTE_MODE)
 
 func _refuse(reason: String) -> void:
 	push_error("Gua game integrity refused: " + reason)
+	if Engine.is_editor_hint():
+		return # Never terminate an Editor or lose its unsaved work.
 	# SceneTree.quit is deferred and would allow later autoload callbacks to run.
 	# On this supported Windows path, terminate immediately instead.
 	OS.kill(OS.get_process_id())

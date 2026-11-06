@@ -139,7 +139,7 @@ jobs:
           $generator = scripts/get-msvc-generator.ps1
           cmake -S . -B build/game-policy-template -G $generator -A x64 -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_EXAMPLES=OFF -DGUA_DISTRIBUTION_FLAVOR=shipping -DGUA_ENABLE_REMOTE_AUTOMATION=OFF
           if ($LASTEXITCODE) { throw 'Game policy template configure failed.' }
-          cmake --build build/game-policy-template --config Release --target gua-game-policy-template gua-editor-policy-template --parallel 2
+          cmake --build build/game-policy-template --config Release --target gua-game-policy-template gua-editor-policy-template gua-godot-policy-template --parallel 2
           if ($LASTEXITCODE) { throw 'Game policy template compilation failed.' }
           dotnet build bindings/dotnet/src/Gua.Runtime -c Release -f net10.0 --nologo -v quiet -o artifacts/native-policy-managed
           if ($LASTEXITCODE) { throw 'Policy test managed fixture compilation failed.' }
@@ -162,6 +162,7 @@ jobs:
           if ((Get-FileHash artifacts/official-godot.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'effcad4cfc6083528bee4e469e171047cd9d2d49547a09d16be04845fcda7873') { throw 'Official reproduction input digest changed.' }
           Expand-Archive artifacts/official-godot.zip artifacts/official-godot
           scripts/test-godot-game-owned-policy.ps1 -SdkDirectory artifacts/godot-game-sdk -GodotExecutable "$PWD/artifacts/godot-game-editor/Godot_v4.7-stable_win64_console.exe" -ReleaseTemplate "$PWD/artifacts/godot-game-templates/templates/windows_release_x86_64.exe" -OfficialGodotExtension "$PWD/artifacts/official-godot/addons/gua/bin/gua_godot.windows.release.x86_64.dll"
+          scripts/test-godot-native-lease.ps1 -SdkDirectory artifacts/godot-game-sdk -GodotExecutable "$PWD/artifacts/godot-game-editor/Godot_v4.7-stable_win64.exe" -OutputDirectory build/godot-native-lease-acceptance
       - name: Accept Web export after native Editor preparation in the combined SDK
         shell: pwsh
         run: |
@@ -218,6 +219,10 @@ jobs:
             build/godot-game-policy-*/**/*.log
             build/godot-game-policy-*/**/*.native-loads.json
             build/godot-game-policy-*/results.json
+            build/godot-native-lease-acceptance/**/*.json
+            build/godot-native-lease-acceptance/**/*.log
+            build/godot-native-lease-acceptance/**/*.stderr
+            build/godot-native-lease-acceptance/**/*.stdout
             build/native-game-policy-*/**/*.log
             build/native-game-policy-*/**/*.native-loads.json
             build/native-game-policy-*/results.json
