@@ -89,6 +89,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -161,6 +162,15 @@ jobs:
           if ((Get-FileHash artifacts/official-godot.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'effcad4cfc6083528bee4e469e171047cd9d2d49547a09d16be04845fcda7873') { throw 'Official reproduction input digest changed.' }
           Expand-Archive artifacts/official-godot.zip artifacts/official-godot
           scripts/test-godot-game-owned-policy.ps1 -SdkDirectory artifacts/godot-game-sdk -GodotExecutable "$PWD/artifacts/godot-game-editor/Godot_v4.7-stable_win64_console.exe" -ReleaseTemplate "$PWD/artifacts/godot-game-templates/templates/windows_release_x86_64.exe" -OfficialGodotExtension "$PWD/artifacts/official-godot/addons/gua/bin/gua_godot.windows.release.x86_64.dll"
+      - name: Accept Web export after native Editor preparation in the combined SDK
+        shell: pwsh
+        run: |
+          scripts/test-godot-web-game-policy.ps1 -SdkDirectory artifacts/godot-game-sdk -GodotExecutable "$PWD/artifacts/godot-game-editor/Godot_v4.7-stable_win64.exe" -ReleaseTemplate "$PWD/artifacts/godot-game-templates/templates/web_dlink_nothreads_release.zip" -OutputDirectory build/godot-combined-web-acceptance
+          $env:CHROME_EXECUTABLE = "$env:ProgramFiles/Google/Chrome/Application/chrome.exe"
+          foreach ($case in 'off','testing','player') {
+            bun scripts/verify-godot-web-game-policy.ts "build/godot-combined-web-acceptance/$case" $case artifacts/godot-web-provider/testing/gua.wasm
+            if ($LASTEXITCODE) { throw "Combined SDK Web acceptance failed: $case" }
+          }
       - name: Accept the actual Godot .NET game, export and Editor loader
         shell: pwsh
         run: |
@@ -199,6 +209,9 @@ jobs:
             build/godot-dotnet-*-acceptance/*.log
             build/godot-dotnet-*-acceptance/*.stdout
             build/godot-dotnet-*-acceptance/*.stderr
+            build/godot-combined-web-acceptance/**/*.json
+            build/godot-combined-web-acceptance/*.stderr
+            build/godot-combined-web-acceptance/*.stdout
             artifacts/game-sdk-win-x64/**
             artifacts/godot-game-sdk/**
             build/cpp-candidate-acceptance/**

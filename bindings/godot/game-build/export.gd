@@ -54,6 +54,11 @@ func _export_begin(features: PackedStringArray, _debug: bool, _path: String, _fl
 		return
 	if _web_target:
 		add_shared_object("res://gua-native/gua.wasm", PackedStringArray(["web"]), "")
+		if str(get_meta("gua_web_mode", "off")) != "off":
+			# A combined SDK first prepares the native Editor target. This bridge
+			# may be created after Godot collected project files, so add it explicitly.
+			var bridge := "res://addons/gua/gua_webmcp_bridge.gd"
+			add_file(bridge, FileAccess.get_file_as_bytes(bridge), false)
 	else:
 		add_shared_object("res://gua-native/gua.dll", PackedStringArray(["windows", "x86_64"]), "gua-native")
 	var descriptor := "res://gua_generated/native/gua.gdextension"
