@@ -8,18 +8,15 @@
 先ほど見た画面を前提とするクリックは安全に実行できません。
 同じボタンIDが残っていても、操作を決めたときの前提が変わっているためです。
 
-Guarded dispatch は、**観測時の前提を操作に添え、受理時とゲーム側が
-キューから取り出す時点で確認する**仕組みです。前提が合わなくなった操作を
-ゲーム側へ渡す前に拒否します。対象はremoteのSemantic UI操作とgame inputです。
-単にクライアントが送信直前に状態を読むだけでは、送信後の待ち時間に生じる
-変化を防げません。
+Guarded dispatch は、離れたプロセスから UI やゲーム入力を操作するときに、
+観測したときの前提を要求に添える仕組みです。キューに入れるときと、
+ゲーム側がキューから取り出すときの２回、前提を確認します。
+例えば、クリックがキューに入った後、取り出す前に公開 UI の商品名が変わって
+`uiRevision` が進むと、クリックは拒否されます。
 
-このガイドは仕組みを読むための案内です。規範となる条件・wire形式は
-[Guarded remote dispatch v1仕様](../protocol/specs/guarded-dispatch-v1.md)と
-[schema](../protocol/schema/guarded-dispatch-v1.schema.json)を参照してください。
-実装時のContract mapping、レビュー履歴、テスト件数と成果物保存先は
-[検証証拠](guarded-dispatch-evidence.md)を参照してください。
-その実行履歴だけから現在の動作を保証するものではありません。
+通信形式と判定条件は [Guarded remote dispatch v1 仕様](../protocol/specs/guarded-dispatch-v1.md) と
+[スキーマ](../protocol/schema/guarded-dispatch-v1.schema.json) にあります。
+実装時に確認した条件と当時のテスト結果は [検証記録](guarded-dispatch-evidence.md) にあります。
 
 ## 2. 操作が実行されるまでの流れ
 
@@ -56,11 +53,10 @@ UI用のguardには、そのsnapshotの `document` から一緒に取得した
 相関可能なtransport `id`、操作ごとの必須payload・型・範囲を検査します。
 未対応のbridgeに通常のclickとして送り直すfallbackはありません。
 
-bridgeは接続ごとに `owner` を持ちます。これは要求・結果・押し続けている
-入力を「どの接続のものか」で分離する所有者です。受理されると
-`requestId` が返り、attemptは `Enqueued` になります。
-transport `id` は通信の返信を、`requestId` はゲーム側の要求と完了を
-対応付けます。**この受理通知は、クリックが実行された証拠ではありません。**
+ブリッジは接続ごとに所有者（`owner`）を持ちます。要求、結果、押し続けている入力はその接続にひも付きます。
+キューに入ると `requestId` が返り、操作の試行（attempt）は `Enqueued` になります。
+通信の `id` は送ったメッセージとその返信、`requestId` はゲーム側の要求と完了を対応付けます。
+この時点で確認できるのはキューへの登録までです。
 
 ### ゲームが受け取る
 
@@ -88,9 +84,9 @@ guardが通った後の実際のUI変更・入力注入と、その完了報告�
 `GuaRemoteGuardedSession.Poll(attempt)` は、元のrequestIdとguardを使って
 `guarded_poll_action` / `guarded_poll_game_input` を送ります。
 元のepoch/profile/revisionと違うpollは、結果を消費する前にbridgeで拒否されます。
-UIのpendingは `null`、inputのpendingは `completed:false` です。
-正常なpendingの間は有限の期限内でpollできます。terminal結果はowner限定で
-一度だけ取り出せます。.NETのattemptには受け取った証拠が残ります。
+完了待ちの応答は、UI なら `null`、ゲーム入力なら `completed:false` です。
+正常な完了待ちの間は期限内で問い合わせを続けられます。確定結果を取り出せるのは
+要求を送った所有者だけで、一度読み取るとキューから消えます。.NET の attempt には受け取った結果が残ります。
 
 .NETの `Completed` は「正しく相関した完了結果を取得した」という状態です。
 成功・失敗は `Completion.succeeded` とUIの `error` / inputの `errorCode`
@@ -107,11 +103,12 @@ UIのpendingは `null`、inputのpendingは `completed:false` です。
 
 ### 状態変化・通信断・所有者の終了
 
-送信した後で返信が失われると、ゲームは既に操作を実行しているかもしれません。
-受理返信の欠落、不正な返信、poll返信の欠落・不正、古い完了条件では、
-.NET sessionは `Uncertain` となったattemptを保持し、接続を閉じます。
-自動resendや不明なpollの再試行はしません。呼び出し側は操作attemptの台帳と
-有限の期限を持ち、不明な操作を新しいsessionから盲目的に繰り返してはいけません。
+送信した後で返信が失われると、ゲームは既に購入を実行しているかもしれません。
+受理や結果の返信が届かない、内容が不正、完了の前提が古くなった、という場合は
+.NET セッションが attempt に `Uncertain` を記録し、接続を閉じます。
+自動で送り直したり、結果の問い合わせを繰り返したりすることはありません。
+呼び出し側は試行と期限を記録します。結果が不明な要求は別のセッションから再送せず、
+ゲームの状態を観測し直して、次の操作を判断します。
 
 切断/Disposeではそのownerの未consume UI要求と結果を除去し、保持入力の
 cleanupを行います。他ownerの入力は解放しません。既にconsumeされたUI要求は
@@ -165,15 +162,16 @@ checkoutしたリポジトリのrootから実行してください。Godot/Unity
 実行時はcommit、環境、終了コード、test結果、skipとログを記録してください。
 既存の履歴は[検証証拠](guarded-dispatch-evidence.md)を参照してください。
 
-`build/guarded-guide` はこの手順用の出力先です。別構成のビルドを混ぜず、
-新しいdirectoryでconfigureしてください。
+`build/guarded-guide` に開発用の Release 構成を作ります。WebSocket の検証には
+`development` と `GUA_ENABLE_REMOTE_AUTOMATION=ON` が必要です。
+設定を切り替えるときは新しいディレクトリを使ってください。
 
 ```powershell
 bun install --frozen-lockfile
 bun run --filter gui-mcp build
 bun run --filter @gua/inspector build:trace
 dotnet restore bindings/dotnet/tests/Gua.Selector.Tests/Gua.Selector.Tests.csproj
-cmake -S . -B build/guarded-guide -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DGUA_BUILD_WS_BRIDGE=ON -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF
+cmake -S . -B build/guarded-guide -G Ninja -DCMAKE_BUILD_TYPE=Release -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DBUILD_TESTING=ON -DGUA_BUILD_WS_BRIDGE=ON -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF
 cmake --build build/guarded-guide --parallel 4
 $env:GUA_NATIVE_DIR = (Resolve-Path build/guarded-guide/native/gua-core).Path
 $env:GUA_RUNTIME_NATIVE_DIR = (Resolve-Path build/guarded-guide/native/gua-runtime).Path
