@@ -7,28 +7,17 @@
 Guaはgameが公開したUIのrole・名前・状態から対象を探し、操作と結果を対応付ける境界です。
 ゲーム世界の追加情報、物理照会、入力再現、失敗の記録は、この境界に用途別の機能を足します。
 
-この文書は読む順番と確認方法の案内です。wire・C ABI・データの厳密な条件は
-[基本protocol](../protocol/specs/protocol.md)と機能別仕様が規範です。
-ガイドに同じ契約を複製せず、各READMEは用途と使用例、仕様は条件、evidence文書は
-対象commit・環境・結果の証拠を担当します。
-恒久的なガイド・仕様には現行の契約、再現手順、判定制約と設計理由を残し、
-一回限りの変更内容・レビュー経緯・実行結果はPRまたは既存の検証記録に記載します。
-過去の証拠を移すときは出典・対象版・未検証範囲を保ち、参照先を確認してから重複を除きます。
+使い方は下の表から選べます。通信形式、C ABI、データの正確な条件は
+[基本プロトコル](../protocol/specs/protocol.md)と機能別の仕様を参照してください。
+ビルド用途を選ぶときは [遠隔機能のビルドガイド](remote-build-variants.ja.md)、
+既に行った配布試験を調べるときは [検証記録](remaining-route-acceptance.md#current-acceptance-status) を開いてください。
 
 ## 2. 公開から結果確認まで
 
-1. game側adapterがframeを組み立て、完成したUI/Worldを公開します。
-   frameは一回の公開のまとまり、revisionは内容の変更番号、
-   sessionEpochはresetで新しいテスト状態へ切り替わった世代です。
-   未完成frameをtestが読んだことにはしません。
-2. test/toolが公開状態を観測し、一つの対象を解決して操作を送ります。
-   locatorは対象を探す条件、capabilityは接続先が初期化して公開する機能です。
-   capabilityを見つけても、Playerへの操作許可を得たとは限りません。
-3. gameが要求をqueueから取り出すconsumeを行い、engineで実処理します。
-   request IDが受理と完了を対応付けます。受理されたことと適用したことは別です。
-   ownerは接続や有限入力区間の要求・結果・保持入力の所有者です。
-4. testが相関した完了を読み、次の画面や値を再観測して目的をassertします。
-   Playの完了があっても、loadingやゲーム開始の状態は別に確認します。
+1. ゲーム側のアダプターが UI や World のフレームを組み立て、完成してから公開します。UI の `frameSequence` は公開のたびに進み、`revision` は内容が変わったときに進みます。`sessionEpoch` はリセット後のセッションを区別します。
+2. テストは公開データを読み、ロケーターで対象を１つに絞って操作を送ります。接続先が機能（capability）を公開していても、Player で操作が許可されているかは別に確認します。
+3. ゲームは要求をキューから取り出し（consume）、エンジンで処理します。要求 ID で受理と完了を対応付けます。要求・結果・押し続けている入力は、接続や期限付きの入力区間などの所有者（owner）にひも付きます。
+4. テストは同じ要求 ID の完了を読み、次の画面や値を観測して期待と照合します。Play ボタンのクリックが完了しても、ゲームが開始したかは次の観測で確かめます。
 
 状態変化で観測の前提が古くなる問題は
 [Guarded dispatchガイド](guarded-dispatch-guide.ja.md)で詳しく扱います。
@@ -81,23 +70,24 @@ baseline欠落・明示承認・maskを扱います。
 
 ### 前提環境と準備
 
-以下はWindows x64のMSVC Developer PowerShellからrepo rootで行う、
-engineを起動しない確認です。Visual StudioのC++ toolchain、Ninja、
-CMake 3.20以上、.NET SDK 10.0.x、Bun 1.3.14、依存を取得できるnetworkが必要です。
-公式VS presetを使う場合は[toolchain文書](native-toolchains.md)のgenerator条件が別途必要です。
+以下はエンジンを起動せずに、ネイティブ実装、.NET API、実 WebSocket などを調べる手順です。
+Windows x64 の Developer PowerShell を開き、リポジトリのルートで実行します。
+Visual Studio の C++ 開発環境、Ninja、CMake 3.20 以上、.NET SDK 10.0.x、Bun 1.3.14、依存を取得できるネットワークが必要です。
+Visual Studio プリセットを使う場合の条件は [ネイティブツールチェーン](native-toolchains.md) にあります。
 
 [CI設定](../.github/workflows/syntax-check.yml)にも、test project・native build・packageの準備例があります。
 実行時は対象commit・環境・終了コード・test結果・skip・ログを保存してください。
 準備の失敗や0件選択を成功として数えません。
 
-新しい出力先build/docs-guideを使い、他の構成のDLLを混ぜません。
-各準備コマンドの成功を確かめてから次へ進みます。
+新しい `build/docs-guide` に、遠隔機能を有効にした開発用の Release 構成を作ります。
+CMake のソース既定値は `shipping` で遠隔機能が無効です。WebSocket を使うこの手順では
+`development` と `GUA_ENABLE_REMOTE_AUTOMATION=ON` を明示します。各コマンドの成功を確かめてから次へ進みます。
 
 ```powershell
 bun install --frozen-lockfile
 bun run --filter gui-mcp build
 bun run --filter @gua/inspector build:trace
-cmake -S . -B build/docs-guide -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DGUA_BUILD_WS_BRIDGE=ON -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF
+cmake -S . -B build/docs-guide -G Ninja -DCMAKE_BUILD_TYPE=Release -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DBUILD_TESTING=ON -DGUA_BUILD_WS_BRIDGE=ON -DGUA_BUILD_GODOT=OFF -DGUA_BUILD_EXAMPLES=OFF -DGUA_BUILD_IMGUI_EXAMPLE=OFF
 cmake --build build/docs-guide --parallel 4
 $env:GUA_NATIVE_DIR = (Resolve-Path build/docs-guide/native/gua-core).Path
 $env:GUA_RUNTIME_NATIVE_DIR = (Resolve-Path build/docs-guide/native/gua-runtime).Path

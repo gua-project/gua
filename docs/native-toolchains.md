@@ -44,23 +44,25 @@ cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
 ```
 
-Release build:
+開発用の Release ビルドも、サンプル用に遠隔機能を有効にします。
 
 ```powershell
 cmake --preset windows-msvc-release
 cmake --build --preset windows-msvc-release
 ```
 
+通常出荷、QA、AI Player の成果物を作る場合は [用途別ビルド](remote-build-variants.ja.md) からプリセットを選んでください。
+
 ## Linux CI
 
-Portable native targets are configured and built on `ubuntu-latest`:
+Linux で WebSocket とネイティブの確認を含む Debug 構成を作る例です。
 
 ```sh
-cmake -S . -B build/cpp -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B build/cpp -DCMAKE_BUILD_TYPE=Debug -DGUA_DISTRIBUTION_FLAVOR=development -DGUA_ENABLE_REMOTE_AUTOMATION=ON -DGUA_BUILD_GODOT=OFF
 cmake --build build/cpp --parallel
 ```
 
-The portable native matrix also runs on Intel and Apple Silicon macOS. It builds
+The portable native matrix uses a remote-enabled Development Release configuration on Ubuntu and Intel/Apple Silicon macOS. It builds
 the shared runtime and native bridge example, runs CTest, and exercises the
 Inspector WebSocket contract through the .NET selector suite. The Win32 DirectX
 11 ImGui example remains Windows-only.
