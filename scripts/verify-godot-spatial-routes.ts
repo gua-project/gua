@@ -49,6 +49,9 @@ for(const backend of ["GodotPhysics3D","Jolt Physics"]) {
   // editor execution or geometry/result cache is needed or claimed.
   await writeFile(join(directory,".godot/extension_list.cfg"),"res://addons/gua/gua.gdextension\n");
   await writeFile(join(directory,".godot/global_script_class_cache.cfg"),'list=[{\n"base": &"RefCounted",\n"class": &"GuaSpatialReader",\n"icon": "",\n"is_abstract": false,\n"is_tool": false,\n"language": &"GDScript",\n"path": "res://addons/gua/gua_spatial.gd"\n}]\n');
+  // A reader parse failure must fail immediately, not loop in the fixture until
+  // the physics timeout. This checks the actual copied candidate addon.
+  await run([executable,"--headless","--path",directory,"--check-only","--script","res://addons/gua/gua_spatial.gd"],backend+"-reader-check.log");
   await run([executable,"--headless","--path",directory,"--max-fps","60"],backend+"-geometry.log");
   const geometry=JSON.parse(await readFile(join(directory,"evidence.json"),"utf8"));
   assertEngineEvidence(geometry,JSON.parse(await readFile("protocol/fixtures/spatial-engine-r1.json","utf8")));

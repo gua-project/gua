@@ -1,0 +1,55 @@
+<Project>
+  <!-- Imported by an executable game, never by an exchangeable SDK assembly. -->
+  <PropertyGroup>
+    <GuaRemoteMode Condition="'$(GuaRemoteMode)' == ''">off</GuaRemoteMode>
+    <GuaGameBuildBundleRoot Condition="'$(GuaGameBuildBundleRoot)' == ''">$(MSBuildThisFileDirectory)</GuaGameBuildBundleRoot>
+    <GuaGamePolicySource>$(MSBuildProjectDirectory)/obj/gua-game-build/$(Configuration)/$(TargetFramework)/$(RuntimeIdentifier)/Gua.GameNativePolicy.g.cs</GuaGamePolicySource>
+    <_GuaOwnsGamePolicy Condition="'$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe' Or '$(UsingGodotNETSdk)' == 'true'">true</_GuaOwnsGamePolicy>
+    <_GuaPolicyGenerator>generate</_GuaPolicyGenerator>
+    <_GuaPolicyGenerator Condition="'$(UsingGodotNETSdk)' == 'true'">generate-godot</_GuaPolicyGenerator>
+    <GuaGamePolicySource Condition="'$(UsingGodotNETSdk)' == 'true'">$(MSBuildProjectDirectory)/.godot/mono/gua-game-build/$(Configuration)/$(TargetFramework)/$(RuntimeIdentifier)/Gua.GameNativePolicy.g.cs</GuaGamePolicySource>
+    <_GuaNativeCopyToOutput>Always</_GuaNativeCopyToOutput>
+    <_GuaNativeCopyToOutput Condition="'$(UsingGodotNETSdk)' == 'true'">Never</_GuaNativeCopyToOutput>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_GuaOwnsGamePolicy)' == 'true'">
+    <Compile Include="$(GuaGamePolicySource)" />
+    <None Include="$(GuaGameBuildBundleRoot)$(GuaRemoteMode)/gua.dll;$(GuaGameBuildBundleRoot)$(GuaRemoteMode)/gua_runtime.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="$(_GuaNativeCopyToOutput)" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UsingGodotNETSdk)' == 'true'">
+    <!-- This adapter is GAME compilation input, not an exchangeable Gua DLL. -->
+    <Compile Remove="$(GuaGameBuildBundleRoot)godot/GuaGodotRuntime.cs" />
+    <Compile Include="$(GuaGameBuildBundleRoot)godot/GuaGodotRuntime.cs" />
+  </ItemGroup>
+  <Target Name="ValidateGuaGameBuildHost" BeforeTargets="CoreCompile">
+    <Error Condition="Exists('$(MSBuildProjectDirectory)/project.godot') And '$(UsingGodotNETSdk)' != 'true'" Text="A Godot game policy requires the actual Godot.NET.Sdk game project; do not import this target through an ordinary library." />
+    <Error Condition="'$(UsingGodotNETSdk)' == 'true' And ('$(TargetFramework)' != 'net10.0' Or '$(GodotTargetPlatform)' != 'windows')" Text="Protected Godot .NET currently requires net10.0 and Windows x64. Other platforms need separate loader acceptance." />
+    <Error Condition="'$(UsingGodotNETSdk)' == 'true' And '$(PackageVersion_Godot_NET_Sdk)' != '4.7.0'" Text="Protected Godot .NET currently accepts Godot.NET.Sdk 4.7.0 only; its engine loader contract must be verified before adding another version." />
+    <Exec Condition="'$(UsingGodotNETSdk)' == 'true'" Command="dotnet &quot;$(GuaGameBuildBundleRoot)tools/Gua.GameBuild.dll&quot; check-godot-host &quot;$(GodotProjectDir).&quot;" />
+  </Target>
+  <Target Name="SynchronizeVerifiedGodotNativeAssets" BeforeTargets="CopyFilesToOutputDirectory;ComputeFilesToPublish" Condition="'$(UsingGodotNETSdk)' == 'true'">
+    <Exec Command="dotnet &quot;$(GuaGameBuildBundleRoot)tools/Gua.GameBuild.dll&quot; sync-godot-native &quot;$(GuaGameBuildBundleRoot)$(GuaRemoteMode)&quot; &quot;$(GuaRemoteMode)&quot; &quot;$(TargetDir).&quot;" />
+  </Target>
+  <Target Name="SelectOnlyGameOwnedGuaNativeAssets" AfterTargets="ResolvePackageAssets" BeforeTargets="ResolveLockFileCopyLocalFiles;ComputeFilesToPublish"
+          Condition="'$(_GuaOwnsGamePolicy)' == 'true'">
+    <!-- Legacy native assets from Core/Runtime must not accompany another mode. -->
+    <ItemGroup>
+      <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Filename)%(Extension)' == 'gua.dll' Or '%(Filename)%(Extension)' == 'gua_runtime.dll' Or '%(Filename)%(Extension)' == 'libgua.so' Or '%(Filename)%(Extension)' == 'libgua_runtime.so' Or '%(Filename)%(Extension)' == 'libgua.dylib' Or '%(Filename)%(Extension)' == 'libgua_runtime.dylib'" />
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)" Condition="'%(Filename)%(Extension)' == 'gua.dll' Or '%(Filename)%(Extension)' == 'gua_runtime.dll' Or '%(Filename)%(Extension)' == 'libgua.so' Or '%(Filename)%(Extension)' == 'libgua_runtime.so' Or '%(Filename)%(Extension)' == 'libgua.dylib' Or '%(Filename)%(Extension)' == 'libgua_runtime.dylib'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="GenerateGuaGameOwnedPolicy" BeforeTargets="CoreCompile" DependsOnTargets="ResolveReferences"
+          Condition="'$(_GuaOwnsGamePolicy)' == 'true'">
+    <Error Condition="'$(GuaRemoteMode)' != 'off' And '$(GuaRemoteMode)' != 'testing' And '$(GuaRemoteMode)' != 'player'" Text="GuaRemoteMode must be off, testing, or player." />
+    <Error Condition="!$([MSBuild]::IsOSPlatform('Windows')) Or ('$(RuntimeIdentifier)' != '' And '$(RuntimeIdentifier)' != 'win-x64') Or ('$(PlatformTarget)' != '' And '$(PlatformTarget)' != 'AnyCPU' And '$(PlatformTarget)' != 'x64')" Text="Game-owned native verification currently requires a Windows x64 game. Other engines and platforms are not covered by this target." />
+    <Error Condition="'$(PublishSingleFile)' == 'true' Or '$(PublishAot)' == 'true' Or '$(PublishTrimmed)' == 'true'" Text="This verifier requires a normal managed game with separate verified native files; single-file, AOT, and trimming are not accepted." />
+    <Error Condition="!Exists('$(GuaGameBuildBundleRoot)$(GuaRemoteMode)/gua-build-manifest.json')" Text="The provider SDK is missing the selected prebuilt Gua mode. Do not rebuild Gua from the game project or fall back to another mode." />
+    <ItemGroup>
+      <_GuaGameManaged Include="@(ReferenceCopyLocalPaths)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('Gua.')) And '%(Extension)' == '.dll'" />
+    </ItemGroup>
+    <Exec Command="dotnet &quot;$(GuaGameBuildBundleRoot)tools/Gua.GameBuild.dll&quot; $(_GuaPolicyGenerator) &quot;$(GuaGameBuildBundleRoot)$(GuaRemoteMode)&quot; $(GuaRemoteMode) &quot;$(GuaGamePolicySource)&quot; @(_GuaGameManaged->'&quot;%(FullPath)&quot;', ' ')" />
+    <PropertyGroup>
+      <DefineConstants Condition="'$(GuaRemoteMode)' != 'off'">$(DefineConstants);GUA_REMOTE_AUTOMATION</DefineConstants>
+      <DefineConstants Condition="'$(GuaRemoteMode)' == 'player'">$(DefineConstants);GUA_PLAYER_ONLY</DefineConstants>
+    </PropertyGroup>
+  </Target>
+</Project>

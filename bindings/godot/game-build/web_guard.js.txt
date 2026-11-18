@@ -1,0 +1,69 @@
+// Generated GAME page code, outside the exchangeable Gua Web side module.
+(() => {
+  'use strict';
+  const expected = /*EXPECTED*/;
+  const mode = /*MODE*/;
+  const source = /*SOURCE*/;
+  const build = /*BUILD*/;
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+  const files = new Map(Object.entries(expected).map(([name, hash]) =>
+    [new URL(name, document.baseURI).href, {name, hash, bytes: null}]));
+  const verified = new Set();
+  let refused = false;
+  const refuse = () => {
+    refused = true;
+    console.error('Gua Web game integrity refused before SDK loading.');
+    throw new Error('Gua Web game integrity refused before SDK loading.');
+  };
+  const matchesName = (url) => {
+    const name = decodeURIComponent(new URL(url).pathname.split('/').pop());
+    return Object.hasOwn(expected, name);
+  };
+  async function guardedFetch(input, options) {
+    const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, document.baseURI).href;
+    const file = files.get(url);
+    if (!file) {
+      if (matchesName(url)) return refuse(); // No alternate base/origin/query.
+      return nativeFetch(input, options);
+    }
+    if (refused) return refuse();
+    if (!file.bytes) file.bytes = (async () => {
+      try {
+        const response = await nativeFetch(input, options);
+        if (!response.ok || !globalThis.crypto?.subtle) return refuse();
+        const bytes = await response.arrayBuffer();
+        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+        const actual = Array.from(digest, n => n.toString(16).padStart(2, '0')).join('');
+        if (actual !== file.hash) return refuse();
+        verified.add(file.name);
+        console.info('Gua Web game verified SDK bytes before loading.');
+        return bytes;
+      } catch (_) { return refuse(); }
+    })();
+    // The loader consumes a private copy of exactly the checked response bytes,
+    // never a second fetch of a file that might have changed after verification.
+    return new Response((await file.bytes).slice(0), {headers: {'Content-Type':'application/wasm'}});
+  }
+  Object.defineProperty(globalThis, 'fetch', {value:guardedFetch, writable:false, configurable:false});
+  // The accepted Godot 4.7 engine uses fetch for dynamic Web modules. Refuse its
+  // XHR fallback for these same names rather than let it bypass the checker.
+  if (globalThis.XMLHttpRequest) {
+    const open = XMLHttpRequest.prototype.open;
+    Object.defineProperty(XMLHttpRequest.prototype, 'open', {value:function(method, url, ...rest) {
+      if (matchesName(new URL(url, document.baseURI).href)) return refuse();
+      return open.call(this, method, url, ...rest);
+    }, writable:false, configurable:false});
+  }
+  function GameEngine(config) {
+    if (refused || !Array.isArray(config.gdextensionLibs) ||
+        [...files.keys()].some(url => config.gdextensionLibs.filter(name => new URL(name, document.baseURI).href === url).length !== 1)) return refuse();
+    return new globalThis.Engine(config);
+  }
+  Object.defineProperty(globalThis, '__guaGameIntegrity', {value:Object.freeze({
+    Engine:GameEngine,
+    acceptGame(gameMode, gameSource, gameBuild) {
+      return !refused && verified.size === files.size && gameMode === mode && gameSource === source && gameBuild === build;
+    },
+    status() { return Object.freeze({mode, source, build, verified:verified.size, refused}); }
+  }), writable:false, configurable:false});
+})();

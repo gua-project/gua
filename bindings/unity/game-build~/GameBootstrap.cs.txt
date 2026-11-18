@@ -1,0 +1,30 @@
+// Generated GAME code. This file is outside the replaceable SDK DLL set.
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using UnityEngine;
+internal static class GameIntegrityBootstrap
+{
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string name);
+    [DllImport(/*LIBRARY*/,CallingConvention=CallingConvention.Cdecl)] private static extern uint GamePolicyStatus();
+    [DllImport(/*LIBRARY*/,CallingConvention=CallingConvention.Cdecl)] private static extern uint GamePolicyWasPreloaded();
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void Verify()
+    {
+#if !UNITY_EDITOR
+        if(GetModuleHandle(/*FILENAME*/)==IntPtr.Zero) Environment.Exit(83);
+        CheckPreloaded();
+#endif
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CheckPreloaded()
+    {
+#if !UNITY_EDITOR
+        if(GamePolicyWasPreloaded()!=1 || GamePolicyStatus()!=1) Environment.Exit(83);
+#endif
+    }
+#if GUA_REMOTE_AUTOMATION
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void StartRemote() { Gua.Unity.GuaUnityRuntime.StartRemoteForGame(); }
+#endif
+}

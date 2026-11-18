@@ -151,6 +151,166 @@ jobs:
             examples/godot-gdscript/addons/gua/bin/gua_godot.windows.release.x86_64.dll
           if-no-files-found: error
 
+  game-sdk-native-inputs:
+    name: Build game SDK native candidate / ${{ matrix.mode }}
+    needs: windows-assets
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mode: 'off', flavor: shipping, remote: 'off' }
+          - { mode: 'testing', flavor: qa, remote: 'on' }
+          - { mode: 'player', flavor: ai-player, remote: 'on' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Build and accept versioned native inputs
+        shell: pwsh
+        run: |
+          scripts/test-remote-build-variant.ps1 -Flavor '${{ matrix.flavor }}' -Remote '${{ matrix.remote }}' -Configuration Release -WithGodot -ProductVersion '${{ needs.windows-assets.outputs.version }}' -BuildParallel 4
+          $package = Get-ChildItem 'build/remote-${{ matrix.flavor }}-${{ matrix.remote }}-Release' -Directory -Filter 'package-*' | Sort-Object Name | Select-Object -Last 1
+          if (!$package) { throw 'Missing accepted game SDK native candidate.' }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item -LiteralPath $package.FullName -Destination artifacts/game-native -Recurse
+          scripts/stage-cpp-imports.ps1 -BuildDirectory 'build/remote-${{ matrix.flavor }}-${{ matrix.remote }}-Release' -PackageDirectory $package.FullName -OutputDirectory artifacts/game-cpp-imports
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-cpp-imports-${{ matrix.mode }}-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-cpp-imports
+          if-no-files-found: error
+      - name: Build game-owned verifier templates
+        if: matrix.mode == 'off'
+        shell: pwsh
+        run: |
+          cmake --build build/remote-shipping-off-Release --config Release --target gua-game-policy-template gua-editor-policy-template gua-godot-policy-template --parallel 2
+          if ($LASTEXITCODE) { throw 'Game verifier template compilation failed.' }
+          New-Item -ItemType Directory -Force artifacts/game-policy-templates | Out-Null
+          Copy-Item build/remote-shipping-off-Release/native/gua-game-policy/Release/*PolicyTemplate.dll artifacts/game-policy-templates
+      - uses: actions/upload-artifact@v4
+        if: matrix.mode == 'off'
+        with:
+          name: gua-game-policy-templates-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-policy-templates
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-native-${{ matrix.mode }}-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-native
+          if-no-files-found: error
+
+  game-sdk-candidates:
+    name: Prepare Windows and Godot Web game SDK candidates (not published)
+    needs: [windows-assets, game-sdk-native-inputs, unity-package, web-native]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gua-game-native-*-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-inputs
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gua-game-cpp-imports-*-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-cpp-imports
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-game-managed-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-managed
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-game-policy-templates-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-policy-templates
+      - uses: actions/download-artifact@v4
+        with:
+          name: gua-game-web-provider-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-web-provider
+      - name: Stage and accept developer SDK candidates
+        shell: pwsh
+        run: |
+          $version = '${{ needs.windows-assets.outputs.version }}'
+          $packages = @{
+            ShippingPackage = "artifacts/game-inputs/gua-game-native-off-v$version"
+            TestingPackage = "artifacts/game-inputs/gua-game-native-testing-v$version"
+            PlayerPackage = "artifacts/game-inputs/gua-game-native-player-v$version"
+          }
+          scripts/stage-game-build-bundle.ps1 @packages -OutputDirectory artifacts/game-sdk-dotnet
+          scripts/test-game-build-nuget.ps1 -BundleRoot artifacts/game-sdk-dotnet
+          scripts/stage-godot-game-sdk.ps1 @packages -PolicyTemplate artifacts/game-policy-templates/GodotPolicyTemplate.dll -OutputDirectory artifacts/game-sdk-godot-native
+          scripts/stage-godot-web-game-sdk.ps1 -ProviderInputs artifacts/game-web-provider -NativeSdkDirectory artifacts/game-sdk-godot-native -OutputDirectory artifacts/game-sdk-godot
+          scripts/stage-unity-game-sdk.ps1 @packages -ManagedOff artifacts/game-managed/off -ManagedTesting artifacts/game-managed/testing -ManagedPlayer artifacts/game-managed/player -PlayerTemplate artifacts/game-policy-templates/GamePolicyTemplate.dll -EditorTemplate artifacts/game-policy-templates/EditorPolicyTemplate.dll -Version $version -OutputDirectory artifacts/game-sdk-unity
+          scripts/stage-cpp-game-sdk.ps1 -BundleRoot artifacts/game-sdk-dotnet -ShippingBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-off-v$version" -TestingBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-testing-v$version" -PlayerBuild "artifacts/game-cpp-imports/gua-game-cpp-imports-player-v$version" -PlayerTemplate artifacts/game-policy-templates/GamePolicyTemplate.dll -OutputDirectory artifacts/game-sdk-cpp
+          scripts/package-game-build-candidates.ps1 -DotnetSdkDirectory artifacts/game-sdk-dotnet -GodotSdkDirectory artifacts/game-sdk-godot -UnitySdkDirectory artifacts/game-sdk-unity -CppSdkDirectory artifacts/game-sdk-cpp -Version $version -RuntimeVersion $version -ExpectedNativeSource '${{ github.sha }}' -OutputDirectory artifacts/game-sdk-candidates
+          scripts/test-cpp-game-candidate.ps1 -CandidateDirectory artifacts/game-sdk-candidates -OutputDirectory build/cpp-candidate-acceptance
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gua-game-cpp-evidence-v${{ needs.windows-assets.outputs.version }}
+          path: build/cpp-candidate-acceptance
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-sdk-candidate-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-sdk-candidates
+          if-no-files-found: error
+
+  game-sdk-linux-candidates:
+    name: Prepare Linux Godot game SDK candidate (not published)
+    needs: windows-assets
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build three native modes and stage the verified candidate
+        run: |
+          python scripts/build-godot-linux-game-inputs.py --build build/linux-game-provider --output artifacts/linux-game-provider --product-version '${{ needs.windows-assets.outputs.version }}'
+          python scripts/stage-godot-linux-game-sdk.py --off artifacts/linux-game-provider/off.so --testing artifacts/linux-game-provider/testing.so --player artifacts/linux-game-provider/player.so --template artifacts/linux-game-provider/GodotPolicyTemplate.so --output artifacts/linux-game-sdk
+      - name: Get digest-pinned official engine inputs
+        shell: pwsh
+        run: scripts/get-godot-web-test-tools.ps1 -OutputDirectory artifacts/linux-game-tools -IncludeLinuxDesktop
+      - name: Accept actual Release games and package build-only output
+        run: |
+          python scripts/package-godot-linux-game-sdk.py --sdk artifacts/linux-game-sdk --version '${{ needs.windows-assets.outputs.version }}' --source '${{ github.sha }}' --output artifacts/linux-game-candidates
+          python -m zipfile -e 'artifacts/linux-game-candidates/gua-game-build-godot-linux-x64-${{ needs.windows-assets.outputs.version }}.zip' artifacts/linux-game-sdk-roundtrip
+          python scripts/test-godot-linux-game-policy.py --sdk artifacts/linux-game-sdk-roundtrip --godot-editor artifacts/linux-game-tools/editor/Godot_v4.7-stable_linux.x86_64 --release-template artifacts/linux-game-tools/linux-release.x86_64 --output build/linux-game-acceptance
+          python scripts/test-godot-linux-sdk-inputs.py --sdk artifacts/linux-game-sdk-roundtrip --inputs artifacts/linux-game-provider --template artifacts/linux-game-provider/GodotPolicyTemplate.so --output build/linux-sdk-input-acceptance
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-sdk-linux-candidate-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/linux-game-candidates
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gua-game-linux-evidence-v${{ needs.windows-assets.outputs.version }}
+          path: |
+            build/linux-game-acceptance/**/*.json
+            build/linux-game-acceptance/**/*.log
+            build/linux-sdk-input-acceptance/**/*.json
+            build/linux-sdk-input-acceptance/**/*.log
+            artifacts/linux-game-provider/*.log
+            artifacts/linux-game-provider/identities.json
+            artifacts/linux-game-provider/environment.json
+          if-no-files-found: error
   portable-native:
     name: Build release native / ${{ matrix.rid }}
     needs: windows-assets
@@ -440,6 +600,16 @@ jobs:
         shell: pwsh
         run: scripts/verify-godot-web-addon.ps1 -RequireBinaries
 
+      - name: Prepare three protected Godot Web game SDK inputs
+        shell: pwsh
+        run: scripts/build-godot-web-game-inputs.ps1 -OutputDirectory artifacts/game-web-provider -BuildDirectory build/game-web-provider -ProductVersion '${{ needs.windows-assets.outputs.version }}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-web-provider-v${{ needs.windows-assets.outputs.version }}
+          path: artifacts/game-web-provider
+          if-no-files-found: error
+
       - name: Package browser native assets
         shell: pwsh
         run: |
@@ -563,9 +733,24 @@ jobs:
           unityVersion: 6000.5.3f1
           projectPath: examples/unity-smoke
           targetPlatform: StandaloneWindows64
-          buildMethod: Gua.Unity.Editor.GuaUnityEditorCommands.BuildPlayer
-          customParameters: -guaScene Assets/Scenes/GuaUnityFixture.unity -guaOutput /github/workspace/artifacts/unity-ci-player/GuaUnitySmoke.exe
+          buildMethod: Gua.Unity.Editor.GuaGameBuildProducer.BuildPlayerAndCaptureReferences
+          customParameters: -guaScene Assets/Scenes/GuaUnityFixture.unity -guaOutput /github/workspace/artifacts/unity-ci-player/GuaUnitySmoke.exe -guaGameBuildReferences /github/workspace/artifacts/private-unity-references
           allowDirtyBuild: true
+
+      - name: Compile and inspect three managed game SDK modes
+        shell: pwsh
+        run: scripts/build-unity-managed-variants.ps1 -ReferencesDirectory artifacts/private-unity-references -Version '${{ needs.windows-assets.outputs.version }}' -OutputDirectory artifacts/unity-game-managed
+
+      - name: Upload only redistributable Gua managed candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: gua-game-managed-v${{ needs.windows-assets.outputs.version }}
+          path: |
+            artifacts/unity-game-managed/*/Gua.Core.dll
+            artifacts/unity-game-managed/*/Gua.Runtime.dll
+            artifacts/unity-game-managed/*/Gua.Unity.dll
+            artifacts/unity-game-managed/managed-variants.json
+          if-no-files-found: error
 
       - name: Package Unity UPM archive
         shell: pwsh
@@ -797,6 +982,8 @@ jobs:
     name: Publish Gua release
     needs:
       - windows-assets
+      - game-sdk-candidates
+      - game-sdk-linux-candidates
       - portable-native
       - native-package-smoke
       - unity-package

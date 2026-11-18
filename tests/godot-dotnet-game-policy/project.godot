@@ -1,0 +1,9 @@
+config_version=5
+[application]
+config/name="Gua protected .NET fixture"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "C#")
+[dotnet]
+project/assembly_name="GuardedGodotGame"
+[rendering]
+renderer/rendering_method="gl_compatibility"
